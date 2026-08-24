@@ -19,6 +19,20 @@ public final class GRDBReadingRepository: ReadingRepository, @unchecked Sendable
     private let db: AppDatabase
     public init(database: AppDatabase) { db = database }
     public func position(for bookID: BookID) async throws -> ReadingPosition? { try await db.writer.read { db in try PositionRecord.fetchOne(db, key: bookID.description)?.domain } }
+    public func positions(for bookIDs: [BookID]) async throws -> [BookID: ReadingPosition] {
+        guard !bookIDs.isEmpty else { return [:] }
+        let ids = Set(bookIDs)
+        return try await db.writer.read { db in
+            var positions: [BookID: ReadingPosition] = [:]
+            for record in try PositionRecord.fetchAll(db) {
+                let position = try record.domain
+                if ids.contains(position.bookID) {
+                    positions[position.bookID] = position
+                }
+            }
+            return positions
+        }
+    }
     public func save(position: ReadingPosition) async throws { try await db.writer.write { db in try PositionRecord(position).save(db) } }
     public func highlights(for bookID: BookID) async throws -> [Highlight] { try await db.writer.read { db in try HighlightRecord.filter(Column("bookID") == bookID.description).order(Column("createdAt")).fetchAll(db).map { try $0.domain() } } }
     public func save(highlight: Highlight) async throws { try await db.writer.write { db in try HighlightRecord(highlight).save(db) } }

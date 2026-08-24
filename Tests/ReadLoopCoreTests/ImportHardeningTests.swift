@@ -81,6 +81,27 @@ func fileFailureLeavesNoBookOrPermanentFile(failure: FileFailure) async throws {
     #expect(await repository.count == 0)
 }
 
+@Test func stagedBookDeletionRestoresOnDatabaseFailureAndRemovesOnCommit() throws {
+    let root = try TestFixtures.temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = try BookFileStore(directory: root.appendingPathComponent("Books"))
+    let bookID = BookID()
+    let permanent = store.url(for: bookID)
+    try Data("fixture".utf8).write(to: permanent)
+
+    let staged = try #require(store.stageDeletion(bookID: bookID))
+    #expect(!FileManager.default.fileExists(atPath: permanent.path))
+    #expect(FileManager.default.fileExists(atPath: staged.url.path))
+
+    try store.restore(staged, for: bookID)
+    #expect(FileManager.default.fileExists(atPath: permanent.path))
+
+    let committed = try #require(store.stageDeletion(bookID: bookID))
+    store.commitDeletion(committed)
+    #expect(!FileManager.default.fileExists(atPath: permanent.path))
+    #expect(!FileManager.default.fileExists(atPath: committed.url.path))
+}
+
 private enum FixtureFailure: Error { case injected }
 enum FileFailure: Sendable, Equatable { case stage, promote }
 

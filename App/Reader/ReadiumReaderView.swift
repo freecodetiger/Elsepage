@@ -17,6 +17,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         return host
     }
     static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        coordinator.cancelOpening()
         Task { await coordinator.flushPosition() }
     }
     @MainActor final class Coordinator: NSObject, EPUBNavigatorDelegate {
@@ -27,13 +28,17 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         private var lastColorScheme: ColorScheme?
         private var lastHighlights: [Highlight] = []
         private var lastJumpTarget: Data?
+        private var openingTask: Task<Void, Never>?
 
         init(model: ReaderModel) { self.model = model }
 
         func open(in host: ReaderHostViewController) {
-            Task {
+            openingTask?.cancel()
+            openingTask = Task { [weak self, weak host] in
                 do {
+                    guard let self, let host else { return }
                     let publication = try await model.readium.open(model.fileURL, allowUserInteraction: true)
+                    try Task.checkCancellation()
                     self.publication = publication
                     model.searchHandler = { [weak self] query in
                         guard let self else { return [] }
@@ -79,9 +84,17 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 } catch is CancellationError {
                     return
                 } catch {
-                    model.errorMessage = error.localizedDescription
+                    guard !Task.isCancelled else { return }
+                    self?.model.errorMessage = error.localizedDescription
                 }
+                self?.openingTask = nil
             }
+        }
+
+        func cancelOpening() {
+            openingTask?.cancel()
+            openingTask = nil
+            navigator?.delegate = nil
         }
 
         func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {

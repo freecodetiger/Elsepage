@@ -14,9 +14,13 @@ final class LibraryModel {
     private let readium: ReadiumServices
 
     private(set) var books: [Book] = []
+    private(set) var readingProgress: [BookID: Double] = [:]
     private(set) var isImporting = false
+    private(set) var deletingBookID: BookID?
     var errorMessage: String?
     var duplicateTitle: String?
+    var searchQuery = ""
+    var sortOrder: LibrarySortOrder = .recentlyOpened
 
     init(books: any BookRepository, reading: any ReadingRepository, files: BookFileStore, metadataReader: ReadiumMetadataReader, readium: ReadiumServices) {
         booksRepository = books; readingRepository = reading; self.files = files
@@ -26,7 +30,13 @@ final class LibraryModel {
     }
 
     func reload() async {
-        do { books = try await booksRepository.allBooks() }
+        do {
+            books = try await booksRepository.allBooks()
+            let positions = try await readingRepository.positions(for: books.map(\.id))
+            readingProgress = positions.reduce(into: [:]) { result, entry in
+                result[entry.key] = entry.value.locator.totalProgression ?? 0
+            }
+        }
         catch { errorMessage = error.localizedDescription }
     }
 
@@ -49,6 +59,54 @@ final class LibraryModel {
         ReaderModel(book: book, fileURL: files.url(for: book.id), repository: readingRepository, books: booksRepository, readium: readium)
     }
 
+    var visibleBooks: [Book] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = books.filter { book in
+            guard !query.isEmpty else { return true }
+            return book.title.localizedCaseInsensitiveContains(query)
+                || (book.author?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+        return matches.sorted { lhs, rhs in
+            switch sortOrder {
+            case .recentlyOpened:
+                return recentDate(for: lhs) > recentDate(for: rhs)
+            case .title:
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            case .author:
+                return (lhs.author ?? "").localizedStandardCompare(rhs.author ?? "") == .orderedAscending
+            }
+        }
+    }
+
+    func progress(for book: Book) -> Double? {
+        readingProgress[book.id]
+    }
+
+    func delete(_ book: Book) async {
+        guard deletingBookID == nil else { return }
+        deletingBookID = book.id
+        defer { deletingBookID = nil }
+        do {
+            let trashed = try files.stageDeletion(bookID: book.id)
+            do {
+                try await booksRepository.delete(book.id)
+            } catch {
+                if let trashed {
+                    do { try files.restore(trashed, for: book.id) }
+                    catch { errorMessage = "无法恢复 EPUB 文件：\(error.localizedDescription)" }
+                }
+                throw error
+            }
+            files.commitDeletion(trashed)
+            books.removeAll { $0.id == book.id }
+            readingProgress[book.id] = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func stageCoordinatedCopy(of url: URL) throws -> URL {
         var coordinationError: NSError?
         var result: Result<URL, Error>!
@@ -63,5 +121,26 @@ final class LibraryModel {
         }
         if let coordinationError { throw coordinationError }
         return try result.get()
+    }
+}
+
+enum LibrarySortOrder: String, CaseIterable, Identifiable {
+    case recentlyOpened
+    case title
+    case author
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .recentlyOpened: "最近阅读"
+        case .title: "书名"
+        case .author: "作者"
+        }
+    }
+}
+
+private extension LibraryModel {
+    func recentDate(for book: Book) -> Date {
+        book.lastOpenedAt ?? book.importedAt
     }
 }

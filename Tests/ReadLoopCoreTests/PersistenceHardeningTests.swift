@@ -78,3 +78,19 @@ import Testing
     try await reading.save(preferences: preferences, for: book.id)
     #expect(try await reading.preferences(for: book.id) == preferences)
 }
+
+@Test func libraryPositionLookupReturnsOnlyRequestedBooks() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reading = GRDBReadingRepository(database: database)
+    let included = TestFixtures.book(fingerprint: "included")
+    let excluded = TestFixtures.book(fingerprint: "excluded")
+    try await books.insert(included)
+    try await books.insert(excluded)
+    try await reading.save(position: .init(bookID: included.id, locator: try TestFixtures.realisticLocator()))
+    try await reading.save(position: .init(bookID: excluded.id, locator: try TestFixtures.realisticLocator()))
+
+    let positions = try await reading.positions(for: [included.id])
+    #expect(positions[included.id]?.bookID == included.id)
+    #expect(positions[excluded.id] == nil)
+}

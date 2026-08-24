@@ -6,6 +6,7 @@ struct LibraryView: View {
     @Bindable var model: LibraryModel
     @State private var importing = false
     @State private var selectedBook: Book?
+    @State private var deletingBook: Book?
 
     var body: some View {
         NavigationStack {
@@ -16,6 +17,18 @@ struct LibraryView: View {
             .navigationTitle("书架")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Picker("排序", selection: $model.sortOrder) {
+                            ForEach(LibrarySortOrder.allCases) { order in
+                                Text(order.title).tag(order)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                    .accessibilityLabel("排序书架")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     if model.isImporting {
                         ProgressView().accessibilityLabel("正在导入 EPUB")
@@ -30,8 +43,22 @@ struct LibraryView: View {
             .navigationDestination(item: $selectedBook) { book in
                 ReaderScreen(model: model.readerModel(for: book))
             }
+            .searchable(text: $model.searchQuery, prompt: "搜索书名或作者")
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
             .alert("这本书已经在书库中", isPresented: Binding(get: { model.duplicateTitle != nil }, set: { if !$0 { model.duplicateTitle = nil } })) { Button("好") {} } message: { Text(model.duplicateTitle ?? "") }
+            .alert("从书架移除这本书？", isPresented: Binding(
+                get: { deletingBook != nil },
+                set: { if !$0 { deletingBook = nil } }
+            )) {
+                Button("取消", role: .cancel) { deletingBook = nil }
+                Button("移除", role: .destructive) {
+                    guard let book = deletingBook else { return }
+                    deletingBook = nil
+                    Task { await model.delete(book) }
+                }
+            } message: {
+                Text("会删除本机 EPUB、阅读位置和全部标注，无法恢复。")
+            }
             .safeAreaInset(edge: .bottom) {
                 if model.isImporting { importStatus }
             }
@@ -75,7 +102,7 @@ struct LibraryView: View {
     private func bookList(_ model: LibraryModel) -> some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: ElsepageTheme.Spacing.medium)], spacing: ElsepageTheme.Spacing.xLarge) {
-                ForEach(model.books) { book in
+                ForEach(model.visibleBooks) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
                             ElsepageBookCover(title: book.title, author: book.author, seed: Int(book.id.rawValue.uuid.0))
@@ -88,6 +115,12 @@ struct LibraryView: View {
                                 .font(ElsepageTheme.Typography.metadata)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                            if let progress = model.progress(for: book) {
+                                ProgressView(value: progress)
+                                    .tint(.elsepageAccent)
+                                    .accessibilityLabel("阅读进度")
+                                    .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -95,6 +128,11 @@ struct LibraryView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(accessibilityLabel(for: book))
                     .accessibilityHint("打开并继续阅读")
+                    .contextMenu {
+                        Button(role: .destructive) { deletingBook = book } label: {
+                            Label("从书架移除", systemImage: "trash")
+                        }
+                    }
                 }
             }
             .padding(ElsepageTheme.Spacing.page)

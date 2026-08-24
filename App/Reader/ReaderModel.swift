@@ -40,12 +40,16 @@ final class ReaderModel {
         guard !isPrepared else { return }
         do {
             let position = try await repository.position(for: book.id)
+            try Task.checkCancellation()
             initialLocatorJSON = position?.locator.json
             progress = position?.locator.totalProgression ?? 0
             preferences = try await repository.preferences(for: book.id)
+            try Task.checkCancellation()
             highlights = try await repository.highlights(for: book.id)
             notes = try await repository.notes(for: book.id)
+            try Task.checkCancellation()
             try await books.markOpened(book.id, at: Date())
+            try Task.checkCancellation()
             isPrepared = true
         } catch is CancellationError {
             return
@@ -168,6 +172,9 @@ final class ReaderModel {
             do {
                 try await repository.save(position: target.value)
                 positionState.didWrite(target, succeeded: true)
+            } catch is CancellationError {
+                positionState.didWrite(target, succeeded: false)
+                return
             } catch {
                 positionState.didWrite(target, succeeded: false)
                 errorMessage = error.localizedDescription
@@ -189,6 +196,7 @@ final class ReaderModel {
     }
     private func reportPersistenceError(_ operation: @escaping @Sendable () async throws -> Void) async {
         do { try await operation() }
+        catch is CancellationError { return }
         catch { errorMessage = error.localizedDescription }
     }
     private func reloadAnnotations(after error: Error) async {

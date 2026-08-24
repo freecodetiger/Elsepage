@@ -71,6 +71,7 @@ public struct Note: Hashable, Codable, Sendable, Identifiable {
 
 public protocol ReadingRepository: Sendable {
     func position(for bookID: BookID) async throws -> ReadingPosition?
+    func positions(for bookIDs: [BookID]) async throws -> [BookID: ReadingPosition]
     func save(position: ReadingPosition) async throws
     func highlights(for bookID: BookID) async throws -> [Highlight]
     func save(highlight: Highlight) async throws
@@ -81,6 +82,18 @@ public protocol ReadingRepository: Sendable {
     func deleteNote(id: UUID) async throws
     func preferences(for bookID: BookID) async throws -> ReaderPreferences
     func save(preferences: ReaderPreferences, for bookID: BookID) async throws
+}
+
+public extension ReadingRepository {
+    func positions(for bookIDs: [BookID]) async throws -> [BookID: ReadingPosition] {
+        var result: [BookID: ReadingPosition] = [:]
+        for bookID in bookIDs {
+            if let position = try await position(for: bookID) {
+                result[bookID] = position
+            }
+        }
+        return result
+    }
 }
 
 public enum ReaderTheme: String, Codable, Sendable, CaseIterable { case system, light, dark, sepia }
