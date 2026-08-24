@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>页外 Elsepage · Calm iOS Prototype</title>
+<style>
+:root{
+  --bg:#F7F6F2;
+  --paper:#FBFAF7;
+  --ink:#1F201D;
+  --muted:#8A8B84;
+  --line:rgba(31,32,29,.08);
+  --accent:#5F6E5F;
+  --accent-soft:#E7ECE6;
+  --card:#FFFFFF;
+  --glass:rgba(248,247,243,.82);
+  --shadow:0 14px 34px rgba(39,40,35,.07);
+  --reader:#F5F1E8;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  background:#E9E8E3;
+  color:var(--ink);
+  overflow:hidden;
+}
+button,input{font:inherit}
+button{border:0;background:none;color:inherit;cursor:pointer}
+.stage{
+  height:100%;
+  display:grid;
+  grid-template-columns:minmax(240px,360px) 405px minmax(220px,340px);
+  gap:40px;
+  align-items:center;
+  justify-content:center;
+  padding:28px;
+}
+.side{color:#5F615B}
+.side .eyebrow{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:1.6px;
+  font-weight:700;
+  color:#999A94;
+}
+.side h1{
+  margin:8px 0 12px;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:42px;
+  line-height:1.1;
+  letter-spacing:-1px;
+}
+.side p{
+  max-width:340px;
+  font-size:14px;
+  line-height:1.8;
+}
+.side blockquote{
+  margin:24px 0 0;
+  padding-left:15px;
+  border-left:2px solid #C9CEC7;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:18px;
+  line-height:1.65;
+  color:#3E403B;
+}
+.notes{
+  margin-top:22px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.note{
+  font-size:12px;
+  line-height:1.6;
+  color:#75776F;
+}
+.note b{color:#454741}
+
+.phone{
+  width:405px;height:844px;
+  background:#111;
+  padding:8px;
+  border-radius:54px;
+  box-shadow:0 30px 90px rgba(0,0,0,.22);
+  position:relative;
+}
+.phone:before{
+  content:"";
+  position:absolute;
+  top:16px;left:50%;transform:translateX(-50%);
+  width:118px;height:32px;border-radius:18px;background:#080808;z-index:90;
+}
+.screen{
+  width:100%;height:100%;
+  border-radius:47px;
+  overflow:hidden;
+  background:var(--bg);
+  position:relative;
+  isolation:isolate;
+}
+.statusbar{
+  position:absolute;z-index:100;top:0;left:0;right:0;height:50px;
+  padding:0 23px 0 27px;
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:750;pointer-events:none;
+}
+.icons{display:flex;gap:6px;align-items:center}
+.signal{display:flex;gap:1.4px;align-items:flex-end;height:9px}
+.signal i{display:block;width:2px;background:var(--ink);border-radius:2px}
+.signal i:nth-child(1){height:3px}.signal i:nth-child(2){height:5px}.signal i:nth-child(3){height:7px}.signal i:nth-child(4){height:9px}
+.battery{width:18px;height:9px;border:1.4px solid var(--ink);border-radius:3px;position:relative}
+.battery:before{content:"";position:absolute;inset:1px 3px 1px 1px;background:var(--ink);border-radius:1px}
+.battery:after{content:"";position:absolute;right:-3px;top:2px;width:2px;height:4px;background:var(--ink)}
+
+.page{
+  position:absolute;inset:0;
+  padding-top:50px;
+  background:var(--bg);
+  overflow-y:auto;
+  scrollbar-width:none;
+  opacity:0;pointer-events:none;
+  transform:translateX(8px);
+  transition:opacity .2s ease,transform .24s ease;
+}
+.page::-webkit-scrollbar{display:none}
+.page.active{opacity:1;pointer-events:auto;transform:none}
+.content{padding:20px 20px 118px}
+.navhead{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  margin-bottom:24px;
+}
+.navhead h1{
+  margin:0;
+  font-size:32px;
+  letter-spacing:-1px;
+  font-weight:760;
+}
+.navhead .date{
+  font-size:12px;color:var(--muted);padding-bottom:4px;
+}
+.iconbtn{
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(255,255,255,.7);
+  border:1px solid rgba(255,255,255,.9);
+  display:grid;place-items:center;
+  box-shadow:0 5px 18px rgba(31,32,29,.05);
+  font-size:18px;
+}
+.section-label{
+  margin:26px 2px 10px;
+  font-size:12px;
+  font-weight:700;
+  color:#777971;
+}
+.current-card{
+  background:var(--card);
+  border-radius:24px;
+  padding:18px;
+  box-shadow:var(--shadow);
+  border:1px solid rgba(255,255,255,.85);
+  display:flex;
+  gap:16px;
+  align-items:stretch;
+  min-height:186px;
+  cursor:pointer;
+  transition:.15s ease;
+}
+.current-card:active{transform:scale(.992)}
+.cover{
+  width:105px;
+  border-radius:12px;
+  background:#3A3D36;
+  color:#F7F4EC;
+  padding:14px 12px;
+  display:flex;flex-direction:column;justify-content:space-between;
+  box-shadow:0 8px 20px rgba(34,35,31,.16);
+  flex:0 0 auto;
+}
+.cover .book-title{
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:20px;
+  line-height:1.1;
+}
+.cover small{font-size:8px;opacity:.72}
+.bookdetail{
+  flex:1;display:flex;flex-direction:column;justify-content:center;
+}
+.bookdetail .meta{font-size:11px;color:var(--muted)}
+.bookdetail h2{
+  margin:6px 0 3px;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:22px;
+  font-weight:650;
+}
+.bookdetail .author{font-size:11px;color:#6F716A}
+.progress{
+  margin-top:20px;
+  height:3px;border-radius:999px;background:#ECEDE9;overflow:hidden;
+}
+.progress i{display:block;width:68%;height:100%;background:#7B867A}
+.progress-meta{
+  display:flex;justify-content:space-between;
+  margin-top:6px;font-size:9px;color:#A0A19B;
+}
+.next-hint{
+  margin-top:12px;
+  font-size:11px;color:#64675F;
+}
+.thought-state{
+  background:transparent;
+  border-radius:20px;
+  padding:18px 2px 4px;
+}
+.thought-state .lead{
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:21px;
+  line-height:1.45;
+  margin:0 0 8px;
+  max-width:305px;
+}
+.thought-state .sub{
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.65;
+  max-width:300px;
+}
+.text-action{
+  margin-top:12px;
+  padding:0;
+  color:var(--accent);
+  font-size:13px;
+  font-weight:700;
+}
+.memory{
+  margin-top:30px;
+  padding-top:18px;
+  border-top:1px solid var(--line);
+}
+.memory .label{
+  font-size:11px;
+  color:#9B9D96;
+  margin-bottom:10px;
+}
+.memory blockquote{
+  margin:0;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:16px;
+  line-height:1.65;
+  color:#4C4E48;
+}
+.memory .source{
+  margin-top:9px;
+  font-size:10px;
+  color:#A0A19A;
+}
+
+/* Library */
+.searchbar{
+  height:42px;border-radius:14px;
+  background:#ECEDE9;
+  display:flex;align-items:center;gap:8px;
+  padding:0 13px;
+  color:#989A93;
+  font-size:12px;
+  margin-bottom:18px;
+}
+.grid{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:19px 16px;
+}
+.book{
+  text-align:left;
+}
+.bookcover{
+  aspect-ratio:.7;
+  border-radius:11px;
+  background:#4A4D44;
+  color:white;
+  padding:15px 12px;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  box-shadow:0 9px 20px rgba(34,35,31,.14);
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+}
+.bookcover.r2{background:#865747}.bookcover.r3{background:#726A50}.bookcover.r4{background:#5F6A62}
+.bookcover b{font-size:19px;line-height:1.1}
+.bookcover small{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;font-size:8px;opacity:.75;margin-top:5px}
+.bookname{font-size:12px;font-weight:650;margin:8px 1px 2px}
+.bookmeta{font-size:9px;color:#9A9C95;margin-left:1px}
+
+/* Thoughts */
+.thought-hero{
+  background:#2D2F2A;color:#F7F5EF;
+  border-radius:24px;padding:19px;
+  box-shadow:var(--shadow);
+}
+.thought-hero .small{
+  font-size:10px;color:#B8BBB3;
+}
+.thought-hero h2{
+  margin:8px 0 0;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:22px;line-height:1.4;font-weight:560;
+}
+.topic-row{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.topic{
+  padding:8px 10px;border-radius:999px;
+  background:#ECEDE8;color:#5F625A;font-size:10px;
+}
+.timeline{display:flex;flex-direction:column;gap:12px}
+.entry{
+  background:white;border-radius:19px;padding:15px;
+  box-shadow:0 8px 22px rgba(31,32,29,.035);
+  border:1px solid rgba(255,255,255,.8);
+}
+.entry .date{font-size:9px;color:#A1A39C;margin-bottom:7px}
+.entry h3{
+  margin:0 0 7px;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:16px;line-height:1.45;font-weight:600;
+}
+.entry p{
+  margin:0;font-size:11px;line-height:1.65;color:#6F716A;
+}
+.agent-note{
+  margin-top:11px;padding-top:10px;border-top:1px solid var(--line);
+  font-size:10px;line-height:1.55;color:#7B7E76;
+}
+
+/* Bottom tab */
+.tabbar{
+  position:absolute;z-index:70;
+  left:13px;right:13px;bottom:12px;
+  height:70px;
+  border-radius:25px;
+  background:var(--glass);
+  backdrop-filter:blur(22px) saturate(135%);
+  -webkit-backdrop-filter:blur(22px) saturate(135%);
+  border:1px solid rgba(255,255,255,.78);
+  box-shadow:0 12px 36px rgba(31,32,29,.10);
+  display:flex;align-items:center;justify-content:space-around;
+}
+.tab{
+  width:96px;height:54px;
+  border-radius:18px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;
+  color:#9A9C95;
+  font-size:9px;font-weight:650;
+}
+.tab .ico{font-size:19px;line-height:1}
+.tab.active{color:#39413A;background:rgba(255,255,255,.68)}
+.tab.active .ico{font-weight:800}
+
+/* Reader */
+.reader{
+  background:var(--reader);
+}
+.reader .toolbar{
+  position:sticky;top:0;z-index:30;
+  height:54px;
+  padding:0 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(var(--reader) 65%,rgba(245,241,232,0));
+}
+.toolbar .title{
+  font-size:11px;color:#77786F;
+  max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.circle{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.58);
+  border:1px solid rgba(255,255,255,.82);
+  display:grid;place-items:center;
+  box-shadow:0 5px 16px rgba(31,32,29,.05);
+}
+.prose{
+  padding:10px 34px 130px;
+  font-family:ui-serif,Georgia,"Songti SC","STSong",serif;
+  font-size:18px;line-height:1.95;color:#292A25;
+}
+.prose .chapter{
+  font-size:10px;letter-spacing:1.8px;
+  color:#A0A196;text-transform:uppercase;margin-bottom:18px;
+}
+.prose h1{font-size:28px;line-height:1.3;margin:0 0 28px;font-weight:600}
+.prose p{margin:0 0 20px;text-align:justify}
+.mark{
+  background:linear-gradient(transparent 58%,rgba(119,137,117,.17) 58%);
+  border-radius:2px;
+}
+.readerbar{
+  position:absolute;z-index:40;
+  left:15px;right:15px;bottom:14px;
+  border-radius:23px;
+  background:rgba(248,245,238,.82);
+  backdrop-filter:blur(22px);
+  -webkit-backdrop-filter:blur(22px);
+  border:1px solid rgba(255,255,255,.72);
+  box-shadow:0 10px 28px rgba(31,32,29,.09);
+  padding:10px 12px;
+}
+.readerbar .pmeta{
+  display:flex;align-items:center;gap:10px;
+  font-size:9px;color:#96988F;padding:0 2px 8px;
+}
+.readerbar .pmeta div{flex:1;height:2px;background:#DDDCD5;border-radius:99px;overflow:hidden}
+.readerbar .pmeta i{display:block;width:68%;height:100%;background:#6F796D}
+.readeractions{
+  display:flex;align-items:center;justify-content:space-between;
+}
+.readeractions .quiet{
+  font-size:11px;color:#71736C;
+}
+.readeractions .done{
+  padding:10px 14px;border-radius:14px;background:#2E302B;color:white;font-size:11px;font-weight:700;
+}
+
+/* Reflection sheet */
+.backdrop{
+  position:absolute;inset:0;z-index:100;
+  background:rgba(24,25,22,.18);
+  opacity:0;pointer-events:none;
+  transition:.2s ease;
+}
+.backdrop.show{opacity:1;pointer-events:auto}
+.sheet{
+  position:absolute;left:9px;right:9px;bottom:9px;
+  background:#FAF9F5;
+  border-radius:29px;
+  padding:11px 20px 24px;
+  box-shadow:0 24px 70px rgba(0,0,0,.18);
+  transform:translateY(110%);
+  transition:.3s cubic-bezier(.2,.9,.2,1);
+}
+.backdrop.show .sheet{transform:none}
+.handle{width:40px;height:5px;background:#DAD9D3;border-radius:99px;margin:0 auto 17px}
+.sheet .summary{
+  text-align:center;font-size:10px;color:#999A93;margin-bottom:21px;
+}
+.sheet h2{
+  margin:0 auto;
+  text-align:center;
+  max-width:280px;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:25px;
+  line-height:1.4;
+  font-weight:580;
+}
+.sheet p{
+  margin:8px auto 18px;
+  text-align:center;
+  max-width:280px;
+  color:#8B8D86;
+  font-size:11px;line-height:1.6;
+}
+.reflect-options{
+  display:flex;gap:10px;
+}
+.reflect-option{
+  flex:1;height:47px;border-radius:16px;
+  background:#ECEEEA;
+  color:#4F5A4F;
+  font-size:12px;font-weight:700;
+}
+.reflect-option.primary{
+  background:#5F6E5F;color:white;
+}
+.skip{
+  width:100%;margin-top:10px;padding:8px 0;
+  color:#A0A29B;font-size:11px;
+}
+.response{
+  display:none;
+}
+.response.show{display:block}
+.response .agent{
+  width:42px;height:42px;border-radius:15px;
+  background:#2E302B;color:#F8F6F1;
+  display:grid;place-items:center;
+  margin:2px auto 16px;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+}
+.response blockquote{
+  margin:0;
+  font-family:ui-serif,Georgia,"Songti SC",serif;
+  font-size:17px;line-height:1.75;
+  color:#3D403A;
+}
+.response .memory-link{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+  font-size:10px;line-height:1.6;color:#85877F;
+}
+.save{
+  margin-top:18px;width:100%;height:47px;border-radius:16px;
+  background:#2E302B;color:white;font-size:12px;font-weight:700;
+}
+
+.right{
+  display:flex;flex-direction:column;gap:12px;color:#61635D;
+}
+.right h3{margin:0 0 4px;font-size:14px;color:#383A35}
+.card{
+  padding:14px 15px;border-radius:18px;
+  background:rgba(255,255,255,.5);
+  border:1px solid rgba(255,255,255,.72);
+}
+.card b{font-size:12px}
+.card p{margin:5px 0 0;font-size:11px;line-height:1.6;color:#777971}
+.state{
+  display:inline-block;margin-top:7px;
+  padding:5px 8px;border-radius:999px;
+  background:#E8ECE7;color:#526052;font-size:9px;font-weight:700;
+}
+
+@media(max-width:1040px){
+  .stage{grid-template-columns:1fr}
+  .side,.right{display:none}
+  .phone{justify-self:center}
+}
+@media(max-width:440px){
+  body{background:#111}
+  .stage{display:block;padding:0}
+  .phone{width:100vw;height:100vh;border-radius:0;padding:0}
+  .phone:before{top:8px}
+  .screen{border-radius:0}
+}
+</style>
+</head>
+<body>
+<div class="stage">
+  <aside class="side">
+    <div class="eyebrow">Elsepage · Calm iOS Concept</div>
+    <h1>今天，<br>读一点就好。</h1>
+    <p>不做打卡，不做刺激，不做奖励焦虑。首页只是一个安静的状态页：告诉你今天正在读什么，以及有没有什么值得留下。</p>
+    <blockquote>“读书不是完成任务。<br>页外只负责在你抬头的时候接住你。”</blockquote>
+    <div class="notes">
+      <div class="note"><b>三个入口：</b> 今天 / 书架 / 思想。</div>
+      <div class="note"><b>Agent 无入口：</b> 只在选中文本或结束阅读后自然出现。</div>
+      <div class="note"><b>状态驱动：</b> 首页随“未阅读 / 已阅读未反思 / 已留下想法”变化。</div>
+      <div class="note"><b>没有 streak：</b> 只保留阅读进度，不把连续天数变成心理负担。</div>
+    </div>
+  </aside>
+
+  <main class="phone">
+    <div class="screen">
+      <div class="statusbar">
+        <span>9:41</span>
+        <div class="icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>⌁</span><span class="battery"></span></div>
+      </div>
+
+      <!-- TODAY -->
+      <section class="page active" id="today">
+        <div class="content">
+          <div class="navhead">
+            <h1>今天</h1>
+            <div class="date">8 月 25 日 · 周二</div>
+          </div>
+
+          <div class="section-label">正在阅读</div>
+          <div class="current-card" onclick="showPage('reader')">
+            <div class="cover">
+              <div class="book-title">置身<br>事内</div>
+              <small>中国政府与经济发展</small>
+            </div>
+            <div class="bookdetail">
+              <div class="meta">第四章</div>
+              <h2>地方政府与经济发展</h2>
+              <div class="author">兰小欢</div>
+              <div class="progress"><i></i></div>
+              <div class="progress-meta"><span>68%</span><span>上次 28 分钟</span></div>
+              <div class="next-hint">点一下，回到上次停下的地方</div>
+            </div>
+          </div>
+
+          <div class="section-label" id="stateLabel">今天</div>
+          <div class="thought-state" id="stateBefore">
+            <div class="lead">读一点就好。</div>
+            <div class="sub">今天没有任务。等你读完一段，页外再问一句。</div>
+          </div>
+
+          <div class="thought-state" id="stateAfterRead" style="display:none">
+            <div class="lead">刚才有什么东西，<br>还留在脑子里吗？</div>
+            <div class="sub">不用总结。说一句、写一句，或者什么都不做。</div>
+            <button class="text-action" onclick="openReflection()">留下一点想法</button>
+          </div>
+
+          <div class="thought-state" id="stateDone" style="display:none">
+            <div class="lead">今天已经留下来了。</div>
+            <div class="sub">不需要再完成什么。以后某一天，页外会把这句话带回来。</div>
+          </div>
+
+          <div class="memory">
+            <div class="label">页外记得</div>
+            <blockquote>“自由可能不是没有约束，而是愿意承担自己选择之后的结果。”</blockquote>
+            <div class="source">47 天前 ·《局外人》</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LIBRARY -->
+      <section class="page" id="library">
+        <div class="content">
+          <div class="navhead">
+            <h1>书架</h1>
+            <button class="iconbtn">＋</button>
+          </div>
+          <div class="searchbar">⌕　搜索书名、作者</div>
+          <div class="grid">
+            <button class="book" onclick="showPage('reader')">
+              <div class="bookcover"><b>置身<br>事内</b><small>兰小欢</small></div>
+              <div class="bookname">置身事内</div><div class="bookmeta">68% · 正在阅读</div>
+            </button>
+            <button class="book">
+              <div class="bookcover r2"><b>局外人</b><small>Albert Camus</small></div>
+              <div class="bookname">局外人</div><div class="bookmeta">已读完</div>
+            </button>
+            <button class="book">
+              <div class="bookcover r3"><b>逃避<br>自由</b><small>Erich Fromm</small></div>
+              <div class="bookname">逃避自由</div><div class="bookmeta">41%</div>
+            </button>
+            <button class="book">
+              <div class="bookcover r4"><b>大国<br>大城</b><small>陆铭</small></div>
+              <div class="bookname">大国大城</div><div class="bookmeta">23%</div>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- THOUGHTS -->
+      <section class="page" id="thoughts">
+        <div class="content">
+          <div class="navhead">
+            <h1>思想</h1>
+            <button class="iconbtn">⋯</button>
+          </div>
+          <div class="thought-hero">
+            <div class="small">最近，页外对你的一个观察</div>
+            <h2>你开始比以前更愿意，先理解机制，再评价结果。</h2>
+          </div>
+
+          <div class="section-label">反复出现的问题</div>
+          <div class="topic-row">
+            <span class="topic">自由与责任</span><span class="topic">个体与制度</span>
+            <span class="topic">技术与人</span>
+          </div>
+
+          <div class="section-label">最近留下的</div>
+          <div class="timeline">
+            <div class="entry">
+              <div class="date">今天 ·《置身事内》</div>
+              <h3>制度里的参与者，不一定需要有恶意。</h3>
+              <p>以前总觉得很多问题是某些人做错了，但今天突然觉得，也可能只是激励结构把每个人推向了相似的选择。</p>
+              <div class="agent-note">页外：这和你之前在《大国大城》里留下的“城市为什么总想继续扩张”很接近。</div>
+            </div>
+            <div class="entry">
+              <div class="date">8 月 21 日 ·《局外人》</div>
+              <h3>如果一个人拒绝解释自己，会不会也是一种自由？</h3>
+              <p>默尔索让我不舒服，但我又不完全觉得他只是冷漠。</p>
+            </div>
+            <div class="entry">
+              <div class="date">8 月 18 日 ·《逃避自由》</div>
+              <h3>人为什么会主动放弃选择？</h3>
+              <p>选择越多也可能意味着责任越重，这和我以前对自由的直觉不太一样。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- READER -->
+      <section class="page reader" id="reader">
+        <div class="toolbar">
+          <button class="circle" onclick="exitReader()">‹</button>
+          <div class="title">置身事内 · 第四章</div>
+          <button class="circle">Aa</button>
+        </div>
+        <article class="prose">
+          <div class="chapter">Chapter Four</div>
+          <h1>地方政府与经济发展</h1>
+          <p>理解地方政府的行为，不能只看政策文本，也不能只把结果归结为某个个体的偏好。更重要的是理解约束与激励。</p>
+          <p><span class="mark">当参与者面对相似的激励结构时，即使每个人都只是做出对自己而言合理的选择，最后也可能形成十分一致的系统性结果。</span></p>
+          <p>这也是为什么很多经济现象不能只从“谁做错了”来解释。个体行为与制度环境之间，始终存在互相塑造的关系。</p>
+          <p>地方政府既承担公共事务，也参与经济发展。在财政、土地、投资和产业之间，存在一整套相互连接的机制。</p>
+          <p>如果只把其中一项抽出来看，很容易把因果关系简单化。理解这些机制，需要不断回到真实约束中去。</p>
+        </article>
+        <div class="readerbar">
+          <div class="pmeta"><span>68%</span><div><i></i></div><span>第四章</span></div>
+          <div class="readeractions">
+            <button class="quiet">目录</button>
+            <button class="done" onclick="finishReading()">读到这里</button>
+            <button class="quiet">更多</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- REFLECTION SHEET -->
+      <div class="backdrop" id="backdrop" onclick="closeReflection(event)">
+        <div class="sheet" onclick="event.stopPropagation()">
+          <div class="handle"></div>
+
+          <div id="reflectPrompt">
+            <div class="summary">刚刚读了 28 分钟 · 第四章</div>
+            <h2>有什么东西，<br>还留在脑子里吗？</h2>
+            <p>不用总结。只留下一句现在还在想的东西。</p>
+            <div class="reflect-options">
+              <button class="reflect-option primary" onclick="showResponse()">🎙 说两句</button>
+              <button class="reflect-option" onclick="showResponse()">写下来</button>
+            </div>
+            <button class="skip" onclick="hideSheet()">稍后再说</button>
+          </div>
+
+          <div class="response" id="response">
+            <div class="agent">页</div>
+            <blockquote>“很多结果未必来自某个人的恶意，而是激励结构把每个人推向了相似的选择。”</blockquote>
+            <div class="memory-link">页外：你今天第一次把这个问题说得这么清楚。一个月前你在《大国大城》里，其实已经从另一个方向碰到过它。</div>
+            <button class="save" onclick="saveReflection()">留在这里</button>
+          </div>
+        </div>
+      </div>
+
+      <nav class="tabbar" id="tabbar">
+        <button class="tab active" data-id="today" onclick="tabTo('today',this)"><span class="ico">⌂</span><span>今天</span></button>
+        <button class="tab" data-id="library" onclick="tabTo('library',this)"><span class="ico">▤</span><span>书架</span></button>
+        <button class="tab" data-id="thoughts" onclick="tabTo('thoughts',this)"><span class="ico">✦</span><span>思想</span></button>
+      </nav>
+    </div>
+  </main>
+
+  <aside class="right">
+    <h3>这版的设计核心</h3>
+    <div class="card">
+      <b>不把阅读变成任务</b>
+      <p>没有连续天数、火焰、经验值、成就节点。只有当前书和阅读进度。</p>
+      <span class="state">calm by default</span>
+    </div>
+    <div class="card">
+      <b>首页是一种状态</b>
+      <p>未阅读：读一点就好。已阅读：要不要留下一句。已反思：今天已经留下来了。</p>
+    </div>
+    <div class="card">
+      <b>按钮只在上下文中出现</b>
+      <p>Agent 没有单独入口；Reflection 不是页面，只是阅读结束后的 Sheet。</p>
+    </div>
+    <div class="card">
+      <b>三个一级入口</b>
+      <p>今天 = 当下，书架 = 内容，思想 = 自己。产品结构与定位一致。</p>
+    </div>
+  </aside>
+</div>
+
+<script>
+let readingFinished=false;
+
+function allPages(){return [...document.querySelectorAll('.page')]}
+function showPage(id){
+  allPages().forEach(p=>p.classList.toggle('active',p.id===id));
+  const top=['today','library','thoughts'];
+  document.getElementById('tabbar').style.display=top.includes(id)?'flex':'none';
+  if(top.includes(id)){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.id===id));
+  }
+}
+function tabTo(id,el){showPage(id)}
+
+function finishReading(){
+  readingFinished=true;
+  showPage('today');
+  document.getElementById('stateBefore').style.display='none';
+  document.getElementById('stateAfterRead').style.display='block';
+  document.getElementById('stateDone').style.display='none';
+  document.getElementById('stateLabel').textContent='刚刚';
+  setTimeout(openReflection,260);
+}
+function exitReader(){
+  showPage('today');
+}
+function openReflection(){
+  document.getElementById('reflectPrompt').style.display='block';
+  document.getElementById('response').classList.remove('show');
+  document.getElementById('backdrop').classList.add('show');
+}
+function hideSheet(){document.getElementById('backdrop').classList.remove('show')}
+function closeReflection(e){if(e.target.id==='backdrop') hideSheet()}
+function showResponse(){
+  document.getElementById('reflectPrompt').style.display='none';
+  document.getElementById('response').classList.add('show');
+}
+function saveReflection(){
+  hideSheet();
+  document.getElementById('stateBefore').style.display='none';
+  document.getElementById('stateAfterRead').style.display='none';
+  document.getElementById('stateDone').style.display='block';
+  document.getElementById('stateLabel').textContent='今天';
+}
+</script>
+</body>
+</html>
