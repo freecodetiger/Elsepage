@@ -59,7 +59,6 @@
 		05A33B98BD21AF7593C5D6EF /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		071CD8577B634BCCA3B9B3A5 /* ReadiumPublicationIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPublicationIntegrationTests.swift; sourceTree = "<group>"; };
 		1214AAD7D7D2F8EA76B585E9 /* LocatorAndRestorationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocatorAndRestorationTests.swift; sourceTree = "<group>"; };
-		1363E9983632E1F6BFF1DC73 /* ReadLoop.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ReadLoop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		38B4CE06D9D3D7B9633CD194 /* ReadiumIntegrationTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ReadiumIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4775351EC3328731E57858C0 /* ReaderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreen.swift; sourceTree = "<group>"; };
 		48908BB1AD2DF81F7EF11AA2 /* outpage */ = {isa = PBXFileReference; lastKnownFileType = folder; name = outpage; path = .; sourceTree = SOURCE_ROOT; };
@@ -75,6 +74,7 @@
 		9DA4DD14F94B6069D15B34AA /* ReadiumReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumReaderView.swift; sourceTree = "<group>"; };
 		E17217B45491685767A98789 /* ReaderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderModel.swift; sourceTree = "<group>"; };
 		EAAA36A8711C5E5DB8D4CC1A /* PersistenceHardeningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceHardeningTests.swift; sourceTree = "<group>"; };
+		F26554FF4C8832780DB8182A /* Reader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Reader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6B8655FAF8076A2B7FD4B64 /* TestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -131,8 +131,8 @@
 		2E815F4371D4DA1673B2E189 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				F26554FF4C8832780DB8182A /* Reader.app */,
 				38B4CE06D9D3D7B9633CD194 /* ReadiumIntegrationTests.xctest */,
-				1363E9983632E1F6BFF1DC73 /* ReadLoop.app */,
 				058175D072CFD86802F55599 /* ReadLoopCoreTests.xctest */,
 			);
 			name = Products;
@@ -270,7 +270,7 @@
 				6A4AF0225E65CE1DEE9B6000 /* ReadiumAdapterGCDWebServer */,
 			);
 			productName = ReadLoop;
-			productReference = 1363E9983632E1F6BFF1DC73 /* ReadLoop.app */;
+			productReference = F26554FF4C8832780DB8182A /* Reader.app */;
 			productType = "com.apple.product-type.application";
 		};
 		E129DD94F5A5757E71D87C42 /* ReadiumIntegrationTests */ = {
@@ -311,6 +311,7 @@
 						ProvisioningStyle = Automatic;
 					};
 					B3AE35C41A02114A63B6CA25 = {
+						DevelopmentTeam = U6Y3X5W7T2;
 						ProvisioningStyle = Automatic;
 					};
 					E129DD94F5A5757E71D87C42 = {
@@ -489,17 +490,19 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U6Y3X5W7T2;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_MODULE_NAME = ReadLoop;
-				PRODUCT_NAME = Reader;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -530,7 +533,7 @@
 				);
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reader.app/Reader";
 			};
 			name = Release;
 		};
@@ -546,7 +549,7 @@
 				);
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reader.app/Reader";
 			};
 			name = Debug;
 		};
@@ -571,17 +574,19 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U6Y3X5W7T2;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_MODULE_NAME = ReadLoop;
-				PRODUCT_NAME = Reader;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

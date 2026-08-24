@@ -1,7 +1,7 @@
-import ReadiumAdapterGCDWebServer
-import ReadiumShared
-import ReadiumStreamer
 import Foundation
+@preconcurrency import ReadiumAdapterGCDWebServer
+@preconcurrency import ReadiumShared
+@preconcurrency import ReadiumStreamer
 
 @MainActor
 final class ReadiumServices {

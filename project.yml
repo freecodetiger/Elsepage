@@ -24,6 +24,7 @@ targets:
   ReadLoop:
     type: application
     platform: iOS
+    productName: Reader
     sources:
       - path: App
     dependencies:
@@ -45,8 +46,11 @@ targets:
         product: ReadiumAdapterGCDWebServer
     settings:
       base:
-        PRODUCT_NAME: Reader
         PRODUCT_MODULE_NAME: ReadLoop
+        DEVELOPMENT_TEAM: U6Y3X5W7T2
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         ENABLE_USER_SCRIPT_SANDBOXING: YES
