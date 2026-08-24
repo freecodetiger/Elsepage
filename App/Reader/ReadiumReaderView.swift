@@ -51,8 +51,8 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         config: .init(
                             editingActions: actions,
                             contentInset: [
-                                .compact: (top: 54, bottom: 58),
-                                .regular: (top: 64, bottom: 68),
+                                .compact: (top: 8, bottom: 8),
+                                .regular: (top: 16, bottom: 16),
                             ]
                         ),
                         httpServer: model.readium.httpServer
@@ -223,7 +223,14 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 var result: [ReaderChapter] = []
                 let locator = Locator(href: link.url(), mediaType: link.mediaType ?? .xhtml, title: link.title)
                 if let data = try? JSONSerialization.data(withJSONObject: locator.json) {
-                    result.append(.init(id: "\(depth)-\(link.href)", title: link.title ?? "未命名章节", depth: depth, href: link.href, locatorJSON: data))
+                    result.append(.init(
+                        id: "\(depth)-\(link.href)",
+                        title: link.title ?? "未命名章节",
+                        depth: depth,
+                        href: link.href,
+                        locatorJSON: data,
+                        progression: locator.locations.progression
+                    ))
                 }
                 result.append(contentsOf: chapters(from: link.children, depth: depth + 1))
                 return result
