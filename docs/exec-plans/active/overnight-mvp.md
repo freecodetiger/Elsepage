@@ -100,3 +100,31 @@ Thoughts + local memory ───┘
 - Record worktree branches/commits, merge order, schema additions, tests/builds,
   unresolved integration issues and manual-device checks in this document.
 - Update stale README/gate documentation if implementation materially changes it.
+
+## Track B handoff — reflection loop
+
+- Branch: `codex/overnight-reflection`.
+- Adds `ReadingSessionService` as the serialized, idempotent lifecycle owner for
+  a book's unfinished session, plus `SessionEndingSummary` for honest
+  wall-clock/progress presentation.
+- Adds `TextReflectionSubmissionService` and a stable `TextReflectionDraft`.
+  A retry with the same draft ID returns the existing raw Reflection; a
+  conflicting retry is rejected. The raw text and locator/session evidence are
+  committed by the existing transactional Reflection repository before any
+  downstream action (there is no Agent call in this track).
+- Adds `App/Reflection/SessionReflectionSheet.swift`: a native text-only sheet
+  with an explicit safe skip action. It is deliberately not yet top-level wired.
+- Coordinator integration: construct `GRDBReadingSessionRepository` and
+  `GRDBReflectionRepository` beside the existing repositories in `AppModel`;
+  inject them into the feature that constructs `ReaderModel`. On reader open,
+  call `ReadingSessionService.start(bookID:at:)` once a current locator exists.
+  On the explicit “end reading” reader control, flush the current locator,
+  call `end(id:at:highlightCount:noteCount:)`, then present
+  `SessionReflectionSheet` with the resulting summary and current locator.
+  Do not end a session merely because SwiftUI dismisses a view.
+- No migration is required: the existing v3/v4 tables and repository contracts
+  cover this flow.
+- Verification: `swift test --filter ReflectionLoopServiceTests` was started;
+  on this shared host it is waiting for SwiftPM dependency resolution/cache
+  locks from parallel worktrees. Run it (and then full `swift test`) once the
+  shared resolver is free.
