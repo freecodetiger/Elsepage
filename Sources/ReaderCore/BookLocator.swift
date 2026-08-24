@@ -129,3 +129,16 @@ public struct HighlightRestorationService: Sendable {
         try await repository.highlights(for: bookID).map(HighlightDecoration.init)
     }
 }
+
+/// Readium-independent search result used by Reader feature state and tests.
+public struct ReaderSearchResult: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let locator: BookLocator
+    public let excerpt: String
+
+    public init(locator: BookLocator, excerpt: String) {
+        self.locator = locator
+        self.excerpt = excerpt
+        id = locator.json.base64EncodedString()
+    }
+}
