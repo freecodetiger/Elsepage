@@ -1,0 +1,72 @@
+name: ReadLoop
+options:
+  deploymentTarget:
+    iOS: "18.0"
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    PRODUCT_BUNDLE_IDENTIFIER: com.readloop.reader
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: Reader
+    INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: NO
+    INFOPLIST_KEY_UISupportsDocumentBrowser: NO
+    INFOPLIST_KEY_UTImportedTypeDeclarations: []
+    TARGETED_DEVICE_FAMILY: "1"
+packages:
+  ReadLoopCore:
+    path: .
+  Readium:
+    url: https://github.com/readium/swift-toolkit.git
+    exactVersion: 3.3.0
+targets:
+  ReadLoop:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: ReadLoopCore
+        product: LibraryCore
+      - package: ReadLoopCore
+        product: ReaderCore
+      - package: ReadLoopCore
+        product: Persistence
+      - package: ReadLoopCore
+        product: AppInfrastructure
+      - package: Readium
+        product: ReadiumShared
+      - package: Readium
+        product: ReadiumStreamer
+      - package: Readium
+        product: ReadiumNavigator
+      - package: Readium
+        product: ReadiumAdapterGCDWebServer
+    settings:
+      base:
+        PRODUCT_NAME: Reader
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+    scheme:
+      testTargets:
+        - ReadLoopCoreTests
+  ReadLoopCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/ReadLoopCoreTests
+    dependencies:
+      - package: ReadLoopCore
+        product: LibraryCore
+      - package: ReadLoopCore
+        product: ReaderCore
+      - package: ReadLoopCore
+        product: Persistence
+      - package: ReadLoopCore
+        product: AppInfrastructure
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
