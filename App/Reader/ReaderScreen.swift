@@ -59,7 +59,7 @@ struct ReaderScreen: View {
             }
             .padding(.horizontal, ElsepageTheme.Spacing.medium)
             .padding(.vertical, ElsepageTheme.Spacing.small)
-            .background(.ultraThinMaterial)
+            .background(ElsepageTheme.MaterialToken.chrome)
 
             Spacer()
 
@@ -81,12 +81,16 @@ struct ReaderScreen: View {
                     .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
             }
             .padding(ElsepageTheme.Spacing.medium)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
+            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
                     .stroke(.primary.opacity(0.06))
             }
-            .shadow(color: .black.opacity(0.09), radius: 18, y: 8)
+            .shadow(
+                color: ElsepageTheme.Shadow.floatingColor,
+                radius: ElsepageTheme.Shadow.floatingRadius,
+                y: ElsepageTheme.Shadow.floatingY
+            )
             .padding(.horizontal, ElsepageTheme.Spacing.medium)
             .padding(.bottom, ElsepageTheme.Spacing.small)
         }
