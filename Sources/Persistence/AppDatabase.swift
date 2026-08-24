@@ -68,6 +68,45 @@ public final class AppDatabase: @unchecked Sendable {
                 t.column("updatedAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("v3_reflection_loop") { db in
+            try db.create(table: "readingSessions") { t in
+                t.column("id", .text).primaryKey()
+                t.column("bookID", .text).notNull().indexed().references("books", onDelete: .cascade)
+                t.column("startedAt", .datetime).notNull()
+                t.column("endedAt", .datetime)
+                Self.addLocatorColumns(to: t, prefix: "start")
+                Self.addOptionalLocatorColumns(to: t, prefix: "end")
+                t.column("highlightCount", .integer).notNull().defaults(to: 0)
+                t.column("noteCount", .integer).notNull().defaults(to: 0)
+                t.column("agentDiscussionCount", .integer).notNull().defaults(to: 0)
+                t.check(sql: "highlightCount >= 0 AND noteCount >= 0 AND agentDiscussionCount >= 0")
+                t.check(sql: "endedAt IS NULL OR endedAt >= startedAt")
+            }
+            try db.create(table: "reflections") { t in
+                t.column("id", .text).primaryKey()
+                t.column("bookID", .text).notNull().indexed().references("books", onDelete: .cascade)
+                t.column("sessionID", .text).indexed().references("readingSessions", onDelete: .setNull)
+                t.column("originalText", .text).notNull()
+                t.column("inputKind", .text).notNull()
+                t.column("audioFileName", .text)
+                t.column("createdAt", .datetime).notNull().indexed()
+                t.check(sql: "length(trim(originalText)) > 0")
+                t.check(sql: "inputKind IN ('text', 'voiceTranscript')")
+            }
+            try db.create(table: "reflectionMessages") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("role", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "role IN ('agent', 'userFollowUp')")
+            }
+            try db.create(table: "reflectionHighlights") { t in
+                t.column("reflectionID", .text).notNull().references("reflections", onDelete: .cascade)
+                t.column("highlightID", .text).notNull().references("highlights", onDelete: .cascade)
+                t.primaryKey(["reflectionID", "highlightID"])
+            }
+        }
         return migrator
     }
 
@@ -79,5 +118,25 @@ public final class AppDatabase: @unchecked Sendable {
         t.column("textBefore", .text)
         t.column("textHighlight", .text)
         t.column("textAfter", .text)
+    }
+
+    private static func addLocatorColumns(to t: TableDefinition, prefix: String) {
+        t.column("\(prefix)LocatorJSON", .blob).notNull()
+        t.column("\(prefix)Href", .text).notNull()
+        t.column("\(prefix)Progression", .double)
+        t.column("\(prefix)TotalProgression", .double)
+        t.column("\(prefix)TextBefore", .text)
+        t.column("\(prefix)TextHighlight", .text)
+        t.column("\(prefix)TextAfter", .text)
+    }
+
+    private static func addOptionalLocatorColumns(to t: TableDefinition, prefix: String) {
+        t.column("\(prefix)LocatorJSON", .blob)
+        t.column("\(prefix)Href", .text)
+        t.column("\(prefix)Progression", .double)
+        t.column("\(prefix)TotalProgression", .double)
+        t.column("\(prefix)TextBefore", .text)
+        t.column("\(prefix)TextHighlight", .text)
+        t.column("\(prefix)TextAfter", .text)
     }
 }
