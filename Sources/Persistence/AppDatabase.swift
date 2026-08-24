@@ -107,6 +107,40 @@ public final class AppDatabase: @unchecked Sendable {
                 t.primaryKey(["reflectionID", "highlightID"])
             }
         }
+        migrator.registerMigration("v4_reflection_provenance") { db in
+            try db.rename(table: "reflectionMessages", to: "reflectionMessagesV3")
+            try db.drop(index: "reflectionMessages_on_reflectionID")
+            try db.create(table: "reflectionMessages") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("author", .text).notNull()
+                t.column("source", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "(author = 'user' AND source = 'userInput') OR (author = 'agent' AND source = 'agentGenerated')")
+            }
+            try db.execute(sql: """
+                INSERT INTO reflectionMessages (id, reflectionID, author, source, content, createdAt)
+                SELECT id, reflectionID,
+                       CASE role WHEN 'userFollowUp' THEN 'user' ELSE 'agent' END,
+                       CASE role WHEN 'userFollowUp' THEN 'userInput' ELSE 'agentGenerated' END,
+                       content, createdAt
+                FROM reflectionMessagesV3
+                """)
+            try db.drop(table: "reflectionMessagesV3")
+
+            try db.create(table: "reflectionEvidence") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("sourceType", .text).notNull()
+                t.column("sourceID", .text)
+                Self.addOptionalLocatorColumns(to: t, prefix: "")
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "sourceType IN ('bookLocator', 'highlight', 'note', 'readingSession')")
+                t.check(sql: "sourceID IS NOT NULL OR locatorJSON IS NOT NULL")
+                t.check(sql: "(locatorJSON IS NULL AND href IS NULL) OR (locatorJSON IS NOT NULL AND href IS NOT NULL)")
+            }
+        }
         return migrator
     }
 

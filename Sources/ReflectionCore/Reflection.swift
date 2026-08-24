@@ -1,5 +1,6 @@
 import Foundation
 import LibraryCore
+import ReaderCore
 import ReadingSessionCore
 
 public struct ReflectionID: Hashable, Codable, Sendable, RawRepresentable, CustomStringConvertible {
@@ -37,26 +38,70 @@ public struct Reflection: Hashable, Codable, Sendable, Identifiable {
     }
 }
 
-/// Future conversation/AI output. Kept separate so it can never overwrite `Reflection.originalText`.
-public struct ReflectionDerivedMessage: Hashable, Codable, Sendable, Identifiable {
-    public enum Role: String, Codable, Sendable { case agent, userFollowUp }
+public enum ReflectionMessageAuthor: String, Codable, Sendable { case user, agent }
+public enum ReflectionMessageSource: String, Codable, Sendable { case userInput, agentGenerated }
+
+/// Conversation content with explicit authorship and provenance.
+/// `.userInput` is user-owned source data; `.agentGenerated` is replaceable derived data.
+public struct ReflectionMessage: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
     public let reflectionID: ReflectionID
-    public let role: Role
+    public let author: ReflectionMessageAuthor
+    public let source: ReflectionMessageSource
     public let content: String
     public let createdAt: Date
 
-    public init(id: UUID = UUID(), reflectionID: ReflectionID, role: Role, content: String, createdAt: Date = Date()) {
-        self.id = id; self.reflectionID = reflectionID; self.role = role; self.content = content; self.createdAt = createdAt
+    public init(
+        id: UUID = UUID(), reflectionID: ReflectionID,
+        author: ReflectionMessageAuthor, source: ReflectionMessageSource,
+        content: String, createdAt: Date = Date()
+    ) throws {
+        guard (author == .user && source == .userInput) || (author == .agent && source == .agentGenerated) else {
+            throw ReflectionValidationError.inconsistentMessageProvenance
+        }
+        self.id = id; self.reflectionID = reflectionID; self.author = author
+        self.source = source; self.content = content; self.createdAt = createdAt
     }
+
+    public var isUserSourceOfTruth: Bool { source == .userInput }
+}
+
+public enum ReflectionEvidenceSourceType: String, Codable, Sendable {
+    case bookLocator, highlight, note, readingSession
+}
+
+public struct ReflectionEvidence: Hashable, Codable, Sendable, Identifiable {
+    public let id: UUID
+    public let reflectionID: ReflectionID
+    public let sourceType: ReflectionEvidenceSourceType
+    public let sourceID: String?
+    public let locator: BookLocator?
+    public let createdAt: Date
+
+    public init(
+        id: UUID = UUID(), reflectionID: ReflectionID,
+        sourceType: ReflectionEvidenceSourceType, sourceID: String? = nil,
+        locator: BookLocator? = nil, createdAt: Date = Date()
+    ) throws {
+        guard sourceID != nil || locator != nil else { throw ReflectionValidationError.missingEvidenceProvenance }
+        self.id = id; self.reflectionID = reflectionID; self.sourceType = sourceType
+        self.sourceID = sourceID; self.locator = locator; self.createdAt = createdAt
+    }
+}
+
+public enum ReflectionValidationError: Error, Equatable {
+    case inconsistentMessageProvenance
+    case missingEvidenceProvenance
 }
 
 public protocol ReflectionRepository: Sendable {
     func reflection(id: ReflectionID) async throws -> Reflection?
     func reflections(for bookID: BookID) async throws -> [Reflection]
-    func insert(_ reflection: Reflection, linkedHighlightIDs: [UUID]) async throws
+    func insert(_ reflection: Reflection, linkedHighlightIDs: [UUID], evidence: [ReflectionEvidence]) async throws
     func linkedHighlightIDs(for reflectionID: ReflectionID) async throws -> [UUID]
-    func derivedMessages(for reflectionID: ReflectionID) async throws -> [ReflectionDerivedMessage]
-    func appendDerivedMessage(_ message: ReflectionDerivedMessage) async throws
+    func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage]
+    func appendMessage(_ message: ReflectionMessage) async throws
+    func evidence(for reflectionID: ReflectionID) async throws -> [ReflectionEvidence]
+    func appendEvidence(_ evidence: ReflectionEvidence) async throws
     func delete(id: ReflectionID) async throws
 }

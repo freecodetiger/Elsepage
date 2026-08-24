@@ -45,6 +45,7 @@ public enum PersistenceError: Error {
     case inconsistentHighlightNote
     case inconsistentReflectionContext
     case missingReadingSession
+    case corruptRecord(table: String, recordID: String, field: String)
 }
 
 private struct BookRecord: Codable, FetchableRecord, PersistableRecord {

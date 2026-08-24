@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .library(name: "LibraryCore", targets: ["LibraryCore"]),
         .library(name: "ReaderCore", targets: ["ReaderCore"]),
+        .library(name: "ReadingSessionCore", targets: ["ReadingSessionCore"]),
+        .library(name: "ReflectionCore", targets: ["ReflectionCore"]),
         .library(name: "Persistence", targets: ["Persistence"]),
         .library(name: "AppInfrastructure", targets: ["AppInfrastructure"]),
     ],
@@ -16,15 +18,21 @@ let package = Package(
     targets: [
         .target(name: "LibraryCore"),
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
+        .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
+        .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore"]),
         .target(
             name: "Persistence",
-            dependencies: ["LibraryCore", "ReaderCore", .product(name: "GRDB", package: "GRDB.swift")]
+            dependencies: [
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ]
         ),
         .target(name: "AppInfrastructure", dependencies: ["LibraryCore", "ReaderCore"]),
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
-                "LibraryCore", "ReaderCore", "Persistence", "AppInfrastructure",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore",
+                "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [.copy("Fixtures")]

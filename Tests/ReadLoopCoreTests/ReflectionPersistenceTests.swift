@@ -1,4 +1,3 @@
-#if canImport(ReadingSessionCore) && canImport(ReflectionCore)
 import Foundation
 import GRDB
 import LibraryCore
@@ -29,6 +28,7 @@ import Testing
     #expect(tables.contains("reflections"))
     #expect(tables.contains("reflectionMessages"))
     #expect(tables.contains("reflectionHighlights"))
+    #expect(tables.contains("reflectionEvidence"))
 }
 
 @Test func readingSessionRoundTripsAndCompletes() async throws {
@@ -54,11 +54,11 @@ import Testing
     let book = TestFixtures.book(); try await GRDBBookRepository(database: database).insert(book)
     let repository = GRDBReflectionRepository(database: database)
     let reflection = Reflection(bookID: book.id, originalText: "This is what I actually thought.", inputKind: .text)
-    try await repository.insert(reflection, linkedHighlightIDs: [])
-    try await repository.appendDerivedMessage(.init(reflectionID: reflection.id, role: .agent, content: "A generated interpretation"))
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    try await repository.appendMessage(try .init(reflectionID: reflection.id, author: .agent, source: .agentGenerated, content: "A generated interpretation"))
 
     #expect(try await repository.reflection(id: reflection.id)?.originalText == reflection.originalText)
-    #expect(try await repository.derivedMessages(for: reflection.id).map(\.content) == ["A generated interpretation"])
+    #expect(try await repository.messages(for: reflection.id).map(\.content) == ["A generated interpretation"])
 }
 
 @Test func reflectionInsertWithInvalidHighlightRollsBack() async throws {
@@ -68,7 +68,7 @@ import Testing
     let reflection = Reflection(bookID: book.id, originalText: "Keep this atomic", inputKind: .text)
 
     await #expect(throws: (any Error).self) {
-        try await repository.insert(reflection, linkedHighlightIDs: [UUID()])
+        try await repository.insert(reflection, linkedHighlightIDs: [UUID()], evidence: [])
     }
     #expect(try await repository.reflection(id: reflection.id) == nil)
 }
@@ -81,7 +81,7 @@ import Testing
     let session = ReadingSession(bookID: book.id, startLocator: try TestFixtures.realisticLocator())
     try await sessions.insert(session)
     let reflection = Reflection(bookID: book.id, sessionID: session.id, originalText: "Preserve my thought", inputKind: .voiceTranscript, audioFileName: "voice.m4a")
-    try await reflections.insert(reflection, linkedHighlightIDs: [])
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
 
     try await sessions.delete(id: session.id)
     #expect(try await reflections.reflection(id: reflection.id)?.sessionID == nil)
@@ -97,12 +97,14 @@ import Testing
     let highlight = Highlight(bookID: book.id, locator: try TestFixtures.realisticLocator())
     try await reading.save(highlight: highlight)
     let reflection = Reflection(bookID: book.id, originalText: "Source", inputKind: .text)
-    try await reflections.insert(reflection, linkedHighlightIDs: [highlight.id])
-    try await reflections.appendDerivedMessage(.init(reflectionID: reflection.id, role: .agent, content: "Derived"))
+    let evidence = try ReflectionEvidence(reflectionID: reflection.id, sourceType: .highlight, sourceID: highlight.id.uuidString.lowercased())
+    try await reflections.insert(reflection, linkedHighlightIDs: [highlight.id], evidence: [evidence])
+    try await reflections.appendMessage(try .init(reflectionID: reflection.id, author: .agent, source: .agentGenerated, content: "Derived"))
 
     try await reflections.delete(id: reflection.id)
-    #expect(try await reflections.derivedMessages(for: reflection.id).isEmpty)
+    #expect(try await reflections.messages(for: reflection.id).isEmpty)
     #expect(try await reflections.linkedHighlightIDs(for: reflection.id).isEmpty)
+    #expect(try await reflections.evidence(for: reflection.id).isEmpty)
     #expect(try await reading.highlights(for: book.id).map(\.id) == [highlight.id])
 }
 
@@ -115,10 +117,164 @@ import Testing
     let session = ReadingSession(bookID: book.id, startLocator: try TestFixtures.realisticLocator())
     try await sessions.insert(session)
     let reflection = Reflection(bookID: book.id, sessionID: session.id, originalText: "Delete with book", inputKind: .text)
-    try await reflections.insert(reflection, linkedHighlightIDs: [])
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
 
     try await books.delete(book.id)
     #expect(try await sessions.session(id: session.id) == nil)
     #expect(try await reflections.reflection(id: reflection.id) == nil)
 }
-#endif
+
+@Test func migratesV3FollowUpAsUserOwnedMessage() async throws {
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v3_reflection_loop")
+    let book = TestFixtures.book()
+    let reflectionID = ReflectionID()
+    let messageID = UUID()
+    try await queue.write { db in
+        try db.execute(
+            sql: "INSERT INTO books (id, fingerprint, title, fileName, fileSize, importedAt) VALUES (?, ?, ?, ?, ?, ?)",
+            arguments: [book.id.description, book.fingerprint.rawValue, book.title, book.fileName, book.fileSize, book.importedAt]
+        )
+        try db.execute(
+            sql: "INSERT INTO reflections (id, bookID, originalText, inputKind, createdAt) VALUES (?, ?, ?, ?, ?)",
+            arguments: [reflectionID.description, book.id.description, "Original", "text", Date()]
+        )
+        try db.execute(
+            sql: "INSERT INTO reflectionMessages (id, reflectionID, role, content, createdAt) VALUES (?, ?, ?, ?, ?)",
+            arguments: [messageID.uuidString.lowercased(), reflectionID.description, "userFollowUp", "My later thought", Date()]
+        )
+    }
+
+    let database = try AppDatabase(writer: queue)
+    let message = try #require(try await GRDBReflectionRepository(database: database).messages(for: reflectionID).first)
+    #expect(message.author == .user)
+    #expect(message.source == .userInput)
+    #expect(message.isUserSourceOfTruth)
+    #expect(message.content == "My later thought")
+}
+
+@Test func messageModelRejectsAgentAuthoredUserSource() throws {
+    #expect(throws: ReflectionValidationError.inconsistentMessageProvenance) {
+        try ReflectionMessage(
+            reflectionID: ReflectionID(), author: .agent, source: .userInput, content: "invalid"
+        )
+    }
+}
+
+@Test func reflectionEvidenceRoundTripsStableIDAndFullLocator() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book(); try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(bookID: book.id, originalText: "Evidence matters", inputKind: .text)
+    let locator = try TestFixtures.realisticLocator()
+    let highlight = Highlight(bookID: book.id, locator: locator)
+    try await GRDBReadingRepository(database: database).save(highlight: highlight)
+    let evidence = [
+        try ReflectionEvidence(reflectionID: reflection.id, sourceType: .highlight, sourceID: highlight.id.uuidString.lowercased()),
+        try ReflectionEvidence(reflectionID: reflection.id, sourceType: .bookLocator, locator: locator),
+    ]
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: evidence)
+
+    let stored = try await repository.evidence(for: reflection.id)
+    #expect(stored.count == 2)
+    let storedID = try #require(stored.first { $0.sourceType == .highlight })
+    let storedLocator = try #require(stored.first { $0.sourceType == .bookLocator })
+    #expect(storedID.sourceID == evidence[0].sourceID)
+    #expect(storedLocator.locator?.json == locator.json)
+}
+
+@Test func reflectionEvidenceRejectsSourceFromAnotherBook() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reading = GRDBReadingRepository(database: database)
+    let firstBook = TestFixtures.book(fingerprint: "evidence-first")
+    let secondBook = TestFixtures.book(fingerprint: "evidence-second")
+    try await books.insert(firstBook); try await books.insert(secondBook)
+    let highlight = Highlight(bookID: secondBook.id, locator: try TestFixtures.realisticLocator())
+    try await reading.save(highlight: highlight)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(bookID: firstBook.id, originalText: "Wrong book", inputKind: .text)
+    let evidence = try ReflectionEvidence(
+        reflectionID: reflection.id, sourceType: .highlight,
+        sourceID: highlight.id.uuidString.lowercased()
+    )
+
+    await #expect(throws: (any Error).self) {
+        try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [evidence])
+    }
+    #expect(try await repository.reflection(id: reflection.id) == nil)
+}
+
+@Test func reflectionAndEvidenceInsertRollBackTogether() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book(); try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(bookID: book.id, originalText: "Atomic source", inputKind: .text)
+    let wrongEvidence = try ReflectionEvidence(
+        reflectionID: ReflectionID(), sourceType: .readingSession, sourceID: ReadingSessionID().description
+    )
+
+    await #expect(throws: (any Error).self) {
+        try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [wrongEvidence])
+    }
+    #expect(try await repository.reflection(id: reflection.id) == nil)
+}
+
+@Test func foreignKeysRejectOrphanReflectionEvidence() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBReflectionRepository(database: database)
+    let evidence = try ReflectionEvidence(
+        reflectionID: ReflectionID(), sourceType: .note, sourceID: UUID().uuidString.lowercased()
+    )
+    await #expect(throws: (any Error).self) { try await repository.appendEvidence(evidence) }
+}
+
+@Test func corruptMessageRowThrowsExplicitPersistenceError() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book(); try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(bookID: book.id, originalText: "Source", inputKind: .text)
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    try await database.writer.write { db in
+        try db.execute(
+            sql: "INSERT INTO reflectionMessages (id, reflectionID, author, source, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
+            arguments: ["not-a-uuid", reflection.id.description, "agent", "agentGenerated", "bad row", Date()]
+        )
+    }
+
+    do {
+        _ = try await repository.messages(for: reflection.id)
+        Issue.record("Expected corrupt row to throw")
+    } catch let error as Persistence.PersistenceError {
+        guard case let .corruptRecord(table, recordID, field) = error else {
+            Issue.record("Unexpected persistence error: \(error)"); return
+        }
+        #expect(table == "reflectionMessages"); #expect(recordID == "not-a-uuid"); #expect(field == "id")
+    }
+}
+
+@Test func corruptEvidenceLocatorThrowsExplicitPersistenceError() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book(); try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(bookID: book.id, originalText: "Source", inputKind: .text)
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    let evidenceID = UUID().uuidString.lowercased()
+    try await database.writer.write { db in
+        try db.execute(
+            sql: "INSERT INTO reflectionEvidence (id, reflectionID, sourceType, locatorJSON, href, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
+            arguments: [evidenceID, reflection.id.description, "bookLocator", Data("invalid".utf8), "chapter.xhtml", Date()]
+        )
+    }
+
+    do {
+        _ = try await repository.evidence(for: reflection.id)
+        Issue.record("Expected corrupt evidence to throw")
+    } catch let error as Persistence.PersistenceError {
+        guard case let .corruptRecord(table, recordID, field) = error else {
+            Issue.record("Unexpected persistence error: \(error)"); return
+        }
+        #expect(table == "reflectionEvidence"); #expect(recordID == evidenceID); #expect(field == "locatorJSON")
+    }
+}

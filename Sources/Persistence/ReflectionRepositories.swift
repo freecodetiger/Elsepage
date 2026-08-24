@@ -1,4 +1,3 @@
-#if canImport(ReadingSessionCore) && canImport(ReflectionCore)
 import Foundation
 import GRDB
 import LibraryCore
@@ -58,11 +57,13 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
     public func reflections(for bookID: BookID) async throws -> [Reflection] {
         try await db.writer.read { db in
             try ReflectionRecord.filter(Column("bookID") == bookID.description)
-                .order(Column("createdAt").desc).fetchAll(db).map(\.domain)
+                .order(Column("createdAt").desc).fetchAll(db).map { try $0.domain }
         }
     }
 
-    public func insert(_ reflection: Reflection, linkedHighlightIDs: [UUID] = []) async throws {
+    public func insert(
+        _ reflection: Reflection, linkedHighlightIDs: [UUID] = [], evidence: [ReflectionEvidence] = []
+    ) async throws {
         try await db.writer.write { db in
             if let sessionID = reflection.sessionID {
                 guard let sessionBookID = try String.fetchOne(
@@ -81,6 +82,11 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
                     arguments: [reflection.id.description, highlightID.uuidString.lowercased()]
                 )
             }
+            for item in evidence {
+                guard item.reflectionID == reflection.id else { throw PersistenceError.inconsistentReflectionContext }
+                try Self.validate(item, belongsTo: reflection.bookID, in: db)
+                try ReflectionEvidenceRecord(item).insert(db)
+            }
         }
     }
 
@@ -89,23 +95,67 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
             try String.fetchAll(
                 db, sql: "SELECT highlightID FROM reflectionHighlights WHERE reflectionID = ? ORDER BY highlightID",
                 arguments: [reflectionID.description]
-            ).compactMap(UUID.init(uuidString:))
+            ).map { value in
+                guard let id = UUID(uuidString: value) else {
+                    throw PersistenceError.corruptRecord(table: "reflectionHighlights", recordID: reflectionID.description, field: "highlightID")
+                }
+                return id
+            }
         }
     }
 
-    public func derivedMessages(for reflectionID: ReflectionID) async throws -> [ReflectionDerivedMessage] {
+    public func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage] {
         try await db.writer.read { db in
             try ReflectionMessageRecord.filter(Column("reflectionID") == reflectionID.description)
-                .order(Column("createdAt"), Column("id")).fetchAll(db).compactMap(\.domain)
+                .order(Column("createdAt"), Column("id")).fetchAll(db).map { try $0.domain() }
         }
     }
 
-    public func appendDerivedMessage(_ message: ReflectionDerivedMessage) async throws {
+    public func appendMessage(_ message: ReflectionMessage) async throws {
         try await db.writer.write { db in try ReflectionMessageRecord(message).insert(db) }
+    }
+
+    public func evidence(for reflectionID: ReflectionID) async throws -> [ReflectionEvidence] {
+        try await db.writer.read { db in
+            try ReflectionEvidenceRecord.filter(Column("reflectionID") == reflectionID.description)
+                .order(Column("createdAt"), Column("id")).fetchAll(db).map { try $0.domain() }
+        }
+    }
+
+    public func appendEvidence(_ evidence: ReflectionEvidence) async throws {
+        try await db.writer.write { db in
+            guard let bookID = try String.fetchOne(
+                db, sql: "SELECT bookID FROM reflections WHERE id = ?", arguments: [evidence.reflectionID.description]
+            ) else { throw PersistenceError.inconsistentReflectionContext }
+            let reflectionBookID = BookID(rawValue: try decodeUUID(
+                bookID, table: "reflections", recordID: evidence.reflectionID.description, field: "bookID"
+            ))
+            try Self.validate(evidence, belongsTo: reflectionBookID, in: db)
+            try ReflectionEvidenceRecord(evidence).insert(db)
+        }
     }
 
     public func delete(id: ReflectionID) async throws {
         _ = try await db.writer.write { db in try ReflectionRecord.deleteOne(db, key: id.description) }
+    }
+
+    private static func validate(_ evidence: ReflectionEvidence, belongsTo bookID: BookID, in db: Database) throws {
+        if evidence.sourceType == .bookLocator {
+            guard evidence.locator != nil else { throw PersistenceError.inconsistentReflectionContext }
+            return
+        }
+        guard let sourceID = evidence.sourceID else { throw PersistenceError.inconsistentReflectionContext }
+        let table: String
+        switch evidence.sourceType {
+        case .highlight: table = "highlights"
+        case .note: table = "notes"
+        case .readingSession: table = "readingSessions"
+        case .bookLocator: return
+        }
+        let sourceBookID = try String.fetchOne(
+            db, sql: "SELECT bookID FROM \(table) WHERE id = ?", arguments: [sourceID.lowercased()]
+        )
+        guard sourceBookID == bookID.description else { throw PersistenceError.inconsistentReflectionContext }
     }
 }
 
@@ -143,12 +193,17 @@ private struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     }
 
     func domain() throws -> ReadingSession {
-        let start = try BookLocator(json: startLocatorJSON, href: startHref, progression: startProgression, totalProgression: startTotalProgression, textBefore: startTextBefore, textHighlight: startTextHighlight, textAfter: startTextAfter)
+        let start = try decodeLocator(json: startLocatorJSON, href: startHref, progression: startProgression, totalProgression: startTotalProgression, textBefore: startTextBefore, textHighlight: startTextHighlight, textAfter: startTextAfter, table: Self.databaseTableName, recordID: id)
         let end: BookLocator?
         if let json = endLocatorJSON, let href = endHref {
-            end = try BookLocator(json: json, href: href, progression: endProgression, totalProgression: endTotalProgression, textBefore: endTextBefore, textHighlight: endTextHighlight, textAfter: endTextAfter)
+            end = try decodeLocator(json: json, href: href, progression: endProgression, totalProgression: endTotalProgression, textBefore: endTextBefore, textHighlight: endTextHighlight, textAfter: endTextAfter, table: Self.databaseTableName, recordID: id)
         } else { end = nil }
-        return ReadingSession(id: .init(rawValue: UUID(uuidString: id)!), bookID: .init(rawValue: UUID(uuidString: bookID)!), startedAt: startedAt, endedAt: endedAt, startLocator: start, endLocator: end, highlightCount: highlightCount, noteCount: noteCount, agentDiscussionCount: agentDiscussionCount)
+        return ReadingSession(
+            id: .init(rawValue: try decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id")),
+            bookID: .init(rawValue: try decodeUUID(bookID, table: Self.databaseTableName, recordID: id, field: "bookID")),
+            startedAt: startedAt, endedAt: endedAt, startLocator: start, endLocator: end,
+            highlightCount: highlightCount, noteCount: noteCount, agentDiscussionCount: agentDiscussionCount
+        )
     }
 }
 
@@ -165,21 +220,113 @@ private struct ReflectionRecord: Codable, FetchableRecord, PersistableRecord {
         inputKind = reflection.inputKind.rawValue; audioFileName = reflection.audioFileName; createdAt = reflection.createdAt
     }
     var domain: Reflection {
-        Reflection(id: .init(rawValue: UUID(uuidString: id)!), bookID: .init(rawValue: UUID(uuidString: bookID)!), sessionID: sessionID.flatMap(UUID.init(uuidString:)).map(ReadingSessionID.init(rawValue:)), originalText: originalText, inputKind: ReflectionInputKind(rawValue: inputKind)!, audioFileName: audioFileName, createdAt: createdAt)
+        get throws {
+            let decodedSessionID: ReadingSessionID?
+            if let sessionID {
+                decodedSessionID = ReadingSessionID(rawValue: try decodeUUID(sessionID, table: Self.databaseTableName, recordID: id, field: "sessionID"))
+            } else { decodedSessionID = nil }
+            guard let decodedInputKind = ReflectionInputKind(rawValue: inputKind) else {
+                throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "inputKind")
+            }
+            return Reflection(
+                id: .init(rawValue: try decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id")),
+                bookID: .init(rawValue: try decodeUUID(bookID, table: Self.databaseTableName, recordID: id, field: "bookID")),
+                sessionID: decodedSessionID, originalText: originalText, inputKind: decodedInputKind,
+                audioFileName: audioFileName, createdAt: createdAt
+            )
+        }
     }
 }
 
 private struct ReflectionMessageRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "reflectionMessages"
-    var id, reflectionID, role, content: String
+    var id, reflectionID, author, source, content: String
     var createdAt: Date
-    init(_ message: ReflectionDerivedMessage) {
+    init(_ message: ReflectionMessage) {
         id = message.id.uuidString.lowercased(); reflectionID = message.reflectionID.description
-        role = message.role.rawValue; content = message.content; createdAt = message.createdAt
+        author = message.author.rawValue; source = message.source.rawValue
+        content = message.content; createdAt = message.createdAt
     }
-    var domain: ReflectionDerivedMessage? {
-        guard let id = UUID(uuidString: id), let reflectionID = UUID(uuidString: reflectionID), let role = ReflectionDerivedMessage.Role(rawValue: role) else { return nil }
-        return ReflectionDerivedMessage(id: id, reflectionID: .init(rawValue: reflectionID), role: role, content: content, createdAt: createdAt)
+    func domain() throws -> ReflectionMessage {
+        guard let decodedAuthor = ReflectionMessageAuthor(rawValue: author) else {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "author")
+        }
+        guard let decodedSource = ReflectionMessageSource(rawValue: source) else {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "source")
+        }
+        do {
+            return try ReflectionMessage(
+                id: decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id"),
+                reflectionID: .init(rawValue: decodeUUID(reflectionID, table: Self.databaseTableName, recordID: id, field: "reflectionID")),
+                author: decodedAuthor, source: decodedSource, content: content, createdAt: createdAt
+            )
+        } catch is ReflectionValidationError {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "author/source")
+        }
     }
 }
-#endif
+
+private struct ReflectionEvidenceRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "reflectionEvidence"
+    var id, reflectionID, sourceType: String
+    var sourceID: String?
+    var locatorJSON: Data?
+    var href: String?
+    var progression, totalProgression: Double?
+    var textBefore, textHighlight, textAfter: String?
+    var createdAt: Date
+
+    init(_ evidence: ReflectionEvidence) {
+        id = evidence.id.uuidString.lowercased(); reflectionID = evidence.reflectionID.description
+        sourceType = evidence.sourceType.rawValue; sourceID = evidence.sourceID
+        locatorJSON = evidence.locator?.json; href = evidence.locator?.href
+        progression = evidence.locator?.progression; totalProgression = evidence.locator?.totalProgression
+        textBefore = evidence.locator?.textBefore; textHighlight = evidence.locator?.textHighlight
+        textAfter = evidence.locator?.textAfter; createdAt = evidence.createdAt
+    }
+
+    func domain() throws -> ReflectionEvidence {
+        guard let decodedSourceType = ReflectionEvidenceSourceType(rawValue: sourceType) else {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "sourceType")
+        }
+        let locator: BookLocator?
+        if let locatorJSON, let href {
+            locator = try decodeLocator(json: locatorJSON, href: href, progression: progression, totalProgression: totalProgression, textBefore: textBefore, textHighlight: textHighlight, textAfter: textAfter, table: Self.databaseTableName, recordID: id)
+        } else if locatorJSON == nil, href == nil {
+            locator = nil
+        } else {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "locator")
+        }
+        do {
+            return try ReflectionEvidence(
+                id: decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id"),
+                reflectionID: .init(rawValue: decodeUUID(reflectionID, table: Self.databaseTableName, recordID: id, field: "reflectionID")),
+                sourceType: decodedSourceType, sourceID: sourceID, locator: locator, createdAt: createdAt
+            )
+        } catch is ReflectionValidationError {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "provenance")
+        }
+    }
+}
+
+private func decodeUUID(_ value: String, table: String, recordID: String, field: String) throws -> UUID {
+    guard let id = UUID(uuidString: value) else {
+        throw PersistenceError.corruptRecord(table: table, recordID: recordID, field: field)
+    }
+    return id
+}
+
+private func decodeLocator(
+    json: Data, href: String, progression: Double?, totalProgression: Double?,
+    textBefore: String?, textHighlight: String?, textAfter: String?,
+    table: String, recordID: String
+) throws -> BookLocator {
+    do {
+        return try BookLocator(
+            json: json, href: href, progression: progression, totalProgression: totalProgression,
+            textBefore: textBefore, textHighlight: textHighlight, textAfter: textAfter
+        )
+    } catch {
+        throw PersistenceError.corruptRecord(table: table, recordID: recordID, field: "locatorJSON")
+    }
+}
