@@ -41,3 +41,12 @@ import Testing
     #expect(decorations.map(\.locator.json) == [first.locator.json, second.locator.json])
     #expect(decorations.map(\.color) == [.yellow, .blue])
 }
+
+@Test func searchResultKeepsStableLocatorAndIdentity() throws {
+    let locator = try TestFixtures.realisticLocator()
+    let first = ReaderSearchResult(locator: locator, excerpt: "a page")
+    let second = ReaderSearchResult(locator: locator, excerpt: "different presentation")
+    #expect(first.locator.json == locator.json)
+    #expect(first.id == second.id)
+    #expect(first.excerpt == "a page")
+}

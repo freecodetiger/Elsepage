@@ -1,7 +1,7 @@
 import ReaderCore
 import ReadiumAdapterGCDWebServer
 import ReadiumNavigator
-import ReadiumShared
+@preconcurrency import ReadiumShared
 import SwiftUI
 import UIKit
 
@@ -16,9 +16,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         context.coordinator.open(in: host)
         return host
     }
+    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        Task { await coordinator.flushPosition() }
+    }
     @MainActor final class Coordinator: NSObject, EPUBNavigatorDelegate {
         private let model: ReaderModel
         private weak var navigator: EPUBNavigatorViewController?
+        private var publication: Publication?
         private var lastPreferences: ReaderPreferences?
         private var lastColorScheme: ColorScheme?
         private var lastHighlights: [Highlight] = []
@@ -30,6 +34,11 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             Task {
                 do {
                     let publication = try await model.readium.open(model.fileURL, allowUserInteraction: true)
+                    self.publication = publication
+                    model.searchHandler = { [weak self] query in
+                        guard let self else { return [] }
+                        return try await self.search(publication: publication, query: query)
+                    }
                     model.chapters = Self.chapters(from: publication.manifest.tableOfContents)
                     let initial = try model.initialLocatorJSON.flatMap(Self.readiumLocator(from:))
                     let actions = EditingAction.defaultActions + [
@@ -39,7 +48,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     let navigator = try EPUBNavigatorViewController(
                         publication: publication,
                         initialLocation: initial,
-                        config: .init(editingActions: actions),
+                        config: .init(
+                            editingActions: actions,
+                            contentInset: [
+                                .compact: (top: 8, bottom: 8),
+                                .regular: (top: 16, bottom: 16),
+                            ]
+                        ),
                         httpServer: model.readium.httpServer
                     )
                     navigator.delegate = self
@@ -55,6 +70,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     navigator.didMove(toParent: host)
                     host.navigator = navigator
                     self.navigator = navigator
+                    navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
+                        guard let id = UUID(uuidString: event.decoration.id) else { return }
+                        self?.presentHighlight(id: id, from: host)
+                    }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights()
                 } catch {
@@ -130,6 +149,66 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             navigator.apply(decorations: decorations, in: "highlights")
         }
 
+        private func presentHighlight(id: UUID, from host: UIViewController) {
+            guard let highlight = model.highlights.first(where: { $0.id == id }) else { return }
+            model.selectedHighlightID = id
+            let linkedNote = model.notes.first { $0.highlightID == id }
+            let alert = UIAlertController(
+                title: linkedNote == nil ? "高亮" : "批注",
+                message: linkedNote?.body ?? highlight.locator.textHighlight,
+                preferredStyle: .actionSheet
+            )
+            alert.addAction(UIAlertAction(title: "跳转到此处", style: .default) { [weak model] _ in model?.jump(to: highlight.locator) })
+            if let linkedNote {
+                alert.addAction(UIAlertAction(title: "编辑批注", style: .default) { [weak host, weak model] _ in
+                    guard let host, let model else { return }
+                    Self.presentNoteEditor(linkedNote, from: host, model: model)
+                })
+                alert.addAction(UIAlertAction(title: "删除批注", style: .destructive) { [weak model] _ in model?.delete(note: linkedNote) })
+            }
+            alert.addAction(UIAlertAction(title: "删除高亮", style: .destructive) { [weak model] _ in model?.delete(highlight: highlight) })
+            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+            if let popover = alert.popoverPresentationController {
+                popover.sourceView = host.view
+                popover.sourceRect = CGRect(x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
+            }
+            host.present(alert, animated: true)
+        }
+
+        private static func presentNoteEditor(_ note: Note, from host: UIViewController, model: ReaderModel) {
+            let alert = UIAlertController(title: "编辑批注", message: note.locator.textHighlight, preferredStyle: .alert)
+            alert.addTextField { $0.text = note.body }
+            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+            alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak alert, weak model] _ in
+                guard let body = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty else { return }
+                model?.update(note: note, body: body)
+            })
+            host.present(alert, animated: true)
+        }
+
+        private func search(publication: Publication, query: String) async throws -> [ReaderSearchResult] {
+            let iterator: any SearchIterator
+            switch await publication.search(query: query) {
+            case .success(let value): iterator = value
+            case .failure(let error): throw error
+            }
+            var results: [ReaderSearchResult] = []
+            while !Task.isCancelled {
+                switch await iterator.next() {
+                case .success(let collection):
+                    guard let collection else { return results }
+                    results.append(contentsOf: try collection.locators.map {
+                        let anchor = try Self.anchor(from: $0)
+                        return ReaderSearchResult(locator: anchor, excerpt: $0.text.highlight ?? $0.text.before ?? query)
+                    })
+                case .failure(let error): throw error
+                }
+            }
+            return results
+        }
+
+        func flushPosition() async { await model.flushPosition() }
+
         private static func color(for color: HighlightColor) -> UIColor {
             switch color {
             case .yellow: .systemYellow.withAlphaComponent(0.42)
@@ -144,7 +223,14 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 var result: [ReaderChapter] = []
                 let locator = Locator(href: link.url(), mediaType: link.mediaType ?? .xhtml, title: link.title)
                 if let data = try? JSONSerialization.data(withJSONObject: locator.json) {
-                    result.append(.init(id: "\(depth)-\(link.href)", title: link.title ?? "未命名章节", depth: depth, href: link.href, locatorJSON: data))
+                    result.append(.init(
+                        id: "\(depth)-\(link.href)",
+                        title: link.title ?? "未命名章节",
+                        depth: depth,
+                        href: link.href,
+                        locatorJSON: data,
+                        progression: locator.locations.progression
+                    ))
                 }
                 result.append(contentsOf: chapters(from: link.children, depth: depth + 1))
                 return result
@@ -183,6 +269,19 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
     weak var navigator: EPUBNavigatorViewController?
     init(model: ReaderModel) { self.model = model; super.init(nibName: nil, bundle: nil) }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        NotificationCenter.default.addObserver(self, selector: #selector(flushPosition), name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(flushPosition), name: UIApplication.willResignActiveNotification, object: nil)
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        flushPosition()
+    }
+
+    @objc private func flushPosition() { Task { await model.flushPosition() } }
 
     @objc func highlightSelection() {
         guard let navigator, let selection = navigator.currentSelection,
