@@ -22,7 +22,7 @@ struct ReaderScreen: View {
                 readerChrome.transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: model.showsControls)
+        .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
         .toolbar(.hidden, for: .navigationBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
         .task { await model.prepare() }
@@ -43,10 +43,10 @@ struct ReaderScreen: View {
     }
 
     private var readerChrome: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                chromeButton("chevron.left") { dismiss() }
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(spacing: ElsepageTheme.Spacing.small) {
+            HStack(spacing: ElsepageTheme.Spacing.medium) {
+                ElsepageIconButton(systemName: "chevron.left", accessibilityLabel: "返回书架") { dismiss() }
+                VStack(alignment: .leading, spacing: 3) {
                     Text(model.book.title)
                         .font(.system(.subheadline, design: .serif, weight: .semibold))
                         .lineLimit(1)
@@ -55,52 +55,54 @@ struct ReaderScreen: View {
                     }
                 }
                 Spacer()
-                chromeButton("textformat") { presentedSheet = .appearance }
+                ElsepageIconButton(systemName: "textformat", accessibilityLabel: "阅读设置") { presentedSheet = .appearance }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-            .background(.regularMaterial)
+            .padding(.horizontal, ElsepageTheme.Spacing.medium)
+            .padding(.vertical, ElsepageTheme.Spacing.small)
+            .background(ElsepageTheme.MaterialToken.chrome)
 
             Spacer()
 
-            VStack(spacing: 10) {
-                HStack {
+            VStack(spacing: ElsepageTheme.Spacing.small) {
+                HStack(spacing: ElsepageTheme.Spacing.medium) {
                     Button { presentedSheet = .contents } label: {
                         Label("目录", systemImage: "list.bullet.indent")
                     }
+                    .buttonStyle(.plain)
                     Spacer()
                     Text(model.progress, format: .percent.precision(.fractionLength(0)))
                         .monospacedDigit().foregroundStyle(.secondary)
+                        .accessibilityLabel("阅读进度")
                 }
                 .font(.subheadline.weight(.medium))
-                ProgressView(value: model.progress).tint(.primary)
+                ProgressView(value: model.progress)
+                    .tint(.elsepageAccent)
+                    .accessibilityLabel("阅读进度")
+                    .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
-            .background(.regularMaterial)
+            .padding(ElsepageTheme.Spacing.medium)
+            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
+                    .stroke(.primary.opacity(0.06))
+            }
+            .shadow(
+                color: ElsepageTheme.Shadow.floatingColor,
+                radius: ElsepageTheme.Shadow.floatingRadius,
+                y: ElsepageTheme.Shadow.floatingY
+            )
+            .padding(.horizontal, ElsepageTheme.Spacing.medium)
+            .padding(.bottom, ElsepageTheme.Spacing.small)
         }
         .foregroundStyle(.primary)
     }
 
-    private func chromeButton(_ systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.body.weight(.semibold))
-                .frame(width: 38, height: 38)
-                .background(.thinMaterial, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(systemName == "chevron.left" ? "返回书库" : "阅读设置")
-    }
-
     private var themeBackground: Color {
         switch model.preferences.theme {
-        case .system: colorScheme == .dark ? .black : .white
-        case .light: .white
-        case .dark: .black
-        case .sepia: Color(red: 0.98, green: 0.96, blue: 0.91)
+        case .system: colorScheme == .dark ? Color(uiColor: .black) : .elsepageBackground
+        case .light: Color(uiColor: .systemBackground)
+        case .dark: Color(uiColor: .black)
+        case .sepia: .elsepageReaderSepia
         }
     }
 }
@@ -129,6 +131,7 @@ private struct ContentsSheet: View {
                                 .foregroundStyle(.primary)
                                 .padding(.leading, CGFloat(chapter.depth) * 16)
                         }
+                        .accessibilityHint("跳转到这一章")
                     }
                     .listStyle(.plain)
                 }
@@ -156,6 +159,7 @@ private struct ReaderAppearanceSheet: View {
                         themeButton(.dark, "深色", .black)
                     }
                     .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .contain)
                 }
                 Section("排版") {
                     settingSlider("字号", value: $model.preferences.fontSize, range: 0.8 ... 1.6)
@@ -197,12 +201,15 @@ private struct ReaderAppearanceSheet: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(title)主题")
+        .accessibilityAddTraits(model.preferences.theme == theme ? .isSelected : [])
     }
 
     private func settingSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         HStack {
             Text(title).frame(width: 52, alignment: .leading)
             Slider(value: value, in: range)
+                .accessibilityLabel(title)
         }
     }
 }

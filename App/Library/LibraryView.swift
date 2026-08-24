@@ -10,13 +10,19 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(uiColor: .secondarySystemBackground).ignoresSafeArea()
+                Color.elsepageBackground.ignoresSafeArea()
                 if model.books.isEmpty { emptyLibrary } else { bookList(model) }
             }
-            .navigationTitle("我的书架")
+            .navigationTitle("书架")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                Button("导入", systemImage: "plus") { importing = true }
-                    .disabled(model.isImporting)
+                ToolbarItem(placement: .topBarTrailing) {
+                    if model.isImporting {
+                        ProgressView().accessibilityLabel("正在导入 EPUB")
+                    } else {
+                        ElsepageIconButton(systemName: "plus", accessibilityLabel: "导入 EPUB") { importing = true }
+                    }
+                }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [UTType.epub], allowsMultipleSelection: false) { result in
                 if case .success(let urls) = result, let url = urls.first { Task { await model.importBook(url) } }
@@ -26,57 +32,81 @@ struct LibraryView: View {
             }
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
             .alert("这本书已经在书库中", isPresented: Binding(get: { model.duplicateTitle != nil }, set: { if !$0 { model.duplicateTitle = nil } })) { Button("好") {} } message: { Text(model.duplicateTitle ?? "") }
+            .safeAreaInset(edge: .bottom) {
+                if model.isImporting { importStatus }
+            }
         }
     }
 
     private var emptyLibrary: some View {
-        ContentUnavailableView {
-            Label("带一本书进来", systemImage: "books.vertical.fill")
-        } description: {
-            Text("从“文件”导入无 DRM 的 EPUB。阅读不需要网络或 AI。")
-        } actions: {
-            Button("导入 EPUB") { importing = true }.buttonStyle(.borderedProminent)
+        VStack(spacing: ElsepageTheme.Spacing.large) {
+            Image(systemName: "books.vertical")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.elsepageAccent)
+                .accessibilityHidden(true)
+            VStack(spacing: ElsepageTheme.Spacing.small) {
+                Text("带一本书进来")
+                    .font(ElsepageTheme.Typography.emptyStateTitle)
+                Text("从“文件”导入无 DRM 的 EPUB。\n没有网络或 AI，也可以安静地读完它。")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Button("导入 EPUB") { importing = true }
+                .buttonStyle(.borderedProminent)
+                .tint(.elsepageAccent)
+                .disabled(model.isImporting)
         }
+        .padding(ElsepageTheme.Spacing.xLarge)
+    }
+
+    private var importStatus: some View {
+        HStack(spacing: ElsepageTheme.Spacing.small) {
+            ProgressView()
+            Text("正在导入 EPUB…").font(.subheadline.weight(.medium))
+        }
+        .padding(.horizontal, ElsepageTheme.Spacing.medium)
+        .padding(.vertical, ElsepageTheme.Spacing.small)
+        .background(ElsepageTheme.MaterialToken.chrome, in: Capsule())
+        .padding(.bottom, ElsepageTheme.Spacing.small)
+        .accessibilityElement(children: .combine)
     }
 
     private func bookList(_ model: LibraryModel) -> some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 20)], spacing: 24) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: ElsepageTheme.Spacing.medium)], spacing: ElsepageTheme.Spacing.xLarge) {
                 ForEach(model.books) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
-                            ZStack(alignment: .bottomLeading) {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color.indigo.opacity(0.9), Color.blue.opacity(0.55)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .aspectRatio(0.7, contentMode: .fit)
-                                    .shadow(color: .black.opacity(0.16), radius: 8, y: 5)
-                                Text(book.title)
-                                    .font(.system(.headline, design: .serif, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(4)
-                                    .padding(14)
-                            }
+                            ElsepageBookCover(title: book.title, author: book.author, seed: Int(book.id.rawValue.uuid.0))
+                                .aspectRatio(0.7, contentMode: .fit)
                             Text(book.title)
-                                .font(.subheadline.weight(.semibold))
+                                .font(ElsepageTheme.Typography.itemTitle)
                                 .foregroundStyle(.primary)
                                 .lineLimit(2)
-                            Text(book.author ?? "未知作者")
-                                .font(.caption)
+                            Text(metadata(for: book))
+                                .font(ElsepageTheme.Typography.metadata)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(accessibilityLabel(for: book))
+                    .accessibilityHint("打开并继续阅读")
                 }
             }
-            .padding(20)
+            .padding(ElsepageTheme.Spacing.page)
         }
+    }
+
+    private func metadata(for book: Book) -> String {
+        if let author = book.author, !author.isEmpty { return author }
+        return "未知作者"
+    }
+
+    private func accessibilityLabel(for book: Book) -> String {
+        "\(book.title)，\(metadata(for: book))"
     }
 }
