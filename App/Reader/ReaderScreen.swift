@@ -29,6 +29,8 @@ struct ReaderScreen: View {
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .contents: ContentsSheet(model: model)
+            case .search: ReaderSearchSheet(model: model)
+            case .annotations: ReaderAnnotationsSheet(model: model)
             case .appearance: ReaderAppearanceSheet(model: model)
             }
         }
@@ -55,6 +57,7 @@ struct ReaderScreen: View {
                     }
                 }
                 Spacer()
+                ElsepageIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索正文") { presentedSheet = .search }
                 ElsepageIconButton(systemName: "textformat", accessibilityLabel: "阅读设置") { presentedSheet = .appearance }
             }
             .padding(.horizontal, ElsepageTheme.Spacing.medium)
@@ -67,6 +70,10 @@ struct ReaderScreen: View {
                 HStack(spacing: ElsepageTheme.Spacing.medium) {
                     Button { presentedSheet = .contents } label: {
                         Label("目录", systemImage: "list.bullet.indent")
+                    }
+                    .buttonStyle(.plain)
+                    Button { presentedSheet = .annotations } label: {
+                        Label("标注", systemImage: "highlighter")
                     }
                     .buttonStyle(.plain)
                     Spacer()
@@ -108,7 +115,7 @@ struct ReaderScreen: View {
 }
 
 private enum ReaderSheet: String, Identifiable {
-    case contents, appearance
+    case contents, search, annotations, appearance
     var id: String { rawValue }
 }
 
@@ -127,9 +134,15 @@ private struct ContentsSheet: View {
                             model.jump(to: chapter)
                             dismiss()
                         } label: {
-                            Text(chapter.title)
-                                .foregroundStyle(.primary)
-                                .padding(.leading, CGFloat(chapter.depth) * 16)
+                            HStack {
+                                Text(chapter.title)
+                                Spacer()
+                                if chapter.id == model.currentChapterID {
+                                    Image(systemName: "checkmark").foregroundStyle(Color.elsepageAccent)
+                                }
+                            }
+                            .foregroundStyle(chapter.id == model.currentChapterID ? Color.elsepageAccent : .primary)
+                            .padding(.leading, CGFloat(chapter.depth) * 16)
                         }
                         .accessibilityHint("跳转到这一章")
                     }
@@ -141,6 +154,93 @@ private struct ContentsSheet: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+private struct ReaderSearchSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var model: ReaderModel
+    @State private var query = ""
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if model.isSearching { ProgressView("正在搜索…") }
+                else if model.searchResults.isEmpty {
+                    ContentUnavailableView("搜索正文", systemImage: "magnifyingglass", description: Text("输入关键词查找书中内容。"))
+                } else {
+                    List(model.searchResults) { result in
+                        Button {
+                            model.jump(to: result.locator); dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(result.excerpt).foregroundStyle(.primary).lineLimit(3)
+                                if let context = result.locator.textBefore {
+                                    Text(context).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                        }
+                    }.listStyle(.plain)
+                }
+            }
+            .navigationTitle("搜索")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $query, prompt: "搜索本书")
+            .task(id: query) {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                await model.search(query)
+            }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct ReaderAnnotationsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var model: ReaderModel
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if model.highlights.isEmpty && model.notes.isEmpty {
+                    ContentUnavailableView("还没有标注", systemImage: "highlighter", description: Text("选中文字即可添加高亮或批注。"))
+                } else {
+                    List {
+                        if !model.notes.isEmpty {
+                            Section("批注") {
+                                ForEach(model.notes) { note in
+                                    annotationButton(note.body, context: note.locator.textHighlight, locator: note.locator)
+                                }
+                            }
+                        }
+                        if !model.highlights.isEmpty {
+                            Section("高亮") {
+                                ForEach(model.highlights) { highlight in
+                                    annotationButton(highlight.locator.textHighlight ?? "高亮位置", context: highlight.locator.textBefore, locator: highlight.locator)
+                                }
+                            }
+                        }
+                    }.listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle("标注")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func annotationButton(_ title: String, context: String?, locator: BookLocator) -> some View {
+        Button {
+            model.jump(to: locator); dismiss()
+        } label: {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).foregroundStyle(.primary).lineLimit(3)
+                if let context { Text(context).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            }
+        }
     }
 }
 

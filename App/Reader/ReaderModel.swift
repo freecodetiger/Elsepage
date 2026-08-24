@@ -29,6 +29,8 @@ final class ReaderModel {
     @ObservationIgnored private var positionSaveTask: Task<Void, Never>?
     @ObservationIgnored private var positionState = LatestValueState<ReadingPosition>()
     @ObservationIgnored private var searchState = LatestRequestState()
+    @ObservationIgnored private var noteSaveTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
 
     init(book: Book, fileURL: URL, repository: any ReadingRepository, books: any BookRepository, readium: ReadiumServices) {
         self.book = book; self.fileURL = fileURL; self.repository = repository; self.books = books
@@ -91,11 +93,22 @@ final class ReaderModel {
         updated.body = body
         updated.updatedAt = Date()
         notes[index] = updated
-        Task {
-            do { try await repository.save(note: updated) }
+        let generation = (noteSaveGenerations[note.id] ?? 0) &+ 1
+        noteSaveGenerations[note.id] = generation
+        let previous = noteSaveTasks[note.id]
+        noteSaveTasks[note.id] = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            do { try await self.repository.save(note: updated) }
             catch {
-                if let current = notes.firstIndex(where: { $0.id == original.id }) { notes[current] = original }
-                errorMessage = error.localizedDescription
+                if self.noteSaveGenerations[note.id] == generation,
+                   let current = self.notes.firstIndex(where: { $0.id == original.id }) {
+                    self.notes[current] = original
+                }
+                self.errorMessage = error.localizedDescription
+            }
+            if self.noteSaveGenerations[note.id] == generation {
+                self.noteSaveTasks[note.id] = nil
             }
         }
     }
