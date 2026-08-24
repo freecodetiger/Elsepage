@@ -24,6 +24,7 @@ struct ReaderScreen: View {
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
         .task { await model.prepare() }
         .sheet(item: $presentedSheet) { sheet in

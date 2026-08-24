@@ -37,7 +37,7 @@ final class ReaderModel {
         self.readium = readium
     }
     func prepare() async {
-        defer { isPrepared = true }
+        guard !isPrepared else { return }
         do {
             let position = try await repository.position(for: book.id)
             initialLocatorJSON = position?.locator.json
@@ -46,7 +46,13 @@ final class ReaderModel {
             highlights = try await repository.highlights(for: book.id)
             notes = try await repository.notes(for: book.id)
             try await books.markOpened(book.id, at: Date())
-        } catch { errorMessage = error.localizedDescription }
+            isPrepared = true
+        } catch is CancellationError {
+            return
+        } catch {
+            isPrepared = true
+            errorMessage = error.localizedDescription
+        }
     }
     func save(locator: BookLocator) {
         progress = locator.totalProgression ?? progress
@@ -145,6 +151,9 @@ final class ReaderModel {
             let results = try await searchHandler(query)
             guard searchState.finish(token) else { return }
             searchResults = results
+            isSearching = searchState.isLoading
+        } catch is CancellationError {
+            guard searchState.finish(token) else { return }
             isSearching = searchState.isLoading
         } catch {
             guard searchState.finish(token) else { return }

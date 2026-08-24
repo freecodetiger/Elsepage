@@ -76,6 +76,8 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights()
+                } catch is CancellationError {
+                    return
                 } catch {
                     model.errorMessage = error.localizedDescription
                 }

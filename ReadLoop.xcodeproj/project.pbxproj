@@ -46,6 +46,7 @@
 		CFB6ECB328C361B1DCAF2CE2 /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05A33B98BD21AF7593C5D6EF /* LibraryModel.swift */; };
 		D212B53D304B5A5C369D0E37 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 303B2BF3C97ADB415239C9F7 /* ReadiumStreamer */; };
 		D71C869DDC4716F8C3FBD66D /* ReadiumServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A3069ECDB501E8EF30EF58 /* ReadiumServices.swift */; };
+		D9300D54F299A3CC2E338B8E /* AppShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCFA4B39B6C45BE89C0D038 /* AppShell.swift */; };
 		DB1681D6696E7574AE2AE093 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731BF6181C2F03AD959521F2 /* LibraryView.swift */; };
 		DF1E21FF7C793E26B8B51C7E /* ElsepageComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9663C3CAFB779777C386F10 /* ElsepageComponents.swift */; };
 		E4D1C924B1823D21FCE52A46 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 14157B016983F45E250D41BD /* ReadiumShared */; };
@@ -85,6 +86,7 @@
 		9732B9E459EE944232BA4360 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		9DA4DD14F94B6069D15B34AA /* ReadiumReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumReaderView.swift; sourceTree = "<group>"; };
 		A9663C3CAFB779777C386F10 /* ElsepageComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElsepageComponents.swift; sourceTree = "<group>"; };
+		AFCFA4B39B6C45BE89C0D038 /* AppShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShell.swift; sourceTree = "<group>"; };
 		B55839CB4C3EA8571BD92EE5 /* elsepage */ = {isa = PBXFileReference; lastKnownFileType = folder; name = elsepage; path = .; sourceTree = SOURCE_ROOT; };
 		E17217B45491685767A98789 /* ReaderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderModel.swift; sourceTree = "<group>"; };
 		EAAA36A8711C5E5DB8D4CC1A /* PersistenceHardeningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceHardeningTests.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				360C4642963044D8D97F349E /* Library */,
 				6D7CCBFE126283EA0154C0BB /* Reader */,
 				9732B9E459EE944232BA4360 /* AppModel.swift */,
+				AFCFA4B39B6C45BE89C0D038 /* AppShell.swift */,
 				5BF9ECFADAEA467B41E4AA5A /* ReadLoopApp.swift */,
 			);
 			path = App;
@@ -414,6 +417,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4AE7C3539EEB1E0403A71A2D /* AppModel.swift in Sources */,
+				D9300D54F299A3CC2E338B8E /* AppShell.swift in Sources */,
 				DF1E21FF7C793E26B8B51C7E /* ElsepageComponents.swift in Sources */,
 				4C21FA3E171833BA8A152903 /* ElsepageTheme.swift in Sources */,
 				CFB6ECB328C361B1DCAF2CE2 /* LibraryModel.swift in Sources */,
