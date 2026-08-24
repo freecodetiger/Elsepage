@@ -1,6 +1,6 @@
 # ReadLoop Reader Foundation
 
-ReadLoop is the engineering codename. This repository currently implements the local-first iOS EPUB reader foundation described by the product and technical Source of Truth documents.
+ReadLoop is the engineering codename. This repository implements a local-first iOS EPUB reader foundation plus the first text-only reading-session and reflection loop described by the product and technical Source of Truth documents.
 
 ## Open the project
 
@@ -9,7 +9,7 @@ ReadLoop is the engineering codename. This repository currently implements the l
 3. Run `xcodegen generate`, then open `ReadLoop.xcodeproj`.
 4. Resolve Swift packages and run the `ReadLoop` scheme.
 
-The app has no account, backend, AI, or network requirement at runtime. Imported EPUBs and `readloop.sqlite` live under Application Support.
+The app has no account or product backend requirement. Imported EPUBs and `readloop.sqlite` live under Application Support. Reading and raw text reflection work without a network or AI provider. The repository includes a Keychain-only BYOK provider foundation; provider setup and in-app Agent delivery are not yet wired.
 
 ## Verification
 
@@ -22,4 +22,4 @@ The purpose-built CC0 EPUB fixture can be reproduced with `Scripts/build-test-ep
 - `ReadLoop_PRD.md`
 - `ReadLoop_Technical_Design.md`
 
-Agent, Reflection, provider, and RAG functionality are intentionally outside the current phase.
+The current product loop is deliberately small: read, explicitly end a session, save a raw text reflection locally, then revisit it in Thoughts. Agent responses, provider settings, Memory, and RAG remain incomplete phases.

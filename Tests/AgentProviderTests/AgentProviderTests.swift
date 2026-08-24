@@ -25,8 +25,8 @@ import Testing
 @Test func inMemorySecretStoreKeepsSecretOutsideProviderConfiguration() async throws {
     let reference = SecretReference(rawValue: "provider-openai-primary")
     let store = InMemorySecretStore()
-    try await store.save("test-secret", for: reference)
-    #expect(try await store.secret(for: reference) == "test-secret")
+    await store.save("test-secret", for: reference)
+    #expect(await store.secret(for: reference) == "test-secret")
 
     let configuration = ProviderConfiguration(
         provider: .openAICompatible, baseURL: URL(string: "https://api.example.test/v1")!,
@@ -35,8 +35,8 @@ import Testing
     let encoded = try JSONEncoder().encode(configuration)
     #expect(!String(decoding: encoded, as: UTF8.self).contains("test-secret"))
 
-    try await store.removeSecret(for: reference)
-    #expect(try await store.secret(for: reference) == nil)
+    await store.removeSecret(for: reference)
+    #expect(await store.secret(for: reference) == nil)
 }
 
 @Test func compatibleClientMapsRequestAndResponseWithoutExposingKey() async throws {

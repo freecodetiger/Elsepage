@@ -1,3 +1,4 @@
+import ReflectionCore
 import SwiftUI
 
 struct ThoughtsView: View {

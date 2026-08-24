@@ -2,6 +2,8 @@ import Foundation
 import LibraryCore
 import Observation
 import ReaderCore
+import ReadingSessionCore
+import ReflectionCore
 
 @MainActor @Observable
 final class ReaderModel {
@@ -9,6 +11,8 @@ final class ReaderModel {
     let fileURL: URL
     let repository: any ReadingRepository
     private let books: any BookRepository
+    let reflectionRepository: any ReflectionRepository
+    private let sessions: ReadingSessionService
     let readium: ReadiumServices
     var initialLocatorJSON: Data?
     var errorMessage: String?
@@ -24,6 +28,8 @@ final class ReaderModel {
     var showsControls = true
     var jumpTargetJSON: Data?
     var selectedHighlightID: UUID?
+    private(set) var currentLocator: BookLocator?
+    private(set) var activeSession: ReadingSession?
     private(set) var isPrepared = false
     @ObservationIgnored var searchHandler: (@MainActor (String) async throws -> [ReaderSearchResult])?
     @ObservationIgnored private var positionSaveTask: Task<Void, Never>?
@@ -32,8 +38,17 @@ final class ReaderModel {
     @ObservationIgnored private var noteSaveTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
 
-    init(book: Book, fileURL: URL, repository: any ReadingRepository, books: any BookRepository, readium: ReadiumServices) {
+    init(
+        book: Book,
+        fileURL: URL,
+        repository: any ReadingRepository,
+        books: any BookRepository,
+        sessions: ReadingSessionService,
+        reflections: any ReflectionRepository,
+        readium: ReadiumServices
+    ) {
         self.book = book; self.fileURL = fileURL; self.repository = repository; self.books = books
+        self.sessions = sessions; reflectionRepository = reflections
         self.readium = readium
     }
     func prepare() async {
@@ -59,6 +74,7 @@ final class ReaderModel {
         }
     }
     func save(locator: BookLocator) {
+        currentLocator = locator
         progress = locator.totalProgression ?? progress
         let currentChapter = chapter(for: locator)
         currentChapterTitle = currentChapter?.title ?? currentChapterTitle
@@ -69,6 +85,9 @@ final class ReaderModel {
             try? await Task.sleep(for: .milliseconds(750))
             guard !Task.isCancelled else { return }
             await self?.flushPosition()
+        }
+        if activeSession == nil {
+            Task { [weak self] in await self?.startSessionIfNeeded(at: locator) }
         }
     }
     func saveHighlight(locator: BookLocator) {
@@ -193,6 +212,43 @@ final class ReaderModel {
     }
     func toggleControls() {
         showsControls.toggle()
+    }
+    func endReadingSession() async -> SessionEndingSummary? {
+        guard let locator = currentLocator else { return nil }
+        do {
+            await flushPosition()
+            let session: ReadingSession
+            if let activeSession {
+                session = activeSession
+            } else {
+                session = try await sessions.start(bookID: book.id, at: locator)
+                activeSession = session
+            }
+            let completed = try await sessions.end(
+                id: session.id,
+                at: locator,
+                highlightCount: highlights.count,
+                noteCount: notes.count
+            )
+            activeSession = completed
+            return SessionEndingSummary(session: completed)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func startSessionIfNeeded(at locator: BookLocator) async {
+        guard activeSession == nil else { return }
+        do {
+            activeSession = try await sessions.start(bookID: book.id, at: locator)
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     private func reportPersistenceError(_ operation: @escaping @Sendable () async throws -> Void) async {
         do { try await operation() }

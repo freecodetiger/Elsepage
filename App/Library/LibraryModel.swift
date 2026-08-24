@@ -3,11 +3,16 @@ import Foundation
 import LibraryCore
 import Observation
 import ReaderCore
+import ReadingSessionCore
+import ReflectionCore
 
 @MainActor @Observable
 final class LibraryModel {
     private let booksRepository: any BookRepository
     let readingRepository: any ReadingRepository
+    let reflectionRepository: any ReflectionRepository
+    let sessionRepository: any ReadingSessionRepository
+    let sessionService: ReadingSessionService
     let files: BookFileStore
     private let importer: BookImporter
     private let metadataReader: ReadiumMetadataReader
@@ -22,8 +27,19 @@ final class LibraryModel {
     var searchQuery = ""
     var sortOrder: LibrarySortOrder = .recentlyOpened
 
-    init(books: any BookRepository, reading: any ReadingRepository, files: BookFileStore, metadataReader: ReadiumMetadataReader, readium: ReadiumServices) {
+    init(
+        books: any BookRepository,
+        reading: any ReadingRepository,
+        sessions: any ReadingSessionRepository,
+        reflections: any ReflectionRepository,
+        files: BookFileStore,
+        metadataReader: ReadiumMetadataReader,
+        readium: ReadiumServices
+    ) {
         booksRepository = books; readingRepository = reading; self.files = files
+        reflectionRepository = reflections
+        sessionRepository = sessions
+        sessionService = ReadingSessionService(repository: sessions)
         importer = BookImporter(repository: books, files: files)
         self.metadataReader = metadataReader
         self.readium = readium
@@ -32,6 +48,7 @@ final class LibraryModel {
     func reload() async {
         do {
             books = try await booksRepository.allBooks()
+            try files.reconcilePendingDeletions(existingBookIDs: books.map(\.id))
             let positions = try await readingRepository.positions(for: books.map(\.id))
             readingProgress = positions.reduce(into: [:]) { result, entry in
                 result[entry.key] = entry.value.locator.totalProgression ?? 0
@@ -56,7 +73,15 @@ final class LibraryModel {
     }
 
     func readerModel(for book: Book) -> ReaderModel {
-        ReaderModel(book: book, fileURL: files.url(for: book.id), repository: readingRepository, books: booksRepository, readium: readium)
+        ReaderModel(
+            book: book,
+            fileURL: files.url(for: book.id),
+            repository: readingRepository,
+            books: booksRepository,
+            sessions: sessionService,
+            reflections: reflectionRepository,
+            readium: readium
+        )
     }
 
     var visibleBooks: [Book] {

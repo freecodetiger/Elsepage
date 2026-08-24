@@ -6,6 +6,8 @@ struct ReaderScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State var model: ReaderModel
     @State private var presentedSheet: ReaderSheet?
+    @State private var reflectionModel: SessionReflectionModel?
+    @State private var showsReflection = false
 
     var body: some View {
         ZStack {
@@ -33,6 +35,11 @@ struct ReaderScreen: View {
             case .search: ReaderSearchSheet(model: model)
             case .annotations: ReaderAnnotationsSheet(model: model)
             case .appearance: ReaderAppearanceSheet(model: model)
+            }
+        }
+        .sheet(isPresented: $showsReflection) {
+            if let reflectionModel {
+                SessionReflectionSheet(model: reflectionModel) { _ in }
             }
         }
         .alert("无法完成操作", isPresented: Binding(
@@ -75,6 +82,20 @@ struct ReaderScreen: View {
                     .buttonStyle(.plain)
                     Button { presentedSheet = .annotations } label: {
                         Label("标注", systemImage: "highlighter")
+                    }
+                    .buttonStyle(.plain)
+                    Button("结束阅读") {
+                        Task {
+                            guard let summary = await model.endReadingSession(),
+                                  let locator = model.currentLocator else { return }
+                            reflectionModel = SessionReflectionModel(
+                                book: model.book,
+                                summary: summary,
+                                locator: locator,
+                                reflectionRepository: model.reflectionRepository
+                            )
+                            showsReflection = true
+                        }
                     }
                     .buttonStyle(.plain)
                     Spacer()

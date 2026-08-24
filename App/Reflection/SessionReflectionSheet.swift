@@ -78,7 +78,7 @@ struct SessionReflectionSheet: View {
                     TextField("写下一点此刻真正留下来的东西…", text: $model.text, axis: .vertical)
                         .lineLimit(5...12)
                         .padding(ElsepageTheme.Spacing.medium)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.medium, style: .continuous))
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
                         .accessibilityLabel("本次阅读感想")
 
                     Text("这是你的原始想法，会先保存在本机。现在不会请求 AI。")
@@ -141,16 +141,17 @@ struct SessionReflectionSheet: View {
 
     private var durationLine: String {
         let minutes = Int((model.summary.wallClockDuration / 60).rounded(.down))
-        return minutes > 0 ? "这一段约 (minutes) 分钟" : "这一段阅读结束了"
+        return minutes > 0 ? "这一段约 \(minutes) 分钟" : "这一段阅读结束了"
     }
 
     private var annotationLine: String {
         let highlights = model.summary.session.highlightCount
         let notes = model.summary.session.noteCount
         switch (highlights, notes) {
-        case (let h, let n) where h > 0 && n > 0: return "留下了 (h) 个高亮和 (n) 条批注。"
-        case (let h, _): return "留下了 (h) 个高亮。"
-        case (_, let n): return "留下了 (n) 条批注。"
+        case (let h, let n) where h > 0 && n > 0: return "留下了 \(h) 个高亮和 \(n) 条批注。"
+        case (let h, _) where h > 0: return "留下了 \(h) 个高亮。"
+        case (_, let n) where n > 0: return "留下了 \(n) 条批注。"
+        default: return ""
         }
     }
 }

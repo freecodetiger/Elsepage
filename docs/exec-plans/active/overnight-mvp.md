@@ -101,6 +101,40 @@ Thoughts + local memory ───┘
   unresolved integration issues and manual-device checks in this document.
 - Update stale README/gate documentation if implementation materially changes it.
 
+## Integration record
+
+- Baseline: `fc25138` (AppShell and cancellation hygiene).
+- Reflection loop: `c72c778` from worker `6d43762`; coordinator corrected display
+  interpolation and made its retry test compare stable persisted identity rather
+  than database-rounded `Date` values.
+- Reader hardening: `f9564ef` from `62aa9c0`; coordinator added crash recovery
+  for the staged EPUB deletion window rather than deleting private trash at app
+  launch.
+- BYOK foundation: `bf28ec9` from `70eb8d9` (worker later verified the same
+  content as `24cb19a`). It is intentionally a foundation only: no provider
+  settings UI, persisted provider-config repository, or Agent response delivery
+  has been wired yet.
+- Thoughts archive: `b164ea7` from `d64365d`; it renders local raw reflections
+  and separately labelled derived responses only.
+- Coordinator wiring now injects session/reflection repositories, exposes the
+  explicit Reader “结束阅读” → text Reflection sheet flow, and replaces Today/
+  Thoughts placeholders with state-driven local surfaces.
+- Verification after integration: `swift test` passed 50 tests; `xcodegen
+  generate` and unsigned generic iOS `xcodebuild` passed. No simulator/device
+  interaction was performed in this run.
+
+## Remaining manual and product work
+
+- Run the full Reader Foundation device gate: real EPUB open/reopen, navigation,
+  position durability, selection, highlights/notes/restoration, rotation and
+  foreground/background behavior.
+- Verify the explicit session-end flow and Reflection save/skip on device.
+- Implement provider configuration persistence/UI and a constrained agent runner
+  that reads a persisted reflection and writes a separate derived message.
+- Add agent response/retry UX only after the raw-first flow is device-verified.
+- The simple Thoughts archive is not Memory or reconnection; preserve that scope
+  until evidence-backed proposal/edit/delete behavior is designed.
+
 ## Track B handoff — reflection loop
 
 - Branch: `codex/overnight-reflection`.

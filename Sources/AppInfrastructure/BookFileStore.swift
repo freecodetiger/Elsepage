@@ -34,11 +34,6 @@ public struct BookFileStore: BookFileManaging, Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: trashDirectory, withIntermediateDirectories: true)
-        // A completed database deletion may have been interrupted before this
-        // best-effort cleanup. These files are no longer user-visible books.
-        for file in try FileManager.default.contentsOfDirectory(at: trashDirectory, includingPropertiesForKeys: nil) {
-            try? FileManager.default.removeItem(at: file)
-        }
     }
     public func url(for bookID: BookID) -> URL { directory.appendingPathComponent(bookID.description).appendingPathExtension("epub") }
     public func fingerprint(of source: URL) throws -> ContentFingerprint {
@@ -79,6 +74,26 @@ public struct BookFileStore: BookFileManaging, Sendable {
     public func commitDeletion(_ trashed: TrashedBookFile?) {
         guard let trashed else { return }
         try? FileManager.default.removeItem(at: trashed.url)
+    }
+
+    /// Repairs an interrupted two-phase deletion. A book still present in the
+    /// database gets its EPUB restored; an orphaned trash entry is safe to drop.
+    public func reconcilePendingDeletions(existingBookIDs: [BookID]) throws {
+        let known = Set(existingBookIDs.map(\.description))
+        for trashed in try FileManager.default.contentsOfDirectory(at: trashDirectory, includingPropertiesForKeys: nil) {
+            let id = trashed.deletingPathExtension().lastPathComponent
+            guard known.contains(id), let uuid = UUID(uuidString: id) else {
+                try? FileManager.default.removeItem(at: trashed)
+                continue
+            }
+            let bookID = BookID(rawValue: uuid)
+            let destination = url(for: bookID)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try? FileManager.default.removeItem(at: trashed)
+            } else {
+                try FileManager.default.moveItem(at: trashed, to: destination)
+            }
+        }
     }
     public func cleanup(_ staged: StagedBookFile?, bookID: BookID) {
         if let staged { try? FileManager.default.removeItem(at: staged.url) }

@@ -63,7 +63,10 @@ import Testing
     let first = try await service.submit(draft)
     let retried = try await service.submit(draft)
 
-    #expect(first == retried)
+    #expect(first.id == retried.id)
+    #expect(first.bookID == retried.bookID)
+    #expect(first.sessionID == retried.sessionID)
+    #expect(first.originalText == retried.originalText)
     #expect(first.originalText == draft.originalText)
     let repository = GRDBReflectionRepository(database: database)
     #expect(try await repository.messages(for: first.id).isEmpty)
