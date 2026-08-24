@@ -33,6 +33,10 @@ targets:
       - package: ReadLoopCore
         product: ReaderCore
       - package: ReadLoopCore
+        product: ReadingSessionCore
+      - package: ReadLoopCore
+        product: ReflectionCore
+      - package: ReadLoopCore
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure
@@ -70,6 +74,10 @@ targets:
       - package: ReadLoopCore
         product: ReaderCore
       - package: ReadLoopCore
+        product: ReadingSessionCore
+      - package: ReadLoopCore
+        product: ReflectionCore
+      - package: ReadLoopCore
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure
@@ -79,6 +87,7 @@ targets:
   ReadiumIntegrationTests:
     type: bundle.unit-test
     platform: iOS
+    hostApplication: ReadLoop
     sources:
       - path: Tests/ReadiumIntegrationTests
       - path: Tests/ReadLoopCoreTests/Fixtures/EPUB/minimal.epub

@@ -22,7 +22,7 @@ import Testing
     #expect(try await books.book(id: book.id)?.fingerprint == book.fingerprint)
     #expect(try await reading.preferences(for: book.id) == .default)
     let migrations = try await queue.read { db in try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid") }
-    #expect(migrations == ["v1_reader_foundation", "v2_reader_preferences"])
+    #expect(migrations == ["v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop", "v4_reflection_provenance"])
 }
 
 @Test func bookDeletionCascadesPositionHighlightsNotesAndPreferences() async throws {
