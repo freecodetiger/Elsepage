@@ -58,4 +58,5 @@ public protocol BookRepository: Sendable {
     func book(fingerprint: ContentFingerprint) async throws -> Book?
     func insert(_ book: Book) async throws
     func markOpened(_ id: BookID, at date: Date) async throws
+    func delete(_ id: BookID) async throws
 }

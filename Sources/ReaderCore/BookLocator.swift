@@ -74,8 +74,58 @@ public protocol ReadingRepository: Sendable {
     func save(position: ReadingPosition) async throws
     func highlights(for bookID: BookID) async throws -> [Highlight]
     func save(highlight: Highlight) async throws
+    func save(highlight: Highlight, note: Note) async throws
     func deleteHighlight(id: UUID) async throws
     func notes(for bookID: BookID) async throws -> [Note]
     func save(note: Note) async throws
     func deleteNote(id: UUID) async throws
+    func preferences(for bookID: BookID) async throws -> ReaderPreferences
+    func save(preferences: ReaderPreferences, for bookID: BookID) async throws
+}
+
+public enum ReaderTheme: String, Codable, Sendable, CaseIterable { case system, light, dark, sepia }
+public enum ReadingMode: String, Codable, Sendable, CaseIterable { case paginated, scroll }
+
+public struct ReaderPreferences: Hashable, Codable, Sendable {
+    public var theme: ReaderTheme
+    public var fontSize: Double
+    public var lineHeight: Double
+    public var pageMargins: Double
+    public var readingMode: ReadingMode
+
+    public init(
+        theme: ReaderTheme = .system,
+        fontSize: Double = 1,
+        lineHeight: Double = 1,
+        pageMargins: Double = 1,
+        readingMode: ReadingMode = .paginated
+    ) {
+        self.theme = theme
+        self.fontSize = fontSize
+        self.lineHeight = lineHeight
+        self.pageMargins = pageMargins
+        self.readingMode = readingMode
+    }
+
+    public static let `default` = ReaderPreferences()
+}
+
+/// Readium-independent data required to restore persisted highlight decorations.
+public struct HighlightDecoration: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let locator: BookLocator
+    public let color: HighlightColor
+    public init(highlight: Highlight) {
+        id = highlight.id.uuidString.lowercased()
+        locator = highlight.locator
+        color = highlight.color
+    }
+}
+
+public struct HighlightRestorationService: Sendable {
+    private let repository: any ReadingRepository
+    public init(repository: any ReadingRepository) { self.repository = repository }
+    public func decorations(for bookID: BookID) async throws -> [HighlightDecoration] {
+        try await repository.highlights(for: bookID).map(HighlightDecoration.init)
+    }
 }

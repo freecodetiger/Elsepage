@@ -50,6 +50,17 @@
                ReferencedContainer = "container:ReadLoop.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "E129DD94F5A5757E71D87C42"
+               BuildableName = "ReadiumIntegrationTests.xctest"
+               BlueprintName = "ReadiumIntegrationTests"
+               ReferencedContainer = "container:ReadLoop.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

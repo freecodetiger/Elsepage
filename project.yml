@@ -46,6 +46,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Reader
+        PRODUCT_MODULE_NAME: ReadLoop
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -53,6 +54,7 @@ targets:
     scheme:
       testTargets:
         - ReadLoopCoreTests
+        - ReadiumIntegrationTests
   ReadLoopCoreTests:
     type: bundle.unit-test
     platform: iOS
@@ -67,6 +69,28 @@ targets:
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  ReadiumIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/ReadiumIntegrationTests
+      - path: Tests/ReadLoopCoreTests/Fixtures/EPUB/minimal.epub
+        buildPhase: resources
+    dependencies:
+      - target: ReadLoop
+      - package: ReadLoopCore
+        product: LibraryCore
+      - package: ReadLoopCore
+        product: AppInfrastructure
+      - package: ReadLoopCore
+        product: Persistence
+      - package: Readium
+        product: ReadiumShared
+      - package: Readium
+        product: ReadiumStreamer
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

@@ -57,6 +57,17 @@ public final class AppDatabase: @unchecked Sendable {
                 t.column("updatedAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("v2_reader_preferences") { db in
+            try db.create(table: "readerPreferences") { t in
+                t.column("bookID", .text).primaryKey().references("books", onDelete: .cascade)
+                t.column("theme", .text).notNull()
+                t.column("fontSize", .double).notNull()
+                t.column("lineHeight", .double).notNull()
+                t.column("pageMargins", .double).notNull()
+                t.column("readingMode", .text).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
         return migrator
     }
 

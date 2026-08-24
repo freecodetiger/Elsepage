@@ -25,7 +25,17 @@ final class ReaderModel {
             try await books.markOpened(book.id, at: Date())
         } catch { errorMessage = error.localizedDescription }
     }
-    func save(locator: BookLocator) { Task { try? await repository.save(position: .init(bookID: book.id, locator: locator)) } }
-    func saveHighlight(locator: BookLocator) { Task { try? await repository.save(highlight: .init(bookID: book.id, locator: locator)) } }
-    func saveNote(locator: BookLocator, body: String) { Task { try? await repository.save(note: .init(bookID: book.id, locator: locator, body: body)) } }
+    func save(locator: BookLocator) {
+        Task { await reportPersistenceError { try await repository.save(position: .init(bookID: book.id, locator: locator)) } }
+    }
+    func saveHighlight(locator: BookLocator) {
+        Task { await reportPersistenceError { try await repository.save(highlight: .init(bookID: book.id, locator: locator)) } }
+    }
+    func saveNote(locator: BookLocator, body: String) {
+        Task { await reportPersistenceError { try await repository.save(note: .init(bookID: book.id, locator: locator, body: body)) } }
+    }
+    private func reportPersistenceError(_ operation: @escaping @Sendable () async throws -> Void) async {
+        do { try await operation() }
+        catch { errorMessage = error.localizedDescription }
+    }
 }

@@ -76,7 +76,7 @@ private func makeBook(fingerprint: String = "abc") -> Book {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let sourceA = root.appendingPathComponent("one.epub")
     let sourceB = root.appendingPathComponent("renamed.epub")
-    let payload = Data([0x50, 0x4b, 0x03, 0x04]) + Data("mimetype application/epub+zip identity fixture".utf8)
+    let payload = try Data(contentsOf: TestFixtures.minimalEPUB)
     try payload.write(to: sourceA); try payload.write(to: sourceB)
     let database = try AppDatabase.inMemory()
     let repository = GRDBBookRepository(database: database)

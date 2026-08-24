@@ -23,7 +23,11 @@ let package = Package(
         .target(name: "AppInfrastructure", dependencies: ["LibraryCore", "ReaderCore"]),
         .testTarget(
             name: "ReadLoopCoreTests",
-            dependencies: ["LibraryCore", "ReaderCore", "Persistence", "AppInfrastructure"]
+            dependencies: [
+                "LibraryCore", "ReaderCore", "Persistence", "AppInfrastructure",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            resources: [.copy("Fixtures")]
         ),
     ]
 )

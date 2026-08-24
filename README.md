@@ -13,7 +13,9 @@ The app has no account, backend, AI, or network requirement at runtime. Imported
 
 ## Verification
 
-Run `swift test` for migrations, book identity, import deduplication, Locator persistence, and Highlight/Note relationship tests. The iOS integration additionally requires full Xcode because Readium's navigator is UIKit-based.
+Run `swift test` for migrations, book identity, import deduplication, Locator persistence, and Highlight/Note relationship tests. The iOS integration additionally requires a full Xcode installation with an installed iOS platform because Readium's navigator is UIKit-based.
+
+The purpose-built CC0 EPUB fixture can be reproduced with `Scripts/build-test-epub.sh`. Full iOS verification requirements are recorded in `docs/READER_FOUNDATION_XCODE_GATE.md` and remain a release gate.
 
 ## Source of Truth
 

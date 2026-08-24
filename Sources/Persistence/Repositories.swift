@@ -12,6 +12,7 @@ public final class GRDBBookRepository: BookRepository, @unchecked Sendable {
     public func book(fingerprint: ContentFingerprint) async throws -> Book? { try await db.writer.read { db in try BookRecord.filter(Column("fingerprint") == fingerprint.rawValue).fetchOne(db)?.domain } }
     public func insert(_ book: Book) async throws { try await db.writer.write { db in try BookRecord(book).insert(db) } }
     public func markOpened(_ id: BookID, at date: Date) async throws { try await db.writer.write { db in try db.execute(sql: "UPDATE books SET lastOpenedAt = ? WHERE id = ?", arguments: [date, id.description]) } }
+    public func delete(_ id: BookID) async throws { _ = try await db.writer.write { db in try BookRecord.deleteOne(db, key: id.description) } }
 }
 
 public final class GRDBReadingRepository: ReadingRepository, @unchecked Sendable {
@@ -21,11 +22,26 @@ public final class GRDBReadingRepository: ReadingRepository, @unchecked Sendable
     public func save(position: ReadingPosition) async throws { try await db.writer.write { db in try PositionRecord(position).save(db) } }
     public func highlights(for bookID: BookID) async throws -> [Highlight] { try await db.writer.read { db in try HighlightRecord.filter(Column("bookID") == bookID.description).order(Column("createdAt")).fetchAll(db).map { try $0.domain() } } }
     public func save(highlight: Highlight) async throws { try await db.writer.write { db in try HighlightRecord(highlight).save(db) } }
+    public func save(highlight: Highlight, note: Note) async throws {
+        guard note.highlightID == highlight.id, note.bookID == highlight.bookID else { throw PersistenceError.inconsistentHighlightNote }
+        try await db.writer.write { db in
+            try HighlightRecord(highlight).insert(db)
+            try NoteRecord(note).insert(db)
+        }
+    }
     public func deleteHighlight(id: UUID) async throws { _ = try await db.writer.write { db in try HighlightRecord.deleteOne(db, key: id.uuidString.lowercased()) } }
     public func notes(for bookID: BookID) async throws -> [Note] { try await db.writer.read { db in try NoteRecord.filter(Column("bookID") == bookID.description).order(Column("createdAt")).fetchAll(db).map { try $0.domain() } } }
     public func save(note: Note) async throws { try await db.writer.write { db in try NoteRecord(note).save(db) } }
     public func deleteNote(id: UUID) async throws { _ = try await db.writer.write { db in try NoteRecord.deleteOne(db, key: id.uuidString.lowercased()) } }
+    public func preferences(for bookID: BookID) async throws -> ReaderPreferences {
+        try await db.writer.read { db in try PreferencesRecord.fetchOne(db, key: bookID.description)?.domain ?? .default }
+    }
+    public func save(preferences: ReaderPreferences, for bookID: BookID) async throws {
+        try await db.writer.write { db in try PreferencesRecord(bookID: bookID, preferences: preferences).save(db) }
+    }
 }
+
+public enum PersistenceError: Error { case inconsistentHighlightNote }
 
 private struct BookRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "books"
@@ -54,4 +70,26 @@ private struct NoteRecord: Codable, FetchableRecord, PersistableRecord, LocatorR
     var id, bookID: String; var highlightID: String?; var locatorJSON: Data; var href: String; var progression, totalProgression: Double?; var textBefore, textHighlight, textAfter: String?; var body: String; var createdAt, updatedAt: Date
     init(_ n: Note) { id=n.id.uuidString.lowercased(); bookID=n.bookID.description; highlightID=n.highlightID?.uuidString.lowercased(); locatorJSON=n.locator.json; href=n.locator.href; progression=n.locator.progression; totalProgression=n.locator.totalProgression; textBefore=n.locator.textBefore; textHighlight=n.locator.textHighlight; textAfter=n.locator.textAfter; body=n.body; createdAt=n.createdAt; updatedAt=n.updatedAt }
     func domain() throws -> Note { Note(id:UUID(uuidString:id)!, bookID:BookID(rawValue:UUID(uuidString:bookID)!), highlightID:highlightID.flatMap(UUID.init(uuidString:)), locator:try locator(), body:body, createdAt:createdAt, updatedAt:updatedAt) }
+}
+
+private struct PreferencesRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "readerPreferences"
+    var bookID, theme: String
+    var fontSize, lineHeight, pageMargins: Double
+    var readingMode: String
+    var updatedAt: Date
+    init(bookID: BookID, preferences: ReaderPreferences) {
+        self.bookID = bookID.description; theme = preferences.theme.rawValue
+        fontSize = preferences.fontSize; lineHeight = preferences.lineHeight; pageMargins = preferences.pageMargins
+        readingMode = preferences.readingMode.rawValue; updatedAt = Date()
+    }
+    var domain: ReaderPreferences {
+        ReaderPreferences(
+            theme: ReaderTheme(rawValue: theme) ?? .system,
+            fontSize: fontSize,
+            lineHeight: lineHeight,
+            pageMargins: pageMargins,
+            readingMode: ReadingMode(rawValue: readingMode) ?? .paginated
+        )
+    }
 }
