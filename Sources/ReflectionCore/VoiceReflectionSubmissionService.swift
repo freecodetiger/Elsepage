@@ -9,14 +9,24 @@ public struct VoiceReflectionDraft: Hashable, Sendable {
     public let sessionID: ReadingSessionID?
     public let locator: BookLocator
     public let editedTranscript: String
+    /// Optional raw audio file name (relative to the Reflections directory). Nil when the
+    /// user chose not to save audio (PRD "可选").
+    public let audioFileName: String?
+    public let linkedHighlightIDs: [UUID]
     public let createdAt: Date
 
-    public init(id: ReflectionID = ReflectionID(), bookID: BookID, sessionID: ReadingSessionID?, locator: BookLocator, editedTranscript: String, createdAt: Date = Date()) {
+    public init(
+        id: ReflectionID = ReflectionID(), bookID: BookID, sessionID: ReadingSessionID?,
+        locator: BookLocator, editedTranscript: String, audioFileName: String? = nil,
+        linkedHighlightIDs: [UUID] = [], createdAt: Date = Date()
+    ) {
         self.id = id
         self.bookID = bookID
         self.sessionID = sessionID
         self.locator = locator
         self.editedTranscript = editedTranscript
+        self.audioFileName = audioFileName
+        self.linkedHighlightIDs = linkedHighlightIDs
         self.createdAt = createdAt
     }
 }
@@ -36,18 +46,23 @@ public struct VoiceReflectionSubmissionService: Sendable {
             guard existing.bookID == draft.bookID,
                   existing.sessionID == draft.sessionID,
                   existing.originalText == draft.editedTranscript,
-                  existing.inputKind == .voiceTranscript else {
+                  existing.inputKind == .voiceTranscript,
+                  existing.audioFileName == draft.audioFileName else {
                 throw VoiceReflectionSubmissionError.conflictingRetry
             }
             return existing
         }
 
-        let reflection = Reflection(id: draft.id, bookID: draft.bookID, sessionID: draft.sessionID, originalText: draft.editedTranscript, inputKind: .voiceTranscript, createdAt: draft.createdAt)
+        let reflection = Reflection(
+            id: draft.id, bookID: draft.bookID, sessionID: draft.sessionID,
+            originalText: draft.editedTranscript, inputKind: .voiceTranscript,
+            audioFileName: draft.audioFileName, createdAt: draft.createdAt
+        )
         var evidence = [try ReflectionEvidence(reflectionID: reflection.id, sourceType: .bookLocator, locator: draft.locator)]
         if let sessionID = draft.sessionID {
             evidence.append(try ReflectionEvidence(reflectionID: reflection.id, sourceType: .readingSession, sourceID: sessionID.description))
         }
-        try await repository.insert(reflection, linkedHighlightIDs: [], evidence: evidence)
+        try await repository.insert(reflection, linkedHighlightIDs: draft.linkedHighlightIDs, evidence: evidence)
         return reflection
     }
 }
