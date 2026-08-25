@@ -105,14 +105,20 @@ struct LibraryView: View {
                 ForEach(model.visibleBooks) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
-                            ElsepageBookCover(
-                                image: model.cover(for: book),
-                                title: book.title,
-                                author: book.author,
-                                seed: Int(book.id.rawValue.uuid.0)
-                            )
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(0.68, contentMode: .fit)
+                            // Keep the geometry independent from the source image's
+                            // aspect ratio. Wide EPUB covers are cropped inside this
+                            // fixed 2:3 portrait frame instead of expanding the cell.
+                            ZStack {
+                                Color.clear
+                                ElsepageBookCover(
+                                    image: model.cover(for: book),
+                                    title: book.title,
+                                    author: book.author,
+                                    seed: Int(book.id.rawValue.uuid.0)
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            .aspectRatio(2.0 / 3.0, contentMode: .fit)
                             .task(id: book.id) { await model.loadCover(for: book) }
                             Text(book.title)
                                 .font(ElsepageTheme.Typography.itemTitle)
