@@ -1,6 +1,17 @@
 import SwiftUI
 import ReflectionCore
 
+extension AgentEvidenceKind {
+    /// Display label used when an evidence snapshot has no better title.
+    var title: String {
+        switch self {
+        case .nearbyPassage: "当前阅读位置"
+        case .bookPassage: "书中内容"
+        case .pastReflection: "过去的想法"
+        }
+    }
+}
+
 /// Renders model-authored Markdown without treating it as executable HTML.
 /// User-authored Reflection text intentionally continues to use plain `Text`.
 struct AgentMarkdownText: View {

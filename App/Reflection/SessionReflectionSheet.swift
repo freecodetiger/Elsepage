@@ -112,7 +112,11 @@ final class SessionReflectionModel: Identifiable {
                     connectedReflection = try? await reflectionRepository.reflection(id: connection.sourceReflectionID)
                 }
             case .textDelta(let text):
-                streamingResponse += text
+                streamingResponse = Self.withoutCitationBlock(streamingResponse + text)
+            case .citationsValidated(let provenance):
+                if let messageID = provenance.evidence.first?.messageID {
+                    responseProvenance[messageID] = provenance
+                }
             case .completed:
                 await reloadMessages()
                 streamingResponse = ""
@@ -134,6 +138,11 @@ final class SessionReflectionModel: Identifiable {
                 responseProvenance[message.id] = provenance
             }
         }
+    }
+
+    private static func withoutCitationBlock(_ content: String) -> String {
+        guard let range = content.range(of: "---CITATIONS---") else { return content }
+        return String(content[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func message(for failure: ReaderAgentFailure) -> String {
@@ -232,20 +241,25 @@ struct SessionReflectionSheet: View {
                         Text(message.content).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                if let provenance = model.responseProvenance[message.id], !provenance.evidence.isEmpty {
-                    DisclosureGroup("查看本次使用的上下文") {
-                        ForEach(provenance.evidence) { evidence in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(evidence.title ?? "阅读证据").font(.caption.weight(.semibold))
-                                Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
-                                if evidence.locator != nil {
-                                    Button("回到原文") { openCitation?(evidence) }.font(.caption)
+                if let provenance = model.responseProvenance[message.id] {
+                    let citedIDs = Set(provenance.citations.map(\.evidenceID))
+                    let cited = provenance.evidence.filter { citedIDs.contains($0.id) }
+                    let shown = cited.isEmpty ? provenance.evidence : cited
+                    if !shown.isEmpty {
+                        DisclosureGroup("本次使用了 \(shown.count) 处阅读数据") {
+                            ForEach(shown) { evidence in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(evidence.title ?? evidence.kind.title).font(.caption.weight(.semibold))
+                                    Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                                    if evidence.locator != nil {
+                                        Button("回到原文") { openCitation?(evidence) }.font(.caption)
+                                    }
                                 }
+                                .padding(.vertical, 3)
                             }
-                            .padding(.vertical, 3)
                         }
+                        .font(.footnote)
                     }
-                    .font(.footnote)
                 }
             }
             if !model.streamingResponse.isEmpty {
