@@ -104,3 +104,52 @@ import Testing
         try await service.submit(.init(id: id, bookID: book.id, sessionID: nil, locator: locator, editedTranscript: "试图覆盖"))
     }
 }
+
+@Test func voiceStateExposesAudioSaveToggleAndFileName() {
+    var state = VoiceReflectionState()
+    #expect(state.saveAudio == false)
+    #expect(state.audioFileName == nil)
+
+    state.saveAudio = true
+    state.audioFileName = "abc-123.caf"
+    #expect(state.saveAudio)
+    #expect(state.audioFileName == "abc-123.caf")
+
+    state.audioFileName = nil
+    #expect(state.audioFileName == nil)
+}
+
+@Test func voiceDraftCarriesAudioFileNameAndLinkedHighlights() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book()
+    try await GRDBBookRepository(database: database).insert(book)
+    let reading = GRDBReadingRepository(database: database)
+    let highlight = Highlight(bookID: book.id, locator: try TestFixtures.realisticLocator())
+    try await reading.save(highlight: highlight)
+    let locator = try TestFixtures.realisticLocator()
+    let repository = GRDBReflectionRepository(database: database)
+    let service = VoiceReflectionSubmissionService(repository: repository)
+
+    let saved = try await service.submit(.init(
+        bookID: book.id, sessionID: nil, locator: locator,
+        editedTranscript: "语音转写", audioFileName: "abc-123.caf", linkedHighlightIDs: [highlight.id]
+    ))
+    #expect(saved.inputKind == .voiceTranscript)
+    #expect(saved.audioFileName == "abc-123.caf")
+    #expect(try await repository.linkedHighlightIDs(for: saved.id) == [highlight.id])
+}
+
+@Test func voiceDraftWithAudioFileNameRetriesIdempotently() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book()
+    try await GRDBBookRepository(database: database).insert(book)
+    let locator = try TestFixtures.realisticLocator()
+    let service = VoiceReflectionSubmissionService(repository: GRDBReflectionRepository(database: database))
+    let draft = VoiceReflectionDraft(bookID: book.id, sessionID: nil, locator: locator, editedTranscript: "保存音频的语音", audioFileName: "voice-1.caf")
+
+    let first = try await service.submit(draft)
+    let retried = try await service.submit(draft)
+    #expect(first.id == retried.id)
+    #expect(first.audioFileName == "voice-1.caf")
+    #expect(retried.audioFileName == "voice-1.caf")
+}
