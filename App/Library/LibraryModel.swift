@@ -5,6 +5,7 @@ import Observation
 import ReaderCore
 import ReadingSessionCore
 import ReflectionCore
+import UIKit
 
 @MainActor @Observable
 final class LibraryModel {
@@ -20,6 +21,7 @@ final class LibraryModel {
 
     private(set) var books: [Book] = []
     private(set) var readingProgress: [BookID: Double] = [:]
+    private(set) var covers: [BookID: UIImage] = [:]
     private(set) var isImporting = false
     private(set) var deletingBookID: BookID?
     var errorMessage: String?
@@ -107,6 +109,24 @@ final class LibraryModel {
         readingProgress[book.id]
     }
 
+    func cover(for book: Book) -> UIImage? {
+        covers[book.id]
+    }
+
+    func loadCover(for book: Book) async {
+        guard covers[book.id] == nil else { return }
+        do {
+            if let cover = try await metadataReader.cover(at: files.url(for: book.id), fitting: .init(width: 480, height: 720)) {
+                covers[book.id] = cover
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            // A cover is optional presentation data. Reading/import remains
+            // usable when an EPUB omits one or exposes an unreadable image.
+        }
+    }
+
     func delete(_ book: Book) async {
         guard deletingBookID == nil else { return }
         deletingBookID = book.id
@@ -125,6 +145,7 @@ final class LibraryModel {
             files.commitDeletion(trashed)
             books.removeAll { $0.id == book.id }
             readingProgress[book.id] = nil
+            covers[book.id] = nil
         } catch is CancellationError {
             return
         } catch {

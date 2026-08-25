@@ -105,8 +105,15 @@ struct LibraryView: View {
                 ForEach(model.visibleBooks) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
-                            ElsepageBookCover(title: book.title, author: book.author, seed: Int(book.id.rawValue.uuid.0))
-                                .aspectRatio(0.7, contentMode: .fit)
+                            ElsepageBookCover(
+                                image: model.cover(for: book),
+                                title: book.title,
+                                author: book.author,
+                                seed: Int(book.id.rawValue.uuid.0)
+                            )
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(0.68, contentMode: .fit)
+                            .task(id: book.id) { await model.loadCover(for: book) }
                             Text(book.title)
                                 .font(ElsepageTheme.Typography.itemTitle)
                                 .foregroundStyle(.primary)

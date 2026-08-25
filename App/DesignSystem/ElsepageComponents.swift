@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ElsepageIconButton: View {
     let systemName: String
@@ -20,6 +21,7 @@ struct ElsepageIconButton: View {
 }
 
 struct ElsepageBookCover: View {
+    let image: UIImage?
     let title: String
     let author: String?
     let seed: Int
@@ -36,7 +38,19 @@ struct ElsepageBookCover: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .accessibilityHidden(true)
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.64)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+            } else {
+                LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
             VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
                 Text(title)
                     .font(ElsepageTheme.Typography.bookTitle)
@@ -48,6 +62,7 @@ struct ElsepageBookCover: View {
             .foregroundStyle(.white)
             .padding(ElsepageTheme.Spacing.medium)
         }
+        .clipped()
         .clipShape(RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
         .shadow(
             color: ElsepageTheme.Shadow.coverColor,
