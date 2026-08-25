@@ -28,8 +28,14 @@ struct ReaderScreen: View {
             if model.isPrepared, model.showsControls {
                 readerChrome.transition(.opacity)
             }
+
+            if let highlight = selectedHighlight {
+                highlightContextBar(highlight)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
+        .animation(ElsepageTheme.Motion.quick, value: model.selectedHighlightID)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
@@ -67,6 +73,57 @@ struct ReaderScreen: View {
                 await model.flushPosition()
                 await model.flushPreferences()
             }
+        }
+    }
+
+    private var selectedHighlight: Highlight? {
+        guard let id = model.selectedHighlightID else { return nil }
+        return model.highlights.first { $0.id == id }
+    }
+
+    private func highlightContextBar(_ highlight: Highlight) -> some View {
+        VStack {
+            Spacer()
+            HStack(spacing: ElsepageTheme.Spacing.large) {
+                Button {
+                    let note = model.notes.first { $0.highlightID == highlight.id }
+                    model.noteEditor = .init(
+                        locator: note?.locator ?? highlight.locator,
+                        note: note,
+                        highlight: highlight
+                    )
+                    model.selectedHighlightID = nil
+                } label: {
+                    Label(
+                        model.notes.contains { $0.highlightID == highlight.id } ? "编辑笔记" : "添加笔记",
+                        systemImage: "square.and.pencil"
+                    )
+                }
+
+                Divider().frame(height: 20)
+
+                Button(role: .destructive) {
+                    model.delete(highlight: highlight)
+                } label: {
+                    Label("删除", systemImage: "trash")
+                }
+
+                Button {
+                    model.selectedHighlightID = nil
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("关闭高亮操作")
+            }
+            .font(.subheadline.weight(.medium))
+            .buttonStyle(.plain)
+            .padding(.horizontal, ElsepageTheme.Spacing.large)
+            .frame(height: 48)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.primary.opacity(0.08)))
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            .padding(.horizontal, ElsepageTheme.Spacing.medium)
+            .padding(.bottom, ElsepageTheme.Spacing.medium)
         }
     }
 

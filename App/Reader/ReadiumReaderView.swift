@@ -54,9 +54,6 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         EditingAction(title: "高亮", action: #selector(ReaderHostViewController.highlightSelection)),
                         EditingAction(title: "笔记", action: #selector(ReaderHostViewController.noteSelection)),
                         .copy,
-                        .lookup,
-                        .translate,
-                        .share,
                     ]
                     let navigator = try EPUBNavigatorViewController(
                         publication: publication,
@@ -93,7 +90,8 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     self.navigator = navigator
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.presentHighlight(id: id, from: host)
+                        self?.model.selectedHighlightID = id
+                        self?.model.showsControls = false
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights(model.highlights)
@@ -192,36 +190,6 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 )
             }
             navigator.apply(decorations: decorations, in: "highlights")
-        }
-
-        private func presentHighlight(id: UUID, from host: UIViewController) {
-            guard let highlight = model.highlights.first(where: { $0.id == id }) else { return }
-            model.selectedHighlightID = id
-            let linkedNote = model.notes.first { $0.highlightID == id }
-            let alert = UIAlertController(
-                title: linkedNote == nil ? "高亮" : "批注",
-                message: linkedNote?.body ?? highlight.locator.textHighlight,
-                preferredStyle: .actionSheet
-            )
-            alert.addAction(UIAlertAction(title: "跳转到此处", style: .default) { [weak model] _ in model?.jump(to: highlight.locator) })
-            if let linkedNote {
-                alert.addAction(UIAlertAction(title: "编辑批注", style: .default) { [weak model] _ in
-                    guard let model else { return }
-                    model.noteEditor = .init(locator: linkedNote.locator, note: linkedNote, highlight: highlight)
-                })
-                alert.addAction(UIAlertAction(title: "删除批注", style: .destructive) { [weak model] _ in model?.delete(note: linkedNote) })
-            } else {
-                alert.addAction(UIAlertAction(title: "添加笔记", style: .default) { [weak model] _ in
-                    model?.noteEditor = .init(locator: highlight.locator, note: nil, highlight: highlight)
-                })
-            }
-            alert.addAction(UIAlertAction(title: "删除高亮", style: .destructive) { [weak model] _ in model?.delete(highlight: highlight) })
-            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-            if let popover = alert.popoverPresentationController {
-                popover.sourceView = host.view
-                popover.sourceRect = CGRect(x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
-            }
-            host.present(alert, animated: true)
         }
 
         private func search(publication: Publication, query: String) async throws -> [ReaderSearchResult] {

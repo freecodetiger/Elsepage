@@ -172,6 +172,7 @@ final class ReaderModel {
         }
     }
     func delete(highlight: Highlight) {
+        if selectedHighlightID == highlight.id { selectedHighlightID = nil }
         highlights.removeAll { $0.id == highlight.id }
         for index in notes.indices where notes[index].highlightID == highlight.id {
             let note = notes[index]
