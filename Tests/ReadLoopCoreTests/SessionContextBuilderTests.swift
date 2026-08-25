@@ -132,7 +132,7 @@ import Testing
     #expect(contents.contains { $0.contains("责任是自由的代价") })
 }
 
-@Test func readerAgentConnectsOnlySameBookPastReflections() async throws {
+@Test func readerAgentPrefersSameBookOverCrossBookPastReflections() async throws {
     let database = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: database)
     let reflections = GRDBReflectionRepository(database: database)
@@ -141,8 +141,11 @@ import Testing
     try await books.insert(bookA)
     try await books.insert(bookB)
 
-    // A lexically-close reflection in a *different* book must not become a candidate.
-    let otherBookThought = Reflection(bookID: bookB.id, originalText: "自由也意味着承担选择带来的责任", inputKind: .text)
+    // Both a same-book and a lexically *stronger* cross-book reflection match;
+    // same-book must win (WS3 ordering: 同书 > 跨书 > 记忆).
+    let sameBookThought = Reflection(bookID: bookA.id, originalText: "自由也意味着承担选择带来的责任", inputKind: .text)
+    try await reflections.insert(sameBookThought, linkedHighlightIDs: [], evidence: [])
+    let otherBookThought = Reflection(bookID: bookB.id, originalText: "承担选择的责任也通向自由", inputKind: .text)
     try await reflections.insert(otherBookThought, linkedHighlightIDs: [], evidence: [])
     let current = Reflection(bookID: bookA.id, originalText: "我现在觉得自由必须包含承担选择的责任", inputKind: .text)
     try await reflections.insert(current, linkedHighlightIDs: [], evidence: [])
@@ -157,7 +160,9 @@ import Testing
         Issue.record("Expected a completed agent reply")
         return
     }
-    #expect(try await reflections.connections(for: current.id).isEmpty)
+    let connection = try #require(try await reflections.connections(for: current.id).first)
+    #expect(connection.sourceReflectionID == sameBookThought.id)
+    #expect(connection.sourceReflectionID != otherBookThought.id)
 }
 
 private struct SessionContextModelFactory: ModelClientFactory {
