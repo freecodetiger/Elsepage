@@ -233,6 +233,51 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "dimensions > 0")
             }
         }
+        migrator.registerMigration("v8_pending_journal") { db in
+            try db.create(table: "journalThoughts") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("messageID", .text).notNull()
+                t.column("thought", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "length(trim(thought)) > 0")
+            }
+            try db.create(table: "agentQuestions") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("messageID", .text).notNull()
+                t.column("text", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("status", .text).notNull().defaults(to: "open")
+                t.column("answeredByMessageID", .text)
+                t.check(sql: "status IN ('open', 'answered')")
+                t.check(sql: "length(trim(text)) > 0")
+            }
+            try db.create(table: "reflectionCitations") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("messageID", .text).notNull()
+                t.column("sourceType", .text).notNull()
+                t.column("sourceID", .text)
+                t.column("bookID", .text).notNull().references("books", onDelete: .cascade)
+                Self.addOptionalLocatorColumns(to: t, prefix: "")
+                t.column("title", .text)
+                t.column("excerpt", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "sourceType IN ('bookLocator', 'highlight', 'note', 'readingSession')")
+                t.check(sql: "(locatorJSON IS NULL AND href IS NULL) OR (locatorJSON IS NOT NULL AND href IS NOT NULL)")
+            }
+            try db.create(table: "journalMemoryChanges") { t in
+                t.column("id", .text).primaryKey()
+                t.column("journalID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("changeType", .text).notNull()
+                t.column("memoryID", .text)
+                t.column("summary", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "changeType IN ('store', 'reinforce', 'revise')")
+                t.check(sql: "length(trim(summary)) > 0")
+            }
+        }
         return migrator
     }
 
