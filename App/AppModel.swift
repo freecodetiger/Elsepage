@@ -38,11 +38,20 @@ final class AppModel {
                 configurations: providerConfigurations,
                 secrets: secrets
             )
+            // Resolves the configured embedding provider (separate model, enabled
+            // in Settings) at run time. Returns nil when disabled, so semantic
+            // retrieval degrades to lexical without rebuilding the object graph.
+            let makeEmbeddingProvider: @Sendable () async -> (any EmbeddingProvider)? = { [providerConfigurations, secrets] in
+                guard let configuration = try? await providerConfigurations.currentConfiguration(),
+                      let model = configuration.embeddingModelID, !model.isEmpty,
+                      let key = try? await secrets.secret(for: configuration.secretReference), !key.isEmpty else { return nil }
+                return try? OpenAICompatibleEmbeddingProvider(configuration: configuration, apiKey: key)
+            }
             let readerAgent = ReaderAgent(
                 reflections: reflections,
                 models: modelClientFactory,
                 contextBuilder: ReaderAgentContextBuilder(
-                    retriever: LocalBookRetriever(repository: bookIndex),
+                    retriever: LocalBookRetriever(repository: bookIndex, embeddingProvider: makeEmbeddingProvider),
                     repository: bookIndex
                 ),
                 sessionContextBuilder: SessionContextBuilder(
@@ -62,7 +71,20 @@ final class AppModel {
             }
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
-            let indexCoordinator = BookIndexCoordinator(repository: bookIndex, readium: readium, files: files)
+            let indexCoordinator = BookIndexCoordinator(
+                repository: bookIndex,
+                readium: readium,
+                files: files,
+                embeddings: makeEmbeddingProvider
+            )
+            let ragManagement = RAGManagementModel(
+                service: BookIndexStatusService(
+                    books: books,
+                    repository: bookIndex,
+                    currentEmbeddingModel: { await makeEmbeddingProvider()?.modelIdentifier }
+                ),
+                coordinator: indexCoordinator
+            )
             library = LibraryModel(
                 books: books,
                 reading: reading,
@@ -89,6 +111,7 @@ final class AppModel {
                     journal: journal
                 ),
                 indexCoordinator: indexCoordinator,
+                ragManagement: ragManagement,
                 onDataDeleted: { [weak self] in
                     await self?.library?.reload()
                     await self?.thoughts?.reload()

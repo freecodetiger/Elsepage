@@ -18,6 +18,7 @@ final class ProviderSettingsModel {
     private let files: BookFileStore
     private let exporter: PersonalDataExporter
     private let indexCoordinator: BookIndexCoordinator?
+    let ragManagement: RAGManagementModel?
     private let onDataDeleted: (@MainActor () async -> Void)?
 
     /// Set after a successful export, drives the ShareLink in the 数据 section.
@@ -29,6 +30,11 @@ final class ProviderSettingsModel {
     var modelID = ""
     var apiKey = ""
     var streamingEnabled = false
+    /// Separate embedding model for semantic retrieval (independent of the chat model).
+    var embeddingModelID = ""
+    private(set) var embeddingEnabled = false
+    private(set) var isEmbeddingWorking = false
+    private(set) var embeddingStatusMessage: String?
     private(set) var hasSavedKey = false
     private(set) var isWorking = false
     private(set) var statusMessage: String?
@@ -43,6 +49,7 @@ final class ProviderSettingsModel {
         files: BookFileStore,
         exporter: PersonalDataExporter,
         indexCoordinator: BookIndexCoordinator? = nil,
+        ragManagement: RAGManagementModel? = nil,
         onDataDeleted: (@MainActor () async -> Void)? = nil
     ) {
         self.configurations = configurations
@@ -52,6 +59,7 @@ final class ProviderSettingsModel {
         self.files = files
         self.exporter = exporter
         self.indexCoordinator = indexCoordinator
+        self.ragManagement = ragManagement
         self.onDataDeleted = onDataDeleted
     }
 
@@ -62,6 +70,8 @@ final class ProviderSettingsModel {
             baseURL = configuration.baseURL.absoluteString
             modelID = configuration.modelID
             streamingEnabled = configuration.streamingEnabled
+            embeddingModelID = configuration.embeddingModelID ?? ""
+            embeddingEnabled = configuration.embeddingModelID != nil
             hasSavedKey = try await secrets.secret(for: configuration.secretReference) != nil
         } catch { errorMessage = Self.message(for: error) }
         await loadDiagnostics()
@@ -119,6 +129,52 @@ final class ProviderSettingsModel {
         } catch { errorMessage = Self.message(for: error) }
     }
 
+    // MARK: - 语义检索 (RAG)
+
+    func testEmbedding() async {
+        guard let configuration = embeddingConfiguration() else { return }
+        isEmbeddingWorking = true
+        embeddingStatusMessage = nil
+        defer { isEmbeddingWorking = false }
+        do {
+            let key = try await resolvedKey()
+            try await ProviderEmbeddingTester().test(configuration: configuration, apiKey: key)
+            embeddingStatusMessage = "Embedding 连接成功"
+        } catch { errorMessage = Self.message(for: error) }
+    }
+
+    /// Persists the embedding model, then re-enqueues existing books so the
+    /// index pipeline picks them up for semantic indexing (`.lexicalReady` books
+    /// get an embed-only pass; model switches get a re-embed).
+    func enableEmbedding() async {
+        guard let configuration = embeddingConfiguration() else { return }
+        isEmbeddingWorking = true
+        embeddingStatusMessage = nil
+        defer { isEmbeddingWorking = false }
+        do {
+            let key = try await resolvedKey()
+            try await ProviderEmbeddingTester().test(configuration: configuration, apiKey: key)
+            try await configurations.save(configuration)
+            embeddingEnabled = true
+            embeddingStatusMessage = "语义检索已启用，正在为已有书籍建立索引"
+            let allBooks = try await books.allBooks()
+            await indexCoordinator?.resume(allBooks)
+        } catch { errorMessage = Self.message(for: error) }
+    }
+
+    func disableEmbedding() async {
+        guard let base = configuration() else { return }
+        let config = ProviderConfiguration(
+            id: base.id, provider: base.provider, baseURL: base.baseURL,
+            modelID: base.modelID, secretReference: base.secretReference,
+            streamingEnabled: base.streamingEnabled, embeddingModelID: nil
+        )
+        try? await configurations.save(config)
+        embeddingModelID = ""
+        embeddingEnabled = false
+        embeddingStatusMessage = "语义检索已停用"
+    }
+
     func deleteConfiguration() async {
         isWorking = true
         defer { isWorking = false }
@@ -139,6 +195,7 @@ final class ProviderSettingsModel {
 
     private func configuration() -> ProviderConfiguration? {
         let model = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let embedding = embeddingModelID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
               ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.host != nil,
@@ -151,7 +208,22 @@ final class ProviderSettingsModel {
             baseURL: url,
             modelID: model,
             secretReference: Self.secretReference,
-            streamingEnabled: streamingEnabled
+            streamingEnabled: streamingEnabled,
+            embeddingModelID: embedding.isEmpty ? nil : embedding
+        )
+    }
+
+    private func embeddingConfiguration() -> ProviderConfiguration? {
+        guard let base = configuration() else { return nil }
+        let embedding = embeddingModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !embedding.isEmpty else {
+            errorMessage = "请填写 Embedding 模型名称。"
+            return nil
+        }
+        return ProviderConfiguration(
+            id: base.id, provider: base.provider, baseURL: base.baseURL,
+            modelID: base.modelID, secretReference: base.secretReference,
+            streamingEnabled: base.streamingEnabled, embeddingModelID: embedding
         )
     }
 

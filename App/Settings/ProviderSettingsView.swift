@@ -72,6 +72,36 @@ struct ProviderSettingsView: View {
                 }
 
                 Section {
+                    TextField("Embedding 模型", text: $model.embeddingModelID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .disabled(model.embeddingEnabled)
+                    if model.embeddingEnabled {
+                        Label("语义检索已启用（\(model.embeddingModelID)）", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Button("测试 Embedding") { Task { await model.testEmbedding() } }
+                    Button(model.embeddingEnabled ? "停用语义检索" : "启用语义检索") {
+                        Task { await (model.embeddingEnabled ? model.disableEmbedding() : model.enableEmbedding()) }
+                    }
+                    if let status = model.embeddingStatusMessage {
+                        Label(status, systemImage: "sparkles").foregroundStyle(.secondary)
+                    }
+                    if let ragManagement = model.ragManagement {
+                        NavigationLink {
+                            RAGManagementView(model: ragManagement)
+                        } label: {
+                            Label("管理每本书的检索进度", systemImage: "doc.text.magnifyingglass")
+                        }
+                    }
+                } header: {
+                    Text("语义检索 (RAG)")
+                } footer: {
+                    Text("单独配置一个 Embedding 模型（与聊天模型无关）。启用后每本书会建立向量索引，Agent 检索可做语义匹配（需联网与 Provider 支持 /embeddings）；停用或不可用时自动退回纯词法检索。")
+                }
+                .disabled(model.isEmbeddingWorking)
+
+                Section {
                     Button("导出我的数据") {
                         Task { await model.exportMyData() }
                     }
