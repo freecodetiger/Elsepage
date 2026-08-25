@@ -70,6 +70,7 @@ public struct ReaderAgent: Sendable {
     private let contextRouter: any ReaderContextRouting
     private let contextValidator: ContextPlanValidator
     private let traceRepository: (any RoutingTraceRepository)?
+    private let memories: (any MemoryRepository)?
 
     public init(
         reflections: any ReflectionRepository,
@@ -80,7 +81,8 @@ public struct ReaderAgent: Sendable {
         sessionContextBuilder: SessionContextBuilder? = nil,
         contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
         contextValidator: ContextPlanValidator = .init(),
-        traceRepository: (any RoutingTraceRepository)? = nil
+        traceRepository: (any RoutingTraceRepository)? = nil,
+        memories: (any MemoryRepository)? = nil
     ) {
         self.reflections = reflections
         self.models = models
@@ -91,6 +93,7 @@ public struct ReaderAgent: Sendable {
         self.contextRouter = contextRouter
         self.contextValidator = contextValidator
         self.traceRepository = traceRepository
+        self.memories = memories
     }
 
     public func respond(to reflectionID: ReflectionID) -> AsyncStream<ReaderAgentEvent> {
@@ -160,16 +163,24 @@ public struct ReaderAgent: Sendable {
                     continuation.yield(.started)
                     let evidence = (try? await reflections.evidence(for: reflection.id)) ?? []
                     let currentLocator = evidence.compactMap(\.locator).first
-                    // Past-thought retrieval is scoped to this book, not the global
-                    // recent list, so connections stay within the same reading thread.
-                    let candidates = (try? await reflections.reflections(for: reflection.bookID))?
+                    // Past-thought retrieval spans all books (WS3): same-book
+                    // reflections stay preferred, cross-book ones become eligible,
+                    // and long-term memories surface as evidence only.
+                    let allCandidates = (try? await reflections.allReflections())?
                         .filter { $0.id != reflection.id } ?? []
+                    let sameBookCandidates = allCandidates.filter { $0.bookID == reflection.bookID }
+                    let crossBookCandidates = allCandidates.filter { $0.bookID != reflection.bookID }
                     let sessionContext = await sessionContextBuilder?.build(
                         bookID: reflection.bookID,
                         sessionID: reflection.sessionID,
                         excluding: reflection.id
                     ) ?? .empty
                     let routingText = followUp?.text ?? reflection.originalText
+                    let matchedMemories = await Self.matchingMemories(
+                        routingText: routingText,
+                        in: memories,
+                        topN: 2
+                    )
                     let routingInput = ContextRoutingInput(
                         interactionMode: followUp == nil ? .reflection : .conversation,
                         currentReflection: routingText,
@@ -185,10 +196,10 @@ public struct ReaderAgent: Sendable {
                         availableSources: .init(
                             hasNearbyPassage: currentLocator != nil,
                             hasBookIndex: await contextBuilder?.isAvailable(for: reflection.bookID) ?? false,
-                            hasPastThoughts: !candidates.isEmpty,
+                            hasPastThoughts: !allCandidates.isEmpty,
                             hasSessionHighlight: sessionContext.hasSessionHighlight,
                             hasSessionNote: sessionContext.hasSessionNote,
-                            hasBookReflections: !candidates.isEmpty
+                            hasBookReflections: !sameBookCandidates.isEmpty
                         ),
                         previousAgentAskedQuestion: Self.previousAgentAskedQuestion(in: messages)
                     )
@@ -198,11 +209,16 @@ public struct ReaderAgent: Sendable {
                     let routingDuration = routingStart.duration(to: clock.now)
                     let plan = contextValidator.validate(routingResult.plan, input: routingInput)
                     let connection = plan.pastThoughtRetrieval.flatMap { pastPlan in
-                        strongestConnection(for: reflection, query: pastPlan.query, among: candidates)
+                        if let sameBookMatch = strongestConnection(
+                            for: reflection, query: pastPlan.query, among: sameBookCandidates
+                        ) {
+                            return sameBookMatch
+                        }
+                        return strongestConnection(for: reflection, query: pastPlan.query, among: crossBookCandidates)
                     }
                     if let connection { try await reflections.saveConnection(connection) }
                     continuation.yield(.contextPrepared(connection))
-                    let prior = connection.flatMap { id in candidates.first { $0.id == id.sourceReflectionID } }
+                    let prior = connection.flatMap { id in allCandidates.first { $0.id == id.sourceReflectionID } }
                     let retrievalStart = clock.now
                     let bookContext: ReaderAgentBookContext?
                     if let contextBuilder, let retrieval = plan.bookRetrieval {
@@ -223,6 +239,7 @@ public struct ReaderAgent: Sendable {
                         reflection: reflection,
                         currentEvidence: evidence,
                         previousReflection: prior,
+                        longTermMemories: matchedMemories,
                         bookEvidence: bookContext?.evidence ?? [],
                         includeNearbyPassage: plan.nearbyPassage == .include,
                         nearbyCharacterBudget: plan.budget.nearbyCharacters,
@@ -394,6 +411,7 @@ public struct ReaderAgent: Sendable {
         reflection: Reflection,
         currentEvidence: [ReflectionEvidence],
         previousReflection: Reflection?,
+        longTermMemories: [ReaderMemory] = [],
         bookEvidence: [BookEvidence],
         includeNearbyPassage: Bool,
         nearbyCharacterBudget: Int,
@@ -418,12 +436,51 @@ public struct ReaderAgent: Sendable {
                 String(previousReflection.originalText.prefix(max(0, pastThoughtCharacterBudget))), nil
             ))
         }
+        // Long-term memories are evidence only: they have no source Reflection,
+        // so they never create a ReflectionConnection. Memories carry no book;
+        // reuse the current reflection's bookID so the persisted row satisfies
+        // the agentResponseEvidence.bookID foreign key.
+        for memory in longTermMemories {
+            snapshots.append((
+                .pastReflection, memory.id.uuidString.lowercased(), reflection.bookID, "长期记忆",
+                String(memory.claim.prefix(max(0, pastThoughtCharacterBudget))), nil
+            ))
+        }
         return snapshots.enumerated().map { offset, item in
             AgentResponseEvidence(
                 id: "E\(offset + 1)", messageID: messageID, kind: item.0, sourceID: item.1,
                 bookID: item.2, title: item.3, excerpt: item.4, locator: item.5
             )
         }
+    }
+
+    /// Lexically matches the routing text against long-term memory claims using
+    /// the same CJK-aware tokenization as `ReflectionLexicalMatcher`. A lighter
+    /// relevance bar than the reflection matcher because memory claims are
+    /// distilled and short; ranking picks the strongest matches and non-active
+    /// memories are ignored. Memories surface as evidence only (no connection).
+    private static func matchingMemories(
+        routingText: String,
+        in repository: (any MemoryRepository)?,
+        topN: Int
+    ) async -> [ReaderMemory] {
+        guard let repository, !routingText.isEmpty else { return [] }
+        let queryTokens = ReflectionLexicalMatcher.tokens(in: routingText)
+        guard queryTokens.count >= 2 else { return [] }
+        let all = (try? await repository.memories()) ?? []
+        return all
+            .filter { $0.status != .superseded }
+            .compactMap { memory -> (memory: ReaderMemory, relevance: Double)? in
+                let claimTokens = ReflectionLexicalMatcher.tokens(in: memory.claim)
+                let overlap = queryTokens.intersection(claimTokens).count
+                guard overlap >= 2 else { return nil }
+                let relevance = Double(overlap) / Double(max(1, min(queryTokens.count, claimTokens.count)))
+                guard relevance >= 0.30 else { return nil }
+                return (memory, relevance)
+            }
+            .sorted { $0.relevance > $1.relevance }
+            .prefix(topN)
+            .map(\.memory)
     }
 }
 
@@ -458,7 +515,7 @@ public enum ReflectionLexicalMatcher {
         }
     }
 
-    private static func tokens(in text: String) -> Set<String> {
+    static func tokens(in text: String) -> Set<String> {
         let lowered = text.lowercased()
         let words = lowered.split { !$0.isLetter && !$0.isNumber }
             .map(String.init)

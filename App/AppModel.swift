@@ -49,7 +49,8 @@ final class AppModel {
                     reading: reading,
                     reflections: reflections
                 ),
-                traceRepository: routingTraces
+                traceRepository: routingTraces,
+                memories: memories
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
             // Re-checked every time a reflection sheet opens, so the polish button appears as soon
