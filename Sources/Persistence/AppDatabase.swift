@@ -233,7 +233,7 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "dimensions > 0")
             }
         }
-        migrator.registerMigration("v8_pending_citations") { db in
+        migrator.registerMigration("v8_agent_citations") { db in
             try db.create(table: "agentResponseEvidence") { t in
                 t.column("messageID", .text).notNull().references("reflectionMessages", onDelete: .cascade)
                 t.column("id", .text).notNull()
@@ -262,7 +262,7 @@ public final class AppDatabase: @unchecked Sendable {
         // durations, evidence IDs, token usage and fallback cause live inside
         // the encoded `ContextPlanTrace`; no raw user text or Reflection body.
         // Numbering is re-sequenced by the coordinator at merge time.
-        migrator.registerMigration("v8_pending_router_trace") { db in
+        migrator.registerMigration("v9_routing_trace") { db in
             try db.create(table: "routingTraces") { t in
                 t.column("id", .text).primaryKey()
                 t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
@@ -274,7 +274,7 @@ public final class AppDatabase: @unchecked Sendable {
         // P0-5 Journal. Stores derived journal snapshots (thoughts, agent
         // questions, citations, memory-change summaries) keyed by reflection.
         // Numbering is re-sequenced by the coordinator at merge time.
-        migrator.registerMigration("v8_pending_journal") { db in
+        migrator.registerMigration("v10_journal") { db in
             try db.create(table: "journalThoughts") { t in
                 t.column("id", .text).primaryKey()
                 t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
