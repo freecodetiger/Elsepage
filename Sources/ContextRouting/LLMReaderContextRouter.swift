@@ -12,7 +12,7 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
     public func route(_ input: ContextRoutingInput, using client: any ModelClient) async -> ContextRoutingResult {
         let encoded: Data
         do { encoded = try JSONEncoder().encode(input) }
-        catch { return fallback.result(for: input, reason: .invalidStructuredOutput) }
+        catch { return fallback.result(for: input, reason: .invalidStructuredOutput, detail: "inputEncodingFailed") }
         let request = AgentInput(
             metadata: .init(agentKind: "reader.context-router", promptVersion: "reader-context-router-v1", contextRecipeVersion: "routing-input-v1"),
             messages: [
@@ -20,19 +20,35 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
                 .init(role: .user, content: String(decoding: encoded, as: UTF8.self)),
             ], temperature: 0
         )
+        var usage: TokenUsage?
         for await event in AgentExecutor(client: client, budget: .init(maxModelCalls: 1, maxWallTime: .seconds(8), maxOutputTokens: 500)).run(input: request) {
             switch event {
+            case .usageUpdated(let update): usage = update
             case .completed(let result):
                 guard let plan = try? JSONDecoder().decode(ReaderContextPlan.self, from: Data(result.response.content.utf8)) else {
-                    return fallback.result(for: input, reason: .invalidStructuredOutput)
+                    return fallback.result(for: input, reason: .invalidStructuredOutput, detail: "structuredDecodeFailed", tokenUsage: usage)
                 }
-                return ContextRoutingResult(plan: plan, usedFallback: false, fallbackReason: nil)
-            case .failed, .cancelled:
-                return fallback.result(for: input, reason: .modelFailure)
+                return ContextRoutingResult(plan: plan, usedFallback: false, fallbackReason: nil, tokenUsage: usage)
+            case .failed(let failure):
+                return fallback.result(for: input, reason: .modelFailure, detail: Self.failureName(failure), tokenUsage: usage)
+            case .cancelled:
+                return fallback.result(for: input, reason: .modelFailure, detail: "cancelled", tokenUsage: usage)
             default: break
             }
         }
-        return fallback.result(for: input, reason: .modelFailure)
+        return fallback.result(for: input, reason: .modelFailure, detail: "noCompletion", tokenUsage: usage)
+    }
+
+    private static func failureName(_ failure: AgentFailure) -> String {
+        switch failure {
+        case .authentication: "authentication"
+        case .rateLimited: "rateLimited"
+        case .providerUnavailable: "providerUnavailable"
+        case .network: "network"
+        case .malformedProviderResponse: "malformedProviderResponse"
+        case .budgetExceeded: "budgetExceeded"
+        case .unknown: "unknown"
+        }
     }
 
     static let prompt = """
@@ -55,7 +71,12 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
 
 public struct DeterministicReaderContextRouter: Sendable {
     public init() {}
-    public func result(for input: ContextRoutingInput, reason: RoutingFallbackReason) -> ContextRoutingResult {
+    public func result(
+        for input: ContextRoutingInput,
+        reason: RoutingFallbackReason,
+        detail: String? = nil,
+        tokenUsage: TokenUsage? = nil
+    ) -> ContextRoutingResult {
         let canReadBook = input.availableSources.hasBookIndex && input.currentReading?.hasCurrentLocator == true
         let plan = ReaderContextPlan(
             intent: input.interactionMode == .conversation ? .conversationContinuation : .unclear,
@@ -66,6 +87,6 @@ public struct DeterministicReaderContextRouter: Sendable {
                 : nil,
             responseGuidance: .init(targetLength: .short, allowQuestion: !input.previousAgentAskedQuestion, shouldNaturallyEnd: input.previousAgentAskedQuestion)
         )
-        return ContextRoutingResult(plan: plan, usedFallback: true, fallbackReason: reason)
+        return ContextRoutingResult(plan: plan, usedFallback: true, fallbackReason: reason, fallbackDetail: detail, tokenUsage: tokenUsage)
     }
 }

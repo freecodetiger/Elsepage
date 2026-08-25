@@ -1,3 +1,4 @@
+import AgentRuntime
 import Foundation
 import LibraryCore
 
@@ -101,7 +102,7 @@ public struct ReaderContextPlan: Hashable, Codable, Sendable {
     }
 }
 
-public struct ContextBudget: Hashable, Sendable {
+public struct ContextBudget: Hashable, Codable, Sendable {
     public let totalCharacters: Int
     public let nearbyCharacters: Int
     public let bookEvidenceCharacters: Int
@@ -109,7 +110,7 @@ public struct ContextBudget: Hashable, Sendable {
     public let conversationCharacters: Int
 }
 
-public struct ValidatedContextPlan: Hashable, Sendable {
+public struct ValidatedContextPlan: Hashable, Codable, Sendable {
     public let intent: ReflectionIntent
     public let nearbyPassage: NearbyPassagePlan
     public let bookRetrieval: BookRetrievalPlan?
@@ -118,9 +119,184 @@ public struct ValidatedContextPlan: Hashable, Sendable {
     public let budget: ContextBudget
 }
 
-public enum RoutingFallbackReason: String, Hashable, Sendable { case invalidStructuredOutput, modelFailure }
+public enum RoutingFallbackReason: String, Hashable, Codable, Sendable { case invalidStructuredOutput, modelFailure }
 public struct ContextRoutingResult: Hashable, Sendable {
     public let plan: ReaderContextPlan
     public let usedFallback: Bool
     public let fallbackReason: RoutingFallbackReason?
+    /// Granular fallback cause (e.g. the underlying `AgentFailure` name) when
+    /// the coarse `fallbackReason` is not enough. Kept as text so routing stays
+    /// independent of the AgentRuntime error type's identity.
+    public let fallbackDetail: String?
+    public let tokenUsage: TokenUsage?
+
+    public init(
+        plan: ReaderContextPlan,
+        usedFallback: Bool,
+        fallbackReason: RoutingFallbackReason?,
+        fallbackDetail: String? = nil,
+        tokenUsage: TokenUsage? = nil
+    ) {
+        self.plan = plan
+        self.usedFallback = usedFallback
+        self.fallbackReason = fallbackReason
+        self.fallbackDetail = fallbackDetail
+        self.tokenUsage = tokenUsage
+    }
+}
+
+/// Seconds extracted from a `Duration` for trace encoding and diagnostics.
+/// Internal to ContextRouting; other modules use `ContextPlanTrace`/`RoutingTraceDiagnostics`.
+extension Duration {
+    var seconds: Double {
+        let components = self.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+}
+
+/// Immutable record of one Reader Agent reply's context-planning decisions and
+/// timing. Persisted as derived observability data — it intentionally stores plan
+/// summaries, statistics, durations, evidence IDs and token usage, never raw
+/// user text or the full Reflection body (ADR 0001).
+public struct ContextPlanTrace: Hashable, Codable, Sendable {
+    public let id: UUID
+    /// `ReflectionID.description` of the reflection being replied to.
+    public let reflectionID: String
+    public let createdAt: Date
+    /// Raw plan produced by the router (may have been rejected by the validator).
+    public let proposedPlan: ReaderContextPlan?
+    /// Plan actually used to assemble context.
+    public let validatedPlan: ValidatedContextPlan
+    public let usedFallback: Bool
+    public let fallbackReason: RoutingFallbackReason?
+    public let fallbackDetail: String?
+    public let routingDuration: Duration
+    public let retrievalDuration: Duration
+    public let replyDuration: Duration
+    /// `BookChunkID.rawValue` for the book evidence actually selected.
+    public let selectedBookEvidenceIDs: [String]
+    /// `ReflectionID.description` of the linked past thought, if any.
+    public let connectedReflectionID: String?
+    public let routingTokenUsage: TokenUsage?
+    public let replyTokenUsage: TokenUsage?
+
+    public init(
+        id: UUID = UUID(),
+        reflectionID: String,
+        createdAt: Date = Date(),
+        proposedPlan: ReaderContextPlan?,
+        validatedPlan: ValidatedContextPlan,
+        usedFallback: Bool,
+        fallbackReason: RoutingFallbackReason?,
+        fallbackDetail: String? = nil,
+        routingDuration: Duration,
+        retrievalDuration: Duration,
+        replyDuration: Duration,
+        selectedBookEvidenceIDs: [String],
+        connectedReflectionID: String? = nil,
+        routingTokenUsage: TokenUsage? = nil,
+        replyTokenUsage: TokenUsage? = nil
+    ) {
+        self.id = id
+        self.reflectionID = reflectionID
+        self.createdAt = createdAt
+        self.proposedPlan = proposedPlan
+        self.validatedPlan = validatedPlan
+        self.usedFallback = usedFallback
+        self.fallbackReason = fallbackReason
+        self.fallbackDetail = fallbackDetail
+        self.routingDuration = routingDuration
+        self.retrievalDuration = retrievalDuration
+        self.replyDuration = replyDuration
+        self.selectedBookEvidenceIDs = selectedBookEvidenceIDs
+        self.connectedReflectionID = connectedReflectionID
+        self.routingTokenUsage = routingTokenUsage
+        self.replyTokenUsage = replyTokenUsage
+    }
+}
+
+extension ContextPlanTrace {
+    private enum CodingKeys: String, CodingKey {
+        case id, reflectionID, createdAt, proposedPlan, validatedPlan, usedFallback
+        case fallbackReason, fallbackDetail
+        case routingDurationSeconds, retrievalDurationSeconds, replyDurationSeconds
+        case selectedBookEvidenceIDs, connectedReflectionID, routingTokenUsage, replyTokenUsage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        reflectionID = try container.decode(String.self, forKey: .reflectionID)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        proposedPlan = try container.decodeIfPresent(ReaderContextPlan.self, forKey: .proposedPlan)
+        validatedPlan = try container.decode(ValidatedContextPlan.self, forKey: .validatedPlan)
+        usedFallback = try container.decode(Bool.self, forKey: .usedFallback)
+        fallbackReason = try container.decodeIfPresent(RoutingFallbackReason.self, forKey: .fallbackReason)
+        fallbackDetail = try container.decodeIfPresent(String.self, forKey: .fallbackDetail)
+        routingDuration = .seconds(try container.decode(Double.self, forKey: .routingDurationSeconds))
+        retrievalDuration = .seconds(try container.decode(Double.self, forKey: .retrievalDurationSeconds))
+        replyDuration = .seconds(try container.decode(Double.self, forKey: .replyDurationSeconds))
+        selectedBookEvidenceIDs = try container.decode([String].self, forKey: .selectedBookEvidenceIDs)
+        connectedReflectionID = try container.decodeIfPresent(String.self, forKey: .connectedReflectionID)
+        routingTokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .routingTokenUsage)
+        replyTokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .replyTokenUsage)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(reflectionID, forKey: .reflectionID)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(proposedPlan, forKey: .proposedPlan)
+        try container.encode(validatedPlan, forKey: .validatedPlan)
+        try container.encode(usedFallback, forKey: .usedFallback)
+        try container.encodeIfPresent(fallbackReason, forKey: .fallbackReason)
+        try container.encodeIfPresent(fallbackDetail, forKey: .fallbackDetail)
+        try container.encode(routingDuration.seconds, forKey: .routingDurationSeconds)
+        try container.encode(retrievalDuration.seconds, forKey: .retrievalDurationSeconds)
+        try container.encode(replyDuration.seconds, forKey: .replyDurationSeconds)
+        try container.encode(selectedBookEvidenceIDs, forKey: .selectedBookEvidenceIDs)
+        try container.encodeIfPresent(connectedReflectionID, forKey: .connectedReflectionID)
+        try container.encodeIfPresent(routingTokenUsage, forKey: .routingTokenUsage)
+        try container.encodeIfPresent(replyTokenUsage, forKey: .replyTokenUsage)
+    }
+}
+
+/// Aggregated routing observability used by the Settings diagnostics screen.
+/// Computed on demand from stored traces (personal-app trace volume is small).
+public struct RoutingTraceDiagnostics: Hashable, Sendable {
+    public let totalTraces: Int
+    /// Fallback counts keyed by `fallbackDetail` (e.g. "network", "rateLimited"),
+    /// falling back to the coarse `fallbackReason`.
+    public let fallbackCounts: [String: Int]
+    public let averageRoutingDuration: Duration?
+    public let averageRetrievalDuration: Duration?
+    public let averageReplyDuration: Duration?
+
+    public init(traces: [ContextPlanTrace]) {
+        totalTraces = traces.count
+        var counts: [String: Int] = [:]
+        for trace in traces where trace.usedFallback {
+            let key = trace.fallbackDetail ?? trace.fallbackReason?.rawValue ?? "unknown"
+            counts[key, default: 0] += 1
+        }
+        fallbackCounts = counts
+        averageRoutingDuration = Self.average(\.routingDuration, in: traces)
+        averageRetrievalDuration = Self.average(\.retrievalDuration, in: traces)
+        averageReplyDuration = Self.average(\.replyDuration, in: traces)
+    }
+
+    private static func average(_ keyPath: KeyPath<ContextPlanTrace, Duration>, in traces: [ContextPlanTrace]) -> Duration? {
+        guard !traces.isEmpty else { return nil }
+        let total = traces.reduce(0.0) { $0 + $1[keyPath: keyPath].seconds }
+        return .seconds(total / Double(traces.count))
+    }
+}
+
+/// Persists derived routing traces. Protocol lives with its primary type so the
+/// Reader Agent can depend on it without pulling persistence/GRDB into its graph.
+public protocol RoutingTraceRepository: Sendable {
+    func save(_ trace: ContextPlanTrace) async throws
+    func latestTrace(for reflectionID: String) async throws -> ContextPlanTrace?
+    func diagnostics() async throws -> RoutingTraceDiagnostics
 }
