@@ -2,6 +2,7 @@ import AgentRuntime
 import ContextRouting
 import Foundation
 import ReaderCore
+import ReadingSessionCore
 import ReflectionCore
 import RetrievalCore
 
@@ -30,6 +31,7 @@ public struct ReaderAgent: Sendable {
     private let policy: ReaderAgentPolicy
     private let budget: ExecutionBudget
     private let contextBuilder: ReaderAgentContextBuilder?
+    private let sessionContextBuilder: SessionContextBuilder?
     private let contextRouter: any ReaderContextRouting
     private let contextValidator: ContextPlanValidator
 
@@ -39,6 +41,7 @@ public struct ReaderAgent: Sendable {
         policy: ReaderAgentPolicy = .init(),
         budget: ExecutionBudget = .readerReply,
         contextBuilder: ReaderAgentContextBuilder? = nil,
+        sessionContextBuilder: SessionContextBuilder? = nil,
         contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
         contextValidator: ContextPlanValidator = .init()
     ) {
@@ -47,6 +50,7 @@ public struct ReaderAgent: Sendable {
         self.policy = policy
         self.budget = budget
         self.contextBuilder = contextBuilder
+        self.sessionContextBuilder = sessionContextBuilder
         self.contextRouter = contextRouter
         self.contextValidator = contextValidator
     }
@@ -118,8 +122,15 @@ public struct ReaderAgent: Sendable {
                     continuation.yield(.started)
                     let evidence = (try? await reflections.evidence(for: reflection.id)) ?? []
                     let currentLocator = evidence.compactMap(\.locator).first
-                    let candidates = (try? await reflections.recentReflections(limit: 50))?
+                    // Past-thought retrieval is scoped to this book, not the global
+                    // recent list, so connections stay within the same reading thread.
+                    let candidates = (try? await reflections.reflections(for: reflection.bookID))?
                         .filter { $0.id != reflection.id } ?? []
+                    let sessionContext = await sessionContextBuilder?.build(
+                        bookID: reflection.bookID,
+                        sessionID: reflection.sessionID,
+                        excluding: reflection.id
+                    ) ?? .empty
                     let routingText = followUp?.text ?? reflection.originalText
                     let routingInput = ContextRoutingInput(
                         interactionMode: followUp == nil ? .reflection : .conversation,
@@ -136,7 +147,10 @@ public struct ReaderAgent: Sendable {
                         availableSources: .init(
                             hasNearbyPassage: currentLocator != nil,
                             hasBookIndex: await contextBuilder?.isAvailable(for: reflection.bookID) ?? false,
-                            hasPastThoughts: !candidates.isEmpty
+                            hasPastThoughts: !candidates.isEmpty,
+                            hasSessionHighlight: sessionContext.hasSessionHighlight,
+                            hasSessionNote: sessionContext.hasSessionNote,
+                            hasBookReflections: !candidates.isEmpty
                         ),
                         previousAgentAskedQuestion: Self.previousAgentAskedQuestion(in: messages)
                     )
@@ -172,7 +186,8 @@ public struct ReaderAgent: Sendable {
                             responseGuidance: plan.responseGuidance,
                             nearbyCharacterBudget: plan.budget.nearbyCharacters,
                             pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters,
-                            conversationCharacterBudget: plan.budget.conversationCharacters
+                            conversationCharacterBudget: plan.budget.conversationCharacters,
+                            sessionContext: sessionContext
                         )
                     ) {
                         switch event {
