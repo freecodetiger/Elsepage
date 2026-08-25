@@ -200,7 +200,9 @@ Voice → Citation → Session Context → Router 可观测性 → Journal
 - **linkedHighlightIDs** 在 SessionReflectionSheet 提交处已由 coordinator 统一接上（voice/text 两分支都传）；capture 端（ReaderModel.endReadingSession）已由 Journal 任务打通。
 - **App 层编译**：swift test 不编译 App target，由 Phase 4 xcodegen + xcodebuild gate 验证。
 
-### Phase 4 门禁（构建中）
+### Phase 4 门禁 ✅
 
-- `xcodegen generate` ✅（ReadLoop.xcodeproj 已更新，含 SpeechCore/ContextRouting 新 product）。
-- unsigned iOS Simulator `xcodebuild` 后台构建中。
+- `xcodegen generate` ✅（ReadLoop.xcodeproj 已更新，含 SpeechCore/ContextRouting 新 product，已入库）。
+- unsigned iOS Simulator `xcodebuild` **BUILD SUCCEEDED**（修了两处 App/SpeechCore 编译错误，见提交 `4f13a2b`）。
+- 全量 `swift test`：**119/119 通过**。
+- 手工设备项仍待真机 gate：Voice 长按/录音/权限、EPUB 引用跳转、AudioFile `.caf` 落盘。
