@@ -1,5 +1,7 @@
 import AgentRuntime
+import ContextRouting
 import Foundation
+import ReaderCore
 import ReflectionCore
 import RetrievalCore
 
@@ -28,19 +30,25 @@ public struct ReaderAgent: Sendable {
     private let policy: ReaderAgentPolicy
     private let budget: ExecutionBudget
     private let contextBuilder: ReaderAgentContextBuilder?
+    private let contextRouter: any ReaderContextRouting
+    private let contextValidator: ContextPlanValidator
 
     public init(
         reflections: any ReflectionRepository,
         models: any ModelClientFactory,
         policy: ReaderAgentPolicy = .init(),
         budget: ExecutionBudget = .readerReply,
-        contextBuilder: ReaderAgentContextBuilder? = nil
+        contextBuilder: ReaderAgentContextBuilder? = nil,
+        contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
+        contextValidator: ContextPlanValidator = .init()
     ) {
         self.reflections = reflections
         self.models = models
         self.policy = policy
         self.budget = budget
         self.contextBuilder = contextBuilder
+        self.contextRouter = contextRouter
+        self.contextValidator = contextValidator
     }
 
     public func respond(to reflectionID: ReflectionID) -> AsyncStream<ReaderAgentEvent> {
@@ -98,9 +106,6 @@ public struct ReaderAgent: Sendable {
                         return
                     }
 
-                    let connection = try? await strongestConnection(for: reflection)
-                    if let connection { try await reflections.saveConnection(connection) }
-                    continuation.yield(.contextPrepared(connection))
                     let client: any ModelClient
                     do { client = try await models.makeClient() }
                     catch {
@@ -108,21 +113,50 @@ public struct ReaderAgent: Sendable {
                         continuation.finish()
                         return
                     }
-
+                    // Routing is part of the optional Agent request; surface the
+                    // loading state before its bounded model call begins.
                     continuation.yield(.started)
-                    let prior: Reflection?
-                    if let connection {
-                        prior = try? await awaitReflection(connection.sourceReflectionID)
-                    } else {
-                        prior = nil
-                    }
                     let evidence = (try? await reflections.evidence(for: reflection.id)) ?? []
+                    let currentLocator = evidence.compactMap(\.locator).first
+                    let candidates = (try? await reflections.recentReflections(limit: 50))?
+                        .filter { $0.id != reflection.id } ?? []
+                    let routingText = followUp?.text ?? reflection.originalText
+                    let routingInput = ContextRoutingInput(
+                        interactionMode: followUp == nil ? .reflection : .conversation,
+                        currentReflection: routingText,
+                        recentConversation: messages.suffix(6).map {
+                            RoutingMessage(role: $0.author == .user ? "user" : "agent", content: String($0.content.prefix(500)))
+                        },
+                        currentReading: .init(
+                            bookID: reflection.bookID,
+                            selectedText: currentLocator?.textHighlight,
+                            nearbyTextPreview: Self.nearbyPreview(currentLocator),
+                            hasCurrentLocator: currentLocator != nil
+                        ),
+                        availableSources: .init(
+                            hasNearbyPassage: currentLocator != nil,
+                            hasBookIndex: await contextBuilder?.isAvailable(for: reflection.bookID) ?? false,
+                            hasPastThoughts: !candidates.isEmpty
+                        ),
+                        previousAgentAskedQuestion: Self.previousAgentAskedQuestion(in: messages)
+                    )
+                    let routingResult = await contextRouter.route(routingInput, using: client)
+                    let plan = contextValidator.validate(routingResult.plan, input: routingInput)
+                    let connection = plan.pastThoughtRetrieval.flatMap { pastPlan in
+                        strongestConnection(for: reflection, query: pastPlan.query, among: candidates)
+                    }
+                    if let connection { try await reflections.saveConnection(connection) }
+                    continuation.yield(.contextPrepared(connection))
+                    let prior = connection.flatMap { id in candidates.first { $0.id == id.sourceReflectionID } }
                     let bookContext: ReaderAgentBookContext?
-                    if let contextBuilder {
+                    if let contextBuilder, let retrieval = plan.bookRetrieval {
                         bookContext = try? await contextBuilder.build(
                             bookID: reflection.bookID,
-                            reflection: followUp?.text ?? reflection.originalText,
-                            currentLocator: evidence.compactMap(\.locator).first
+                            reflection: retrieval.query,
+                            currentLocator: currentLocator,
+                            evidenceLimit: retrieval.maximumEvidenceCount,
+                            characterBudget: plan.budget.bookEvidenceCharacters,
+                            scope: retrieval.preferredScope == .readSoFar ? .readSoFar : .currentResource
                         )
                     } else {
                         bookContext = nil
@@ -133,7 +167,12 @@ public struct ReaderAgent: Sendable {
                             messages: messages,
                             currentEvidence: evidence,
                             previousReflection: prior,
-                            bookEvidence: bookContext?.evidence ?? []
+                            bookEvidence: bookContext?.evidence ?? [],
+                            includeNearbyPassage: plan.nearbyPassage == .include,
+                            responseGuidance: plan.responseGuidance,
+                            nearbyCharacterBudget: plan.budget.nearbyCharacters,
+                            pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters,
+                            conversationCharacterBudget: plan.budget.conversationCharacters
                         )
                     ) {
                         switch event {
@@ -174,15 +213,9 @@ public struct ReaderAgent: Sendable {
         }
     }
 
-    private func awaitReflection(_ id: ReflectionID) async throws -> Reflection? {
-        try await reflections.reflection(id: id)
-    }
-
-    private func strongestConnection(for reflection: Reflection) async throws -> ReflectionConnection? {
-        let candidates = try await reflections.recentReflections(limit: 50)
-            .filter { $0.id != reflection.id }
+    private func strongestConnection(for reflection: Reflection, query: String, among candidates: [Reflection]) -> ReflectionConnection? {
         guard let match = ReflectionLexicalMatcher.strongestMatch(
-            for: reflection.originalText,
+            for: query,
             among: candidates
         ) else { return nil }
         return ReflectionConnection(
@@ -190,6 +223,17 @@ public struct ReaderAgent: Sendable {
             sourceReflectionID: match.reflection.id,
             relevance: match.relevance
         )
+    }
+
+    private static func nearbyPreview(_ locator: BookLocator?) -> String? {
+        guard let locator else { return nil }
+        let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
+        return text.isEmpty ? nil : String(text.prefix(600))
+    }
+
+    private static func previousAgentAskedQuestion(in messages: [ReflectionMessage]) -> Bool {
+        guard let agent = messages.last(where: { $0.author == .agent }) else { return false }
+        return agent.content.contains("？") || agent.content.contains("?")
     }
 }
 

@@ -65,7 +65,7 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         }
     }
 
-    public func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int) async throws -> [(BookChunk, Double)] {
+    public func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope = .readSoFar) async throws -> [(BookChunk, Double)] {
         let terms = query.lowercased().split { !$0.isLetter && !$0.isNumber }
             .map(String.init).filter { $0.count >= 3 }
             .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }
@@ -75,7 +75,10 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
                 guard !needle.isEmpty else { return [] }
                 var sql = "SELECT c.* FROM bookChunks c WHERE c.bookID=? AND instr(c.normalizedText, ?) > 0"
                 var arguments: StatementArguments = [bookID.description, needle]
-                if let boundary {
+                if let boundary, scope == .currentResource {
+                    sql += " AND c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?"
+                    arguments += [boundary.resourceOrdinal, boundary.progression ?? 1]
+                } else if let boundary {
                     sql += " AND (c.resourceOrdinal < ? OR (c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?))"
                     arguments += [boundary.resourceOrdinal, boundary.resourceOrdinal, boundary.progression ?? 1]
                 }
@@ -84,7 +87,10 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
             }
             var sql = "SELECT c.*, bm25(bookChunksFTS) AS rank FROM bookChunksFTS f JOIN bookChunks c ON c.id=f.chunkID WHERE f.bookChunksFTS MATCH ? AND c.bookID=?"
             var arguments: StatementArguments = [terms.joined(separator: " OR "), bookID.description]
-            if let boundary {
+            if let boundary, scope == .currentResource {
+                sql += " AND c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?"
+                arguments += [boundary.resourceOrdinal, boundary.progression ?? 1]
+            } else if let boundary {
                 sql += " AND (c.resourceOrdinal < ? OR (c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?))"
                 arguments += [boundary.resourceOrdinal, boundary.resourceOrdinal, boundary.progression ?? 1]
             }

@@ -21,6 +21,9 @@ import Testing
     #expect(try await index.chunks(for: book.id, version: 1).count == 2)
     let found = try await index.lexicalSearch(bookID: book.id, query: "制度结构", boundary: .init(resourceOrdinal: 0, progression: 0.5), limit: 10)
     #expect(found.map { $0.0.id.rawValue } == ["read"])
+    let currentResource = try await index.lexicalSearch(bookID: book.id, query: "制度结构",
+        boundary: .init(resourceOrdinal: 2, progression: 0.9), limit: 10, scope: .currentResource)
+    #expect(currentResource.map { $0.0.id.rawValue } == ["future"])
     try await index.saveEmbeddings([.init(rawValue: "read"): [1, 0]], model: "fake", dimensions: 2)
     #expect(try await index.embeddings(bookID: book.id, model: "fake").count == 1)
     try await books.delete(book.id)

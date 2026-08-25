@@ -36,14 +36,17 @@ public struct LocalBookRetriever: BookRetriever {
         self.repository = repository; self.embeddingProvider = embeddingProvider
     }
     public func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence] {
-        let lexical = try await repository.lexicalSearch(bookID: query.bookID, query: query.text, boundary: query.boundary, limit: max(12, query.limit * 3))
+        let lexical = try await repository.lexicalSearch(bookID: query.bookID, query: query.text, boundary: query.boundary, limit: max(12, query.limit * 3), scope: query.scope)
         var ranked = lexical.map { ($0.0.id, $0.1) }
         var chunks = Dictionary(uniqueKeysWithValues: lexical.map { ($0.0.id, $0.0) })
         if let provider = embeddingProvider,
            let queryVector = try? await provider.embed([query.text]).first {
             let stored = try await repository.embeddings(bookID: query.bookID, model: provider.modelIdentifier)
             let allChunks = try await repository.chunks(for: query.bookID, version: BookIndexPipeline.currentVersion)
-                .filter { query.boundary?.contains($0) ?? true }
+                .filter { chunk in
+                    guard query.boundary?.contains(chunk) ?? true else { return false }
+                    return query.scope == .readSoFar || chunk.resourceOrdinal == query.boundary?.resourceOrdinal
+                }
             chunks.merge(Dictionary(uniqueKeysWithValues: allChunks.map { ($0.id, $0) })) { current, _ in current }
             let allowed = Set(allChunks.map(\.id))
             let semantic = stored.filter { allowed.contains($0.key) }

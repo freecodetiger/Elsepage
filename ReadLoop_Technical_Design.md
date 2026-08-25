@@ -372,6 +372,28 @@ ReadLoopApp
 
 可依赖阅读与 Reflection 领域模块，但不得依赖具体 Provider adapter 或 UI。
 
+## 6.3A.1 ContextRouting
+
+`ContextRouting` 是 ReaderAgent 的语义规划边界：LLM 只能根据轻量 routing input 提议
+`ReaderContextPlan`，不能读取数据库、调用 Retriever 或放宽权限。计划必须经过 Swift
+`ContextPlanValidator` 后才可执行。
+
+```text
+Reflection + conversation metadata
+        ↓
+LLMReaderContextRouter
+        ↓ strict JSON
+ReaderContextPlan
+        ↓ Swift validation
+ValidatedContextPlan
+        ↓
+L0 nearby / L1 book / L2 past thought builders
+```
+
+硬边界仍由本地代码拥有：当前 Book、read-so-far、可用数据源、查询长度、证据数量、
+字符预算与连续追问限制。Router 超时、失败或返回非严格 JSON 时，使用
+`DeterministicReaderContextRouter`；不得尝试从 Markdown 或自然语言中猜测计划。
+
 ---
 
 ## 6.3B ThoughtCore

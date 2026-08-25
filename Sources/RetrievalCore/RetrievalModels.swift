@@ -118,10 +118,13 @@ public struct RetrievalQuery: Hashable, Sendable {
     public let text: String
     public let boundary: ReadingBoundary?
     public let limit: Int
-    public init(bookID: BookID, text: String, boundary: ReadingBoundary?, limit: Int = 4) {
-        self.bookID = bookID; self.text = text; self.boundary = boundary; self.limit = limit
+    public let scope: BookRetrievalScope
+    public init(bookID: BookID, text: String, boundary: ReadingBoundary?, limit: Int = 4, scope: BookRetrievalScope = .readSoFar) {
+        self.bookID = bookID; self.text = text; self.boundary = boundary; self.limit = limit; self.scope = scope
     }
 }
+
+public enum BookRetrievalScope: Hashable, Sendable { case currentResource, readSoFar }
 
 public protocol BookRetriever: Sendable {
     func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence]
@@ -134,7 +137,7 @@ public protocol BookIndexRepository: Sendable {
     func replace(chunks: [BookChunk], inResource href: String, for bookID: BookID, version: Int) async throws
     func replace(blocks: [BookTextBlock], inResource href: String, for bookID: BookID, version: Int) async throws
     func chunks(for bookID: BookID, version: Int) async throws -> [BookChunk]
-    func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int) async throws -> [(BookChunk, Double)]
+    func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope) async throws -> [(BookChunk, Double)]
     func readingBoundary(bookID: BookID, locator: BookLocator) async throws -> ReadingBoundary?
     func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws
     func embeddings(bookID: BookID, model: String) async throws -> [BookChunkID: [Float]]
@@ -156,7 +159,14 @@ public struct ReaderAgentContextBuilder: Sendable {
     public init(retriever: any BookRetriever, repository: any BookIndexRepository, characterBudget: Int = 4_000) {
         self.retriever = retriever; self.repository = repository; self.characterBudget = max(0, characterBudget)
     }
-    public func build(bookID: BookID, reflection: String, currentLocator: BookLocator?) async throws -> ReaderAgentBookContext {
+    public func isAvailable(for bookID: BookID) async -> Bool {
+        guard let job = try? await repository.job(for: bookID, version: BookIndexPipeline.currentVersion) else { return false }
+        return job.state == .lexicalReady || job.state == .embedding || job.state == .ready
+    }
+
+    public func build(bookID: BookID, reflection: String, currentLocator: BookLocator?,
+                      evidenceLimit: Int = 4, characterBudget overrideBudget: Int? = nil,
+                      scope: BookRetrievalScope = .readSoFar) async throws -> ReaderAgentBookContext {
         let boundary: ReadingBoundary?
         if let currentLocator {
             boundary = try await repository.readingBoundary(bookID: bookID, locator: currentLocator)
@@ -166,8 +176,8 @@ public struct ReaderAgentContextBuilder: Sendable {
         // No known reading boundary means no broad book retrieval. This is the
         // conservative anti-spoiler default, not an invitation to search all.
         guard boundary != nil else { return ReaderAgentBookContext(evidence: []) }
-        let retrieved = try await retriever.retrieve(.init(bookID: bookID, text: reflection, boundary: boundary))
-        var remaining = characterBudget
+        let retrieved = try await retriever.retrieve(.init(bookID: bookID, text: reflection, boundary: boundary, limit: max(1, evidenceLimit), scope: scope))
+        var remaining = max(0, overrideBudget ?? characterBudget)
         let evidence = retrieved.compactMap { item -> BookEvidence? in
             guard remaining > 0 else { return nil }
             let excerpt = String(item.excerpt.prefix(remaining)); remaining -= excerpt.count

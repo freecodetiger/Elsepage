@@ -587,14 +587,20 @@ L0 > L1 > L2 > L3
 
 Do not maximize context size. Maximize relevance.
 
-### Deterministic context builder
+### Model-planned, locally enforced context routing
 
-Recommended pipeline:
+Elsepage uses an LLM for semantic routing because intent such as emotional
+recording, author disagreement, or a strong personal connection cannot always be
+reliably inferred from keywords. The model is a planner, never a data executor.
+
+Required pipeline:
 
 ```text
 Reflection
    ↓
-derive retrieval queries
+LLM proposes strict ContextPlan
+   ↓
+Swift validates source permissions, read-so-far and budgets
    ↓
 retrieve book evidence
 retrieve personal evidence
@@ -606,7 +612,10 @@ apply context budget
 ReaderAgentContext
 ```
 
-Only use model-driven tools if this deterministic pass is insufficient.
+The router must not access repositories, Readium, SQL, FTS, vectors, secrets,
+Memory/Profile, or external knowledge. Invalid JSON, timeout, or provider failure
+must use a deterministic minimal fallback. The fallback is availability, not a
+second product personality.
 
 ### Context budget
 
