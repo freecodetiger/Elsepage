@@ -1,18 +1,15 @@
-import AgentCore
 import Foundation
 import LibraryCore
-import ModelProviders
 import Observation
+import ReaderAgent
 import ReflectionCore
 
-/// Read-only presentation state for the user's local reflection archive.
-/// It intentionally does not infer a profile, create memory, or call a provider.
+/// Presentation state for the local Reflection archive and explicit ReaderAgent replies.
+/// It does not know provider HTTP, credentials, Memory, or retrieval details.
 @MainActor @Observable
 final class ThoughtsModel {
     private let archive: ReflectionArchiveService
-    private let reflections: any ReflectionRepository
-    private let configurations: any ProviderConfigurationRepository
-    private let secrets: any SecretStore
+    private let readerAgent: ReaderAgent
 
     private(set) var entries: [ReflectionArchiveEntry] = []
     private(set) var isLoading = false
@@ -22,13 +19,10 @@ final class ThoughtsModel {
     init(
         books: any BookRepository,
         reflections: any ReflectionRepository,
-        configurations: any ProviderConfigurationRepository,
-        secrets: any SecretStore
+        readerAgent: ReaderAgent
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
-        self.reflections = reflections
-        self.configurations = configurations
-        self.secrets = secrets
+        self.readerAgent = readerAgent
     }
 
     func reload() async {
@@ -49,19 +43,34 @@ final class ThoughtsModel {
         guard replyingTo == nil else { return }
         replyingTo = reflection.id
         defer { replyingTo = nil }
-        do {
-            guard let configuration = try await configurations.currentConfiguration(),
-                  let key = try await secrets.secret(for: configuration.secretReference),
-                  !key.isEmpty else {
-                throw ModelClientError.invalidConfiguration
+        for await event in readerAgent.respond(to: reflection.id) {
+            switch event {
+            case .completed:
+                await reload()
+            case .failed(let failure):
+                errorMessage = Self.message(for: failure)
+            case .started, .textDelta, .cancelled:
+                break
             }
-            let client = try OpenAICompatibleModelClient(configuration: configuration, apiKey: key)
-            try await ReflectionAgentReplyService(reflections: reflections, client: client).reply(to: reflection.id)
-            await reload()
-        } catch is CancellationError {
-            return
-        } catch {
-            errorMessage = ProviderSettingsModel.message(for: error)
+        }
+    }
+
+    private static func message(for failure: ReaderAgentFailure) -> String {
+        switch failure {
+        case .missingReflection: "找不到这条 Reflection。"
+        case .providerNotConfigured: "请先配置并测试 AI Provider。"
+        case .emptyResponse: "Provider 没有返回可显示的内容。"
+        case .persistence: "Agent 回复无法保存到本机。"
+        case .runtime(let failure):
+            switch failure {
+            case .authentication: "API Key 无效或没有访问权限。"
+            case .rateLimited: "Provider 请求过于频繁，请稍后再试。"
+            case .providerUnavailable: "Provider 暂时不可用。"
+            case .network: "网络连接失败。"
+            case .malformedProviderResponse: "Provider 返回了无法识别的响应。"
+            case .budgetExceeded: "本次 Agent 请求超出时间或调用预算。"
+            case .unknown: "Agent 暂时无法完成回应。"
+            }
         }
     }
 }

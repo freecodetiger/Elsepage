@@ -1,23 +1,14 @@
-import AgentCore
+import AgentRuntime
 import Foundation
 import LibraryCore
 import ModelProviders
+import ReaderAgent
 import ReflectionCore
 import Testing
 
-@Test func agentDiscussionOnlyReferencesAlreadyPersistedReflection() {
-    let reflectionID = ReflectionID()
-    let request = AgentDiscussionRequest(reflectionID: reflectionID, prompt: "Help me examine this thought.")
-    let response = AgentDiscussionResponse(requestID: request.id, content: "What makes that tension important to you?")
-
-    #expect(request.reflectionID == reflectionID)
-    #expect(response.requestID == request.id)
-    #expect(!response.content.isEmpty)
-}
-
 @Test func fakeModelClientIsDeterministicWithoutNetworkOrSecrets() async throws {
     let response = ModelResponse(content: "A small prompt back.")
-    let client = FakeModelClient(script: [.started, .textDelta(response.content), .completed(response)])
+    let client = FakeModelClient(events: [.started, .textDelta(response.content), .completed(response)])
     var events: [ModelEvent] = []
     for try await event in client.stream(request: ModelRequest(messages: [])) { events.append(event) }
     #expect(events == [.started, .textDelta("A small prompt back."), .completed(response)])
@@ -76,7 +67,7 @@ import Testing
     #expect(events == [
         .started,
         .textDelta("A concise response."),
-        .completed(ModelResponse(id: "chatcmpl-1", content: "A concise response.", finishReason: "stop", usage: ModelUsage(inputTokens: 12, outputTokens: 4, totalTokens: 16))),
+        .completed(ModelResponse(id: "chatcmpl-1", content: "A concise response.", finishReason: "stop", usage: TokenUsage(inputTokens: 12, outputTokens: 4, totalTokens: 16))),
     ])
     let captured = await transport.captured()
     #expect(captured.url?.absoluteString == "https://provider.example/v1/chat/completions")
@@ -99,8 +90,44 @@ import Testing
     do {
         for try await _ in client.stream(request: ModelRequest(messages: [])) {}
         Issue.record("Expected provider failure")
-    } catch let error as ModelClientError {
-        #expect(error == .providerMessage("Invalid API key"))
+    } catch let error as ModelFailure {
+        #expect(error == .authentication)
+    }
+}
+
+@Test func compatibleClientNormalizesRateLimitServerAndNetworkFailures() async throws {
+    let configuration = ProviderConfiguration(
+        provider: .openAICompatible,
+        baseURL: URL(string: "https://provider.example/v1")!,
+        modelID: "model-a",
+        secretReference: SecretReference(rawValue: "key")
+    )
+    for (status, expected) in [(429, ModelFailure.rateLimited), (503, .providerUnavailable)] {
+        let client = try OpenAICompatibleModelClient(
+            configuration: configuration,
+            apiKey: "test",
+            transport: RecordedTransport(statusCode: status, data: Data())
+        )
+        do {
+            for try await _ in client.stream(request: ModelRequest(messages: [])) {}
+            Issue.record("Expected normalized provider failure")
+        } catch let failure as ModelFailure {
+            #expect(failure == expected)
+        } catch {
+            Issue.record("Unexpected failure type: \(error)")
+        }
+    }
+
+    let networkClient = try OpenAICompatibleModelClient(
+        configuration: configuration,
+        apiKey: "test",
+        transport: FailingTransport()
+    )
+    do {
+        for try await _ in networkClient.stream(request: ModelRequest(messages: [])) {}
+        Issue.record("Expected normalized network failure")
+    } catch let failure as ModelFailure {
+        #expect(failure == .network)
     }
 }
 
@@ -110,12 +137,15 @@ import Testing
     )
     let repository = ReflectionRepositoryFake(reflection: reflection)
     let response = ModelResponse(content: "效率服务于什么，或许比效率本身更值得追问。")
-    let service = ReflectionAgentReplyService(
+    let agent = ReaderAgent(
         reflections: repository,
-        client: FakeModelClient(script: [.started, .completed(response)])
+        models: StaticModelFactory(client: FakeModelClient(events: [.started, .completed(response)]))
     )
 
-    let message = try await service.reply(to: reflection.id)
+    let events = await collect(agent.respond(to: reflection.id))
+    guard case .completed(let message) = events.last else {
+        Issue.record("Expected persisted ReaderAgent completion"); return
+    }
 
     #expect(message.reflectionID == reflection.id)
     #expect(message.author == .agent)
@@ -123,19 +153,40 @@ import Testing
     #expect(await repository.savedMessages() == [message])
 }
 
+@Test func readerAgentPolicyKeepsPromptAndContextRecipeVersioned() {
+    let reflection = Reflection(bookID: .init(), originalText: "这是我的原始想法", inputKind: .text)
+    let input = ReaderAgentPolicy(promptVersion: "reader-test-v2").input(for: reflection)
+
+    #expect(input.metadata.agentKind == "reader.reflection")
+    #expect(input.metadata.promptVersion == "reader-test-v2")
+    #expect(input.metadata.contextRecipeVersion == "reflection-only-v1")
+    #expect(input.messages.last?.role == .user)
+    #expect(input.messages.last?.content == reflection.originalText)
+}
+
 @Test func failedAgentReplyDoesNotMutatePersistedReflectionOrAppendMessage() async throws {
     let reflection = Reflection(bookID: .init(), originalText: "原始想法", inputKind: .text)
     let repository = ReflectionRepositoryFake(reflection: reflection)
-    let service = ReflectionAgentReplyService(
+    let agent = ReaderAgent(
         reflections: repository,
-        client: FakeModelClient(script: [.completed(ModelResponse(content: "  "))])
+        models: StaticModelFactory(client: FakeModelClient(events: [.completed(ModelResponse(content: "  "))]))
     )
 
-    await #expect(throws: ReflectionAgentReplyError.emptyProviderResponse) {
-        try await service.reply(to: reflection.id)
-    }
+    let events = await collect(agent.respond(to: reflection.id))
+    #expect(events.last == .failed(.emptyResponse))
     #expect(await repository.savedMessages().isEmpty)
     #expect(await repository.persistedReflection()?.originalText == "原始想法")
+}
+
+private struct StaticModelFactory: ModelClientFactory {
+    let client: any ModelClient
+    func makeClient() -> any ModelClient { client }
+}
+
+private func collect(_ stream: AsyncStream<ReaderAgentEvent>) async -> [ReaderAgentEvent] {
+    var events: [ReaderAgentEvent] = []
+    for await event in stream { events.append(event) }
+    return events
 }
 
 private actor RecordedTransport: HTTPDataTransport {
@@ -163,6 +214,12 @@ private actor RecordedTransport: HTTPDataTransport {
     }
 
     func captured() -> Captured { latest! }
+}
+
+private struct FailingTransport: HTTPDataTransport {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        throw URLError(.notConnectedToInternet)
+    }
 }
 
 private actor ReflectionRepositoryFake: ReflectionRepository {

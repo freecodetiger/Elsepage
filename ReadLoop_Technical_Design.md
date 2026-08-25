@@ -206,7 +206,7 @@ Thinking Streak 不是 UI 计算字段，而应由稳定的行为事件产生。
 | Secrets | Keychain |
 | Networking | URLSession + async/await |
 | Streaming | SSE / provider-native HTTP stream |
-| Agent Runtime | Custom `ReaderAgentCore` |
+| Agent Runtime | Pure Swift `AgentRuntime` + product-specific `ReaderAgent` |
 | LLM | BYOK `ModelProvider` adapters |
 | Embeddings | `EmbeddingProvider` abstraction；BYOK cloud embedding first |
 | Speech | `TranscriptionProvider` abstraction；system Speech 或 BYOK cloud STT |
@@ -296,7 +296,8 @@ ReadLoopApp
 ├── ReadingSessionCore
 ├── ReflectionCore
 ├── ThoughtCore
-├── AgentCore
+├── AgentRuntime
+├── ReaderAgent
 ├── ModelProviders
 ├── RetrievalCore
 ├── MemoryCore
@@ -343,25 +344,37 @@ ReadLoopApp
 
 ---
 
-## 6.3 AgentCore
+## 6.3 AgentRuntime
 
 拥有：
 
 - Agent Loop；
 - Agent Request；
 - Tool Registry；
-- Context Builder；
 - Agent Events；
 - Budget/turn limits；
 - Cancellation；
 - Recovery；
-- Prompt policy interfaces。
+- ModelClient interfaces。
 
-不得直接依赖具体 OpenAI/Anthropic SDK。
+不得依赖 SwiftUI、UIKit、Readium、GRDB、ReaderCore、ReflectionCore、MemoryCore，
+也不得直接依赖具体 OpenAI/Anthropic SDK。
+
+## 6.3A ReaderAgent
+
+拥有：
+
+- Reader Agent product behavior；
+- Reader-specific Context Builder；
+- Prompt policy 与版本；
+- Reflection feedback workflow；
+- Runtime event 到产品事件的映射。
+
+可依赖阅读与 Reflection 领域模块，但不得依赖具体 Provider adapter 或 UI。
 
 ---
 
-## 6.3A ThoughtCore
+## 6.3B ThoughtCore
 
 拥有长期“用户思想”领域模型，而不是 AI Chat 数据模型。
 
@@ -2215,7 +2228,8 @@ ReadLoop/
 │   ├── LibraryCore/
 │   ├── ReadingSessionCore/
 │   ├── ReflectionCore/
-│   ├── AgentCore/
+│   ├── AgentRuntime/
+│   ├── ReaderAgent/
 │   ├── ModelProviders/
 │   ├── RetrievalCore/
 │   ├── MemoryCore/

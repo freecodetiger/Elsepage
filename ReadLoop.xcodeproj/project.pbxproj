@@ -18,9 +18,10 @@
 		3836C273AAA2B862FF7F358B /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 5CB651BEA886D981413F1F07 /* ReadiumShared */; };
 		3A6A395EB182962A3951C62A /* ProviderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C438732DAC81CDEC4CE59A /* ProviderSettingsView.swift */; };
 		3D5A833BDD3AABB5E665E2FE /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17217B45491685767A98789 /* ReaderModel.swift */; };
+		3DBB52E66244A880F22E45B7 /* ReadiumAdapterGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = 6A4AF0225E65CE1DEE9B6000 /* ReadiumAdapterGCDWebServer */; };
 		3F4AC3062F18C7C41CE13F59 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 4B88E02C78BB96FC5CDDC13B /* AppInfrastructure */; };
 		444DD91222545D4687D8FE48 /* LibraryCore in Frameworks */ = {isa = PBXBuildFile; productRef = 247C93FCDA06F24613EBE24D /* LibraryCore */; };
-		49729F72297A6EA4CDC6B681 /* ModelProviders in Frameworks */ = {isa = PBXBuildFile; productRef = 2E828F1FA7007F0BFAAF63AD /* ModelProviders */; };
+		49729F72297A6EA4CDC6B681 /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = 6F921148D5F8EDA27439F5AE /* ReaderAgent */; };
 		4AE7C3539EEB1E0403A71A2D /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9732B9E459EE944232BA4360 /* AppModel.swift */; };
 		4C21FA3E171833BA8A152903 /* ElsepageTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB660ABDB582C5FFF22452F /* ElsepageTheme.swift */; };
 		4CC56E8B1E5E137CE3F3C17D /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 4FADAA5B8DE1FC390342D187 /* README.md */; };
@@ -33,10 +34,10 @@
 		6980106596A47E10F72E7450 /* ReadiumMetadataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66EE9BCD5892EF245E64083C /* ReadiumMetadataReader.swift */; };
 		6D3551BB7604A37E2686E2F7 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 3F3697D18135E781693A7918 /* Persistence */; };
 		6DBB33C874EB21849FA36E0E /* ReaderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4775351EC3328731E57858C0 /* ReaderScreen.swift */; };
-		739069444F35954CEA6764A6 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 303B2BF3C97ADB415239C9F7 /* ReadiumStreamer */; };
+		739069444F35954CEA6764A6 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 14157B016983F45E250D41BD /* ReadiumShared */; };
 		73C172F594B4A9EDB5A66693 /* minimal.epub in Resources */ = {isa = PBXBuildFile; fileRef = 7374A2B8429A778AE5F22ADB /* minimal.epub */; };
 		792942EBAB3264DB01B406CF /* minimal.epub in Resources */ = {isa = PBXBuildFile; fileRef = 7374A2B8429A778AE5F22ADB /* minimal.epub */; };
-		7FC73606EBFF4A5E8F4C9605 /* AgentCore in Frameworks */ = {isa = PBXBuildFile; productRef = 31C9B867CDB20FBB78DA038C /* AgentCore */; };
+		7FC73606EBFF4A5E8F4C9605 /* AgentRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 90714C30F7492E2D43B30D14 /* AgentRuntime */; };
 		81173A889CF964F288964C96 /* PersistenceHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAAA36A8711C5E5DB8D4CC1A /* PersistenceHardeningTests.swift */; };
 		87269EB51BCFE5BA105ED490 /* ImportHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 763AB1DDEA8450791C00CCA5 /* ImportHardeningTests.swift */; };
 		934C8B1B09C601B5DF3B8EC3 /* ReflectionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2A42F4617B2CBC1E133B68 /* ReflectionPersistenceTests.swift */; };
@@ -51,18 +52,18 @@
 		BCF12F7BDE014C820B6BBD40 /* ThoughtsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D705601303A87157EE4015 /* ThoughtsView.swift */; };
 		C26DA02B3F9A8C35E9F6C756 /* ThoughtsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9873A9A1DCAB50645CD89D82 /* ThoughtsModel.swift */; };
 		C4BAC49B67F3E0A07742FFE2 /* ReflectionArchiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB0F9F7F0385EB45FD94025 /* ReflectionArchiveTests.swift */; };
-		CA1CBECBFE0693EA2499D9D0 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A39B871343335FF088DF30A4 /* ReadiumNavigator */; };
+		CA1CBECBFE0693EA2499D9D0 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 303B2BF3C97ADB415239C9F7 /* ReadiumStreamer */; };
 		CA3EFC2A30136CE9B551DBC0 /* ReadiumPublicationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 071CD8577B634BCCA3B9B3A5 /* ReadiumPublicationIntegrationTests.swift */; };
 		CFB6ECB328C361B1DCAF2CE2 /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05A33B98BD21AF7593C5D6EF /* LibraryModel.swift */; };
-		D212B53D304B5A5C369D0E37 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */; };
+		D212B53D304B5A5C369D0E37 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 499F3F0E1BB1A21324F25FBA /* Persistence */; };
 		D71C869DDC4716F8C3FBD66D /* ReadiumServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A3069ECDB501E8EF30EF58 /* ReadiumServices.swift */; };
 		D9300D54F299A3CC2E338B8E /* AppShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCFA4B39B6C45BE89C0D038 /* AppShell.swift */; };
 		DB1681D6696E7574AE2AE093 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731BF6181C2F03AD959521F2 /* LibraryView.swift */; };
-		DDB31037CCD8DA96EBA5F106 /* ReadiumAdapterGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = 6A4AF0225E65CE1DEE9B6000 /* ReadiumAdapterGCDWebServer */; };
+		DDB31037CCD8DA96EBA5F106 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A39B871343335FF088DF30A4 /* ReadiumNavigator */; };
 		DF1E21FF7C793E26B8B51C7E /* ElsepageComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9663C3CAFB779777C386F10 /* ElsepageComponents.swift */; };
-		E4D1C924B1823D21FCE52A46 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 499F3F0E1BB1A21324F25FBA /* Persistence */; };
+		E4D1C924B1823D21FCE52A46 /* ModelProviders in Frameworks */ = {isa = PBXBuildFile; productRef = 2E828F1FA7007F0BFAAF63AD /* ModelProviders */; };
 		E702281F1BC89A6D1FA32BD4 /* ReaderFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B89083F818E40F555FF2F92 /* ReaderFoundationTests.swift */; };
-		F8BAA6C7A354A1BF0ACB82F6 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 14157B016983F45E250D41BD /* ReadiumShared */; };
+		F8BAA6C7A354A1BF0ACB82F6 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -123,14 +124,15 @@
 				562131A6C3CC31746D55546F /* ReaderCore in Frameworks */,
 				A409B447F29C532AF154CE4F /* ReadingSessionCore in Frameworks */,
 				29E9FAE1964C080610B43AAE /* ReflectionCore in Frameworks */,
-				7FC73606EBFF4A5E8F4C9605 /* AgentCore in Frameworks */,
-				49729F72297A6EA4CDC6B681 /* ModelProviders in Frameworks */,
-				E4D1C924B1823D21FCE52A46 /* Persistence in Frameworks */,
-				D212B53D304B5A5C369D0E37 /* AppInfrastructure in Frameworks */,
-				F8BAA6C7A354A1BF0ACB82F6 /* ReadiumShared in Frameworks */,
-				739069444F35954CEA6764A6 /* ReadiumStreamer in Frameworks */,
-				CA1CBECBFE0693EA2499D9D0 /* ReadiumNavigator in Frameworks */,
-				DDB31037CCD8DA96EBA5F106 /* ReadiumAdapterGCDWebServer in Frameworks */,
+				7FC73606EBFF4A5E8F4C9605 /* AgentRuntime in Frameworks */,
+				49729F72297A6EA4CDC6B681 /* ReaderAgent in Frameworks */,
+				E4D1C924B1823D21FCE52A46 /* ModelProviders in Frameworks */,
+				D212B53D304B5A5C369D0E37 /* Persistence in Frameworks */,
+				F8BAA6C7A354A1BF0ACB82F6 /* AppInfrastructure in Frameworks */,
+				739069444F35954CEA6764A6 /* ReadiumShared in Frameworks */,
+				CA1CBECBFE0693EA2499D9D0 /* ReadiumStreamer in Frameworks */,
+				DDB31037CCD8DA96EBA5F106 /* ReadiumNavigator in Frameworks */,
+				3DBB52E66244A880F22E45B7 /* ReadiumAdapterGCDWebServer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -364,7 +366,8 @@
 				D053F9E8C184BD4A40F4CFB7 /* ReaderCore */,
 				0E5D34A20C524BA77AFBBDCC /* ReadingSessionCore */,
 				0B4FD2F89117EA936344DC03 /* ReflectionCore */,
-				31C9B867CDB20FBB78DA038C /* AgentCore */,
+				90714C30F7492E2D43B30D14 /* AgentRuntime */,
+				6F921148D5F8EDA27439F5AE /* ReaderAgent */,
 				2E828F1FA7007F0BFAAF63AD /* ModelProviders */,
 				499F3F0E1BB1A21324F25FBA /* Persistence */,
 				F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */,
@@ -871,10 +874,6 @@
 			package = 4EB37B9FD7C8F70E35BFF395 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = ReadiumStreamer;
 		};
-		31C9B867CDB20FBB78DA038C /* AgentCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = AgentCore;
-		};
 		3F3697D18135E781693A7918 /* Persistence */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Persistence;
@@ -904,6 +903,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4EB37B9FD7C8F70E35BFF395 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = ReadiumAdapterGCDWebServer;
+		};
+		6F921148D5F8EDA27439F5AE /* ReaderAgent */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ReaderAgent;
+		};
+		90714C30F7492E2D43B30D14 /* AgentRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AgentRuntime;
 		};
 		A26E7C374147AAC3B9C133F2 /* AppInfrastructure */ = {
 			isa = XCSwiftPackageProductDependency;

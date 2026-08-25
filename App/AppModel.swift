@@ -3,6 +3,7 @@ import Foundation
 import ModelProviders
 import Observation
 import Persistence
+import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
 
@@ -26,6 +27,13 @@ final class AppModel {
             let reflections = GRDBReflectionRepository(database: database)
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
+            let readerAgent = ReaderAgent(
+                reflections: reflections,
+                models: ConfiguredModelClientFactory(
+                    configurations: providerConfigurations,
+                    secrets: secrets
+                )
+            )
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
             library = LibraryModel(
@@ -44,8 +52,7 @@ final class AppModel {
             thoughts = ThoughtsModel(
                 books: books,
                 reflections: reflections,
-                configurations: providerConfigurations,
-                secrets: secrets
+                readerAgent: readerAgent
             )
             await providerSettings?.load()
             await library?.reload()

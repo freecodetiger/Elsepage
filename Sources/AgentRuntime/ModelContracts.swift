@@ -8,8 +8,10 @@ public struct ModelCapabilities: Hashable, Codable, Sendable {
     public var maxContextTokens: Int?
 
     public init(
-        supportsStreaming: Bool = false, supportsToolCalling: Bool = false,
-        supportsStructuredOutput: Bool = false, supportsVision: Bool = false,
+        supportsStreaming: Bool = false,
+        supportsToolCalling: Bool = false,
+        supportsStructuredOutput: Bool = false,
+        supportsVision: Bool = false,
         maxContextTokens: Int? = nil
     ) {
         self.supportsStreaming = supportsStreaming
@@ -17,6 +19,18 @@ public struct ModelCapabilities: Hashable, Codable, Sendable {
         self.supportsStructuredOutput = supportsStructuredOutput
         self.supportsVision = supportsVision
         self.maxContextTokens = maxContextTokens
+    }
+}
+
+public struct ModelDescriptor: Hashable, Codable, Sendable {
+    public let provider: String
+    public let model: String
+    public let capabilities: ModelCapabilities
+
+    public init(provider: String, model: String, capabilities: ModelCapabilities) {
+        self.provider = provider
+        self.model = model
+        self.capabilities = capabilities
     }
 }
 
@@ -46,7 +60,7 @@ public struct ModelRequest: Hashable, Codable, Sendable {
     }
 }
 
-public struct ModelUsage: Hashable, Codable, Sendable {
+public struct TokenUsage: Hashable, Codable, Sendable {
     public let inputTokens: Int?
     public let outputTokens: Int?
     public let totalTokens: Int?
@@ -62,9 +76,9 @@ public struct ModelResponse: Hashable, Codable, Sendable {
     public let id: String?
     public let content: String
     public let finishReason: String?
-    public let usage: ModelUsage?
+    public let usage: TokenUsage?
 
-    public init(id: String? = nil, content: String, finishReason: String? = nil, usage: ModelUsage? = nil) {
+    public init(id: String? = nil, content: String, finishReason: String? = nil, usage: TokenUsage? = nil) {
         self.id = id
         self.content = content
         self.finishReason = finishReason
@@ -75,17 +89,25 @@ public struct ModelResponse: Hashable, Codable, Sendable {
 public enum ModelEvent: Hashable, Sendable {
     case started
     case textDelta(String)
+    case usage(TokenUsage)
     case completed(ModelResponse)
 }
 
 public protocol ModelClient: Sendable {
-    var capabilities: ModelCapabilities { get }
+    var descriptor: ModelDescriptor { get }
     func stream(request: ModelRequest) -> AsyncThrowingStream<ModelEvent, Error>
 }
 
-public enum ModelClientError: Error, Equatable, Sendable {
+public protocol ModelClientFactory: Sendable {
+    func makeClient() async throws -> any ModelClient
+}
+
+public enum ModelFailure: Error, Equatable, Sendable {
     case invalidConfiguration
+    case authentication
+    case rateLimited
+    case providerUnavailable
     case invalidResponse
-    case httpStatus(Int)
+    case network
     case providerMessage(String)
 }

@@ -1,3 +1,4 @@
+import AgentRuntime
 import Foundation
 
 public protocol HTTPDataTransport: Sendable {
@@ -18,7 +19,7 @@ public struct URLSessionDataTransport: HTTPDataTransport {
 /// non-streaming HTTP request for now, while presenting the stable `ModelClient`
 /// event contract required by the future local runtime.
 public struct OpenAICompatibleModelClient: ModelClient {
-    public let capabilities: ModelCapabilities
+    public let descriptor: ModelDescriptor
 
     private let configuration: ProviderConfiguration
     private let apiKey: String
@@ -32,12 +33,16 @@ public struct OpenAICompatibleModelClient: ModelClient {
               !configuration.modelID.isEmpty,
               !apiKey.isEmpty,
               configuration.baseURL.scheme == "https" || configuration.baseURL.scheme == "http" else {
-            throw ModelClientError.invalidConfiguration
+            throw ModelFailure.invalidConfiguration
         }
         self.configuration = configuration
         self.apiKey = apiKey
         self.transport = transport
-        capabilities = ModelCapabilities(supportsStreaming: false)
+        descriptor = ModelDescriptor(
+            provider: configuration.provider.rawValue,
+            model: configuration.modelID,
+            capabilities: ModelCapabilities(supportsStreaming: false)
+        )
     }
 
     public func stream(request: ModelRequest) -> AsyncThrowingStream<ModelEvent, Error> {
@@ -67,21 +72,30 @@ public struct OpenAICompatibleModelClient: ModelClient {
         urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         urlRequest.httpBody = try JSONEncoder().encode(OpenAIRequest(configuration: configuration, request: request))
 
-        let (data, response) = try await transport.data(for: urlRequest)
-        guard let http = response as? HTTPURLResponse else { throw ModelClientError.invalidResponse }
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await transport.data(for: urlRequest) }
+        catch is CancellationError { throw CancellationError() }
+        catch { throw ModelFailure.network }
+        guard let http = response as? HTTPURLResponse else { throw ModelFailure.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             if let providerError = try? JSONDecoder().decode(OpenAIErrorEnvelope.self, from: data) {
-                throw ModelClientError.providerMessage(providerError.error.message)
+                if http.statusCode == 401 || http.statusCode == 403 { throw ModelFailure.authentication }
+                if http.statusCode == 429 { throw ModelFailure.rateLimited }
+                throw ModelFailure.providerMessage(providerError.error.message)
             }
-            throw ModelClientError.httpStatus(http.statusCode)
+            if http.statusCode == 401 || http.statusCode == 403 { throw ModelFailure.authentication }
+            if http.statusCode == 429 { throw ModelFailure.rateLimited }
+            if http.statusCode >= 500 { throw ModelFailure.providerUnavailable }
+            throw ModelFailure.providerMessage("HTTP \(http.statusCode)")
         }
         let decoded: OpenAIResponse
         do { decoded = try JSONDecoder().decode(OpenAIResponse.self, from: data) }
-        catch { throw ModelClientError.invalidResponse }
-        guard let choice = decoded.choices.first else { throw ModelClientError.invalidResponse }
+        catch { throw ModelFailure.invalidResponse }
+        guard let choice = decoded.choices.first else { throw ModelFailure.invalidResponse }
         return ModelResponse(
             id: decoded.id, content: choice.message.content ?? "", finishReason: choice.finishReason,
-            usage: decoded.usage.map { ModelUsage(inputTokens: $0.promptTokens, outputTokens: $0.completionTokens, totalTokens: $0.totalTokens) }
+            usage: decoded.usage.map { TokenUsage(inputTokens: $0.promptTokens, outputTokens: $0.completionTokens, totalTokens: $0.totalTokens) }
         )
     }
 }

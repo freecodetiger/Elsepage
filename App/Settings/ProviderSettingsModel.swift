@@ -1,3 +1,4 @@
+import AgentRuntime
 import Foundation
 import ModelProviders
 import Observation
@@ -77,16 +78,7 @@ final class ProviderSettingsModel {
         defer { isWorking = false }
         do {
             let key = try await resolvedKey()
-            let client = try OpenAICompatibleModelClient(configuration: configuration, apiKey: key)
-            var completed = false
-            for try await event in client.stream(request: ModelRequest(
-                messages: [ModelMessage(role: .user, content: "Reply with OK.")],
-                temperature: 0,
-                maxOutputTokens: 8
-            )) {
-                if case .completed = event { completed = true }
-            }
-            guard completed else { throw ModelClientError.invalidResponse }
+            try await ProviderConnectionTester().test(configuration: configuration, apiKey: key)
             statusMessage = "连接成功"
         } catch { errorMessage = Self.message(for: error) }
     }
@@ -140,17 +132,20 @@ final class ProviderSettingsModel {
         let typed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !typed.isEmpty { return typed }
         if let saved = try await secrets.secret(for: Self.secretReference), !saved.isEmpty { return saved }
-        throw ModelClientError.invalidConfiguration
+        throw ModelFailure.invalidConfiguration
     }
 
     func clearTransientSecret() { apiKey = "" }
 
     static func message(for error: Error) -> String {
-        if let provider = error as? ModelClientError {
+        if let provider = error as? ModelFailure {
             switch provider {
             case .invalidConfiguration: return "Provider 配置或 API Key 无效。"
             case .invalidResponse: return "Provider 返回了无法识别的响应。"
-            case .httpStatus(let status): return "Provider 请求失败（HTTP \(status)）。"
+            case .authentication: return "API Key 无效或没有访问权限。"
+            case .rateLimited: return "Provider 请求过于频繁，请稍后再试。"
+            case .providerUnavailable: return "Provider 暂时不可用。"
+            case .network: return "网络连接失败。"
             case .providerMessage(let message): return message
             }
         }

@@ -37,7 +37,9 @@ targets:
       - package: ReadLoopCore
         product: ReflectionCore
       - package: ReadLoopCore
-        product: AgentCore
+        product: AgentRuntime
+      - package: ReadLoopCore
+        product: ReaderAgent
       - package: ReadLoopCore
         product: ModelProviders
       - package: ReadLoopCore

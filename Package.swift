@@ -9,7 +9,8 @@ let package = Package(
         .library(name: "ReaderCore", targets: ["ReaderCore"]),
         .library(name: "ReadingSessionCore", targets: ["ReadingSessionCore"]),
         .library(name: "ReflectionCore", targets: ["ReflectionCore"]),
-        .library(name: "AgentCore", targets: ["AgentCore"]),
+        .library(name: "AgentRuntime", targets: ["AgentRuntime"]),
+        .library(name: "ReaderAgent", targets: ["ReaderAgent"]),
         .library(name: "ModelProviders", targets: ["ModelProviders"]),
         .library(name: "Persistence", targets: ["Persistence"]),
         .library(name: "AppInfrastructure", targets: ["AppInfrastructure"]),
@@ -22,8 +23,9 @@ let package = Package(
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore"]),
-        .target(name: "AgentCore", dependencies: ["ReflectionCore", "ModelProviders"]),
-        .target(name: "ModelProviders"),
+        .target(name: "AgentRuntime"),
+        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ReflectionCore"]),
+        .target(name: "ModelProviders", dependencies: ["AgentRuntime"]),
         .target(
             name: "Persistence",
             dependencies: [
@@ -43,7 +45,11 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentProviderTests",
-            dependencies: ["AgentCore", "ModelProviders", "ReflectionCore", "LibraryCore"]
+            dependencies: ["AgentRuntime", "ReaderAgent", "ModelProviders", "ReflectionCore", "LibraryCore"]
+        ),
+        .testTarget(
+            name: "AgentRuntimeTests",
+            dependencies: ["AgentRuntime"]
         ),
     ]
 )
