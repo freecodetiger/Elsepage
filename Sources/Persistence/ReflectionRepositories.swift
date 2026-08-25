@@ -20,6 +20,12 @@ public final class GRDBReadingSessionRepository: ReadingSessionRepository, @unch
         }
     }
 
+    public func allSessions() async throws -> [ReadingSession] {
+        try await db.writer.read { db in
+            try SessionRecord.order(Column("startedAt").desc).fetchAll(db).map { try $0.domain() }
+        }
+    }
+
     public func insert(_ session: ReadingSession) async throws {
         try await db.writer.write { db in try SessionRecord(session).insert(db) }
     }
@@ -58,6 +64,12 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
         try await db.writer.read { db in
             try ReflectionRecord.filter(Column("bookID") == bookID.description)
                 .order(Column("createdAt").desc).fetchAll(db).map { try $0.domain }
+        }
+    }
+
+    public func allReflections() async throws -> [Reflection] {
+        try await db.writer.read { db in
+            try ReflectionRecord.order(Column("createdAt").desc).fetchAll(db).map { try $0.domain }
         }
     }
 

@@ -43,10 +43,18 @@ public struct ReadingSession: Hashable, Codable, Sendable, Identifiable {
 public protocol ReadingSessionRepository: Sendable {
     func session(id: ReadingSessionID) async throws -> ReadingSession?
     func sessions(for bookID: BookID) async throws -> [ReadingSession]
+    /// Every reading session across all books, newest first. Derived indicators
+    /// (streaks) consume this. Fakes inherit an empty default; the GRDB
+    /// implementation loads the real table.
+    func allSessions() async throws -> [ReadingSession]
     func insert(_ session: ReadingSession) async throws
     func complete(
         id: ReadingSessionID, endedAt: Date, endLocator: BookLocator,
         highlightCount: Int, noteCount: Int, agentDiscussionCount: Int
     ) async throws
     func delete(id: ReadingSessionID) async throws
+}
+
+public extension ReadingSessionRepository {
+    func allSessions() async throws -> [ReadingSession] { [] }
 }

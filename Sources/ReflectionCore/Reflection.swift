@@ -184,6 +184,10 @@ public enum ReflectionValidationError: Error, Equatable {
 public protocol ReflectionRepository: Sendable {
     func reflection(id: ReflectionID) async throws -> Reflection?
     func reflections(for bookID: BookID) async throws -> [Reflection]
+    /// Every reflection across all books, newest first. Derived indicators
+    /// (streaks) and cross-book retrieval consume this. Fakes inherit an empty
+    /// default; the GRDB implementation loads the real table.
+    func allReflections() async throws -> [Reflection]
     func insert(_ reflection: Reflection, linkedHighlightIDs: [UUID], evidence: [ReflectionEvidence]) async throws
     func linkedHighlightIDs(for reflectionID: ReflectionID) async throws -> [UUID]
     func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage]
@@ -201,4 +205,8 @@ public protocol ReflectionRepository: Sendable {
     func evidence(for reflectionID: ReflectionID) async throws -> [ReflectionEvidence]
     func appendEvidence(_ evidence: ReflectionEvidence) async throws
     func delete(id: ReflectionID) async throws
+}
+
+public extension ReflectionRepository {
+    func allReflections() async throws -> [Reflection] { [] }
 }
