@@ -10,6 +10,8 @@ settings:
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
     INFOPLIST_KEY_CFBundleDisplayName: Reader
+    INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于录下你的阅读感想并在本机转写。"
+    INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "用于把你的语音感想转成可编辑文字。"
     INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: NO
     INFOPLIST_KEY_UISupportsDocumentBrowser: NO
     INFOPLIST_KEY_UTImportedTypeDeclarations: []
@@ -39,6 +41,8 @@ targets:
         product: ReadingSessionCore
       - package: ReadLoopCore
         product: ReflectionCore
+      - package: ReadLoopCore
+        product: SpeechCore
       - package: ReadLoopCore
         product: RetrievalCore
       - package: ReadLoopCore
@@ -88,6 +92,8 @@ targets:
         product: ReadingSessionCore
       - package: ReadLoopCore
         product: ReflectionCore
+      - package: ReadLoopCore
+        product: SpeechCore
       - package: ReadLoopCore
         product: RetrievalCore
       - package: ReadLoopCore
