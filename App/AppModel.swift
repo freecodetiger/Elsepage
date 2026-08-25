@@ -26,6 +26,7 @@ final class AppModel {
             let reading = GRDBReadingRepository(database: database)
             let sessions = GRDBReadingSessionRepository(database: database)
             let reflections = GRDBReflectionRepository(database: database)
+            let journal = GRDBJournalRepository(database: database)
             let bookIndex = GRDBBookIndexRepository(database: database)
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
@@ -69,6 +70,10 @@ final class AppModel {
             thoughts = ThoughtsModel(
                 books: books,
                 reflections: reflections,
+                sessions: sessions,
+                reading: reading,
+                index: bookIndex,
+                journal: journal,
                 readerAgent: readerAgent,
                 traceRepository: routingTraces
             )

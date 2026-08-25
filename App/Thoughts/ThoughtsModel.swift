@@ -3,17 +3,23 @@ import Foundation
 import LibraryCore
 import Observation
 import ReaderAgent
+import ReaderCore
+import ReadingSessionCore
 import ReflectionCore
+import RetrievalCore
 
-/// Presentation state for the local Reflection archive and explicit ReaderAgent replies.
-/// It does not know provider HTTP, credentials, Memory, or retrieval details.
+/// Presentation state for the local Reflection archive, the structured Journal,
+/// and explicit ReaderAgent replies. It does not know provider HTTP, credentials,
+/// Memory, or retrieval details.
 @MainActor @Observable
 final class ThoughtsModel {
     private let archive: ReflectionArchiveService
+    private let journalService: JournalEntryService
     private let readerAgent: ReaderAgent
     private let traceRepository: (any RoutingTraceRepository)?
 
     private(set) var entries: [ReflectionArchiveEntry] = []
+    private(set) var journalEntries: [JournalEntry] = []
     private(set) var isLoading = false
     private(set) var replyingTo: ReflectionID?
     /// Latest stored trace per reflection, used for archive disclosure.
@@ -23,10 +29,18 @@ final class ThoughtsModel {
     init(
         books: any BookRepository,
         reflections: any ReflectionRepository,
+        sessions: any ReadingSessionRepository,
+        reading: any ReadingRepository,
+        index: any BookIndexRepository,
+        journal: any JournalRepository,
         readerAgent: ReaderAgent,
         traceRepository: (any RoutingTraceRepository)? = nil
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
+        journalService = JournalEntryService(
+            books: books, reflections: reflections,
+            sessions: sessions, index: index, reading: reading, journal: journal
+        )
         self.readerAgent = readerAgent
         self.traceRepository = traceRepository
     }
@@ -46,6 +60,7 @@ final class ThoughtsModel {
                 }
                 tracesByReflection = traces
             }
+            journalEntries = try await journalService.recentEntries()
             errorMessage = nil
         } catch is CancellationError {
             return

@@ -20,6 +20,7 @@ final class SessionReflectionModel: Identifiable {
     let book: Book
     let summary: SessionEndingSummary
     let locator: BookLocator
+    let linkedHighlightIDs: [UUID]
     private let submission: TextReflectionSubmissionService
     private let voiceSubmission: VoiceReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
@@ -55,12 +56,14 @@ final class SessionReflectionModel: Identifiable {
         book: Book,
         summary: SessionEndingSummary,
         locator: BookLocator,
+        linkedHighlightIDs: [UUID] = [],
         reflectionRepository: any ReflectionRepository,
         readerAgent: ReaderAgent
     ) {
         self.book = book
         self.summary = summary
         self.locator = locator
+        self.linkedHighlightIDs = linkedHighlightIDs
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
@@ -77,9 +80,9 @@ final class SessionReflectionModel: Identifiable {
         do {
             let reflection: Reflection
             if inputKind == .voiceTranscript {
-                reflection = try await voiceSubmission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, editedTranscript: text, audioFileName: audioFileName))
+                reflection = try await voiceSubmission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, editedTranscript: text, audioFileName: audioFileName, linkedHighlightIDs: linkedHighlightIDs))
             } else {
-                reflection = try await submission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, originalText: text))
+                reflection = try await submission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, originalText: text, linkedHighlightIDs: linkedHighlightIDs))
             }
             self.reflection = reflection
             state = .saved

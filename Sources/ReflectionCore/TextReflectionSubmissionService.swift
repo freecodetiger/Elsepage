@@ -10,6 +10,7 @@ public struct TextReflectionDraft: Hashable, Sendable {
     public let sessionID: ReadingSessionID?
     public let locator: BookLocator
     public let originalText: String
+    public let linkedHighlightIDs: [UUID]
     public let createdAt: Date
 
     public init(
@@ -18,6 +19,7 @@ public struct TextReflectionDraft: Hashable, Sendable {
         sessionID: ReadingSessionID?,
         locator: BookLocator,
         originalText: String,
+        linkedHighlightIDs: [UUID] = [],
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -25,6 +27,7 @@ public struct TextReflectionDraft: Hashable, Sendable {
         self.sessionID = sessionID
         self.locator = locator
         self.originalText = originalText
+        self.linkedHighlightIDs = linkedHighlightIDs
         self.createdAt = createdAt
     }
 
@@ -75,7 +78,7 @@ public struct TextReflectionSubmissionService: Sendable {
                 sourceID: sessionID.description
             ))
         }
-        try await repository.insert(reflection, linkedHighlightIDs: [], evidence: evidence)
+        try await repository.insert(reflection, linkedHighlightIDs: draft.linkedHighlightIDs, evidence: evidence)
         return reflection
     }
 }

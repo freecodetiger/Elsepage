@@ -25,7 +25,7 @@ let package = Package(
         .target(name: "LibraryCore"),
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
-        .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore"]),
+        .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore", "RetrievalCore"]),
         .target(name: "SpeechCore"),
         .target(name: "AgentRuntime"),
         .target(name: "ContextRouting", dependencies: ["AgentRuntime", "LibraryCore"]),
