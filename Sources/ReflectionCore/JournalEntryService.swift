@@ -15,6 +15,7 @@ public struct JournalEntryService: Sendable {
     private let index: any BookIndexRepository
     private let reading: any ReadingRepository
     private let journal: any JournalRepository
+    private let memoryApplication: MemoryApplicationService?
 
     public init(
         books: any BookRepository,
@@ -22,7 +23,8 @@ public struct JournalEntryService: Sendable {
         sessions: any ReadingSessionRepository,
         index: any BookIndexRepository,
         reading: any ReadingRepository,
-        journal: any JournalRepository
+        journal: any JournalRepository,
+        memoryRepository: (any MemoryRepository)? = nil
     ) {
         self.books = books
         self.reflections = reflections
@@ -30,6 +32,7 @@ public struct JournalEntryService: Sendable {
         self.index = index
         self.reading = reading
         self.journal = journal
+        memoryApplication = memoryRepository.map { MemoryApplicationService(repository: $0) }
     }
 
     public func recentEntries() async throws -> [JournalEntry] {
@@ -147,11 +150,19 @@ public struct JournalEntryService: Sendable {
                 ))
             }
             for memory in parsed.memoryProposals {
-                try await journal.saveMemoryChange(.init(
+                let change = JournalMemoryChange(
                     journalID: reflection.id, changeType: memory.changeType,
                     memoryID: memory.memoryID, summary: memory.summary,
                     createdAt: message.createdAt
-                ))
+                )
+                try await journal.saveMemoryChange(change)
+                if let memoryApplication {
+                    try await memoryApplication.apply(
+                        change,
+                        sourceReflectionID: reflection.id,
+                        evidence: ["refl:\(reflection.id)", "msg:\(message.id.uuidString.lowercased())"]
+                    )
+                }
             }
         }
     }

@@ -330,6 +330,27 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "polishedText", .text)
             }
         }
+
+        // WS1 Memory. Long-term derived memories, evidence-backed and
+        // cascade-deleted with their source Reflection (PRD §19). ifNotExists
+        // keeps v1–v11 installs upgradeable without deletion.
+        migrator.registerMigration("v12_memory") { db in
+            try db.create(table: "memories", ifNotExists: true) { t in
+                t.column("id", .text).primaryKey()
+                t.column("sourceReflectionID", .text).references("reflections", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("claim", .text).notNull()
+                t.column("confidence", .double).notNull()
+                t.column("status", .text).notNull()
+                t.column("userEdited", .boolean).notNull().defaults(to: false)
+                t.column("evidenceIDsJSON", .blob).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.check(sql: "kind IN ('episodic', 'semantic', 'preference', 'openQuestion', 'profileTrait')")
+                t.check(sql: "length(trim(claim)) > 0")
+                t.check(sql: "status IN ('provisional', 'active', 'superseded')")
+            }
+        }
         return migrator
     }
 
