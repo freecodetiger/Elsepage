@@ -226,6 +226,28 @@ public protocol EmbeddingProvider: Sendable {
     func embed(_ texts: [String]) async throws -> [[Float]]
 }
 
+/// A retrieval candidate sent to a cross-encoder reranker for re-scoring.
+public struct RerankCandidate: Hashable, Sendable {
+    public let id: String
+    public let text: String
+    public init(id: String, text: String) { self.id = id; self.text = text }
+}
+
+/// A passage re-scored by a reranker against the query.
+public struct RerankedPassage: Hashable, Sendable {
+    public let id: String
+    public let score: Double
+    public init(id: String, score: Double) { self.id = id; self.score = score }
+}
+
+/// Cross-encoder re-ranking: score `candidates` against `query` and return the
+/// top `limit` by descending relevance. Used as the RAG precision gate after
+/// lexical/semantic candidate fusion.
+public protocol Reranker: Sendable {
+    var modelIdentifier: String { get }
+    func rerank(query: String, candidates: [RerankCandidate], limit: Int?) async throws -> [RerankedPassage]
+}
+
 public protocol VectorIndex: Sendable {
     func upsert(_ vectors: [BookChunkID: [Float]]) async throws
     func search(vector: [Float], candidates: Set<BookChunkID>?, limit: Int) async throws -> [(BookChunkID, Double)]

@@ -94,11 +94,15 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
     /// RAG stays lexical-only. Non-nil enables the `/embeddings` path against
     /// the same `baseURL` and key as the chat model.
     public let embeddingModelID: String?
+    /// Separate cross-encoder rerank model (the RAG precision gate). Nil means
+    /// candidates are used as-fused; non-nil re-scores them via `/rerank`.
+    public let rerankerModelID: String?
 
     public init(
         id: UUID = UUID(), provider: ModelProviderKind, baseURL: URL,
         modelID: String, secretReference: SecretReference,
-        streamingEnabled: Bool = true, embeddingModelID: String? = nil
+        streamingEnabled: Bool = true, embeddingModelID: String? = nil,
+        rerankerModelID: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -107,6 +111,7 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
         self.secretReference = secretReference
         self.streamingEnabled = streamingEnabled
         self.embeddingModelID = embeddingModelID
+        self.rerankerModelID = rerankerModelID
     }
 }
 

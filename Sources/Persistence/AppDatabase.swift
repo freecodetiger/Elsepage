@@ -364,6 +364,14 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "embeddingModel", .text)
             }
         }
+
+        // RAG precision gate. A separate, user-configured cross-encoder rerank
+        // model (nil = no reranking; retrieval falls back to fused results).
+        migrator.registerMigration("v14_reranker_config") { db in
+            try db.alter(table: "providerConfigurations") { t in
+                t.add(column: "rerankerModelID", .text)
+            }
+        }
         return migrator
     }
 

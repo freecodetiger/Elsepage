@@ -72,6 +72,12 @@ struct ProviderSettingsView: View {
                 }
 
                 Section {
+                    Picker("Embedding 预设", selection: $model.embeddingPresetSelection) {
+                        Text("自定义").tag("")
+                        ForEach(ProviderSettingsModel.siliconFlowEmbeddingModels, id: \.model) { preset in
+                            Text(preset.name).tag(preset.model)
+                        }
+                    }
                     TextField("Embedding 模型", text: $model.embeddingModelID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -87,6 +93,31 @@ struct ProviderSettingsView: View {
                     if let status = model.embeddingStatusMessage {
                         Label(status, systemImage: "sparkles").foregroundStyle(.secondary)
                     }
+
+                    Divider()
+
+                    Picker("Reranker 预设", selection: $model.rerankerPresetSelection) {
+                        Text("自定义").tag("")
+                        ForEach(ProviderSettingsModel.siliconFlowRerankerModels, id: \.model) { preset in
+                            Text(preset.name).tag(preset.model)
+                        }
+                    }
+                    TextField("Reranker 模型", text: $model.rerankerModelID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .disabled(model.rerankerEnabled)
+                    if model.rerankerEnabled {
+                        Label("Reranker 已启用（\(model.rerankerModelID)）", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Button("测试 Reranker") { Task { await model.testReranker() } }
+                    Button(model.rerankerEnabled ? "停用 Reranker" : "启用 Reranker") {
+                        Task { await (model.rerankerEnabled ? model.disableReranker() : model.enableReranker()) }
+                    }
+                    if let status = model.rerankerStatusMessage {
+                        Label(status, systemImage: "sparkles").foregroundStyle(.secondary)
+                    }
+
                     if let ragManagement = model.ragManagement {
                         NavigationLink {
                             RAGManagementView(model: ragManagement)
@@ -97,9 +128,9 @@ struct ProviderSettingsView: View {
                 } header: {
                     Text("语义检索 (RAG)")
                 } footer: {
-                    Text("单独配置一个 Embedding 模型（与聊天模型无关）。启用后每本书会建立向量索引，Agent 检索可做语义匹配（需联网与 Provider 支持 /embeddings）；停用或不可用时自动退回纯词法检索。")
+                    Text("Embedding：为每本书建立向量索引（语义召回）。Reranker：对召回候选做精排门禁，低相关的不再作为证据发给 Agent。两者独立配置、需联网；未配置或失败时自动降级（词法 / 融合结果）。")
                 }
-                .disabled(model.isEmbeddingWorking)
+                .disabled(model.isEmbeddingWorking || model.isRerankerWorking)
 
                 Section {
                     Button("导出我的数据") {

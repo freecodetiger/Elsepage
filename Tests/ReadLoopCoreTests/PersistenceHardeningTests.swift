@@ -27,7 +27,7 @@ import Testing
             .map { row in String.fromDatabaseValue(row["name"])! }
     }
     #expect(columns.sorted() == [
-        "baseURL", "embeddingModelID", "id", "modelID", "provider", "secretReference", "streamingEnabled"
+        "baseURL", "embeddingModelID", "id", "modelID", "provider", "rerankerModelID", "secretReference", "streamingEnabled"
     ])
     #expect(!columns.contains("apiKey"))
 
@@ -56,7 +56,7 @@ import Testing
         "v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop",
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
-        "v11_polished_text", "v12_memory", "v13_embedding_config"
+        "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config"
     ])
 }
 

@@ -35,9 +35,29 @@ public struct LocalBookRetriever: BookRetriever {
     /// instance) so a Settings enable/disable/model-switch takes effect without
     /// rebuilding the ReaderAgent graph. Nil factory or throw → pure lexical.
     private let embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)?
-    public init(repository: any BookIndexRepository, embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)? = nil) {
-        self.repository = repository; self.embeddingProvider = embeddingProvider
+    /// Optional cross-encoder reranker (the RAG precision gate). When available,
+    /// fused candidates are re-scored against the query and low-relevance ones
+    /// are dropped; nil/failure → fused results as-is.
+    private let reranker: (@Sendable () async -> (any Reranker)?)?
+    /// How many fused candidates to hand to the reranker (cost control).
+    private let rerankCandidateCount: Int
+    /// Rerank score floor: passages below it never become evidence.
+    private let minimumRelevance: Double
+
+    public init(
+        repository: any BookIndexRepository,
+        embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)? = nil,
+        reranker: (@Sendable () async -> (any Reranker)?)? = nil,
+        rerankCandidateCount: Int = 10,
+        minimumRelevance: Double = 0
+    ) {
+        self.repository = repository
+        self.embeddingProvider = embeddingProvider
+        self.reranker = reranker
+        self.rerankCandidateCount = max(1, rerankCandidateCount)
+        self.minimumRelevance = minimumRelevance
     }
+
     public func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence] {
         let lexical = try await repository.lexicalSearch(bookID: query.bookID, query: query.text, boundary: query.boundary, limit: max(12, query.limit * 3), scope: query.scope)
         var ranked = lexical.map { ($0.0.id, $0.1) }
@@ -55,7 +75,23 @@ public struct LocalBookRetriever: BookRetriever {
             let allowed = Set(allChunks.map(\.id))
             let semantic = stored.filter { allowed.contains($0.key) }
                 .map { ($0.key, FlatVectorIndex.cosine(queryVector, $0.value)) }.sorted { $0.1 > $1.1 }
-            ranked = HybridRanker.fuse(lexical: ranked, semantic: semantic, limit: query.limit)
+            ranked = HybridRanker.fuse(lexical: ranked, semantic: semantic, limit: max(query.limit, rerankCandidateCount))
+        }
+        // Reranker gate: re-score the fused top-K against the query and drop
+        // passages below the relevance floor. Failure degrades to fused results.
+        if let reranker, let provider = await reranker(), !ranked.isEmpty {
+            let candidates = ranked.prefix(rerankCandidateCount).compactMap { id, _ -> RerankCandidate? in
+                guard let chunk = chunks[id] else { return nil }
+                return RerankCandidate(id: id.rawValue, text: chunk.text)
+            }
+            if !candidates.isEmpty,
+               let reranked = try? await provider.rerank(query: query.text, candidates: candidates, limit: query.limit) {
+                let scoreByID = Dictionary(uniqueKeysWithValues: reranked.map { ($0.id, $0.score) })
+                ranked = candidates
+                    .map { (BookChunkID(rawValue: $0.id), scoreByID[$0.id] ?? 0) }
+                    .filter { $0.1 > minimumRelevance }
+                    .sorted { $0.1 > $1.1 }
+            }
         }
         return ranked.prefix(query.limit).compactMap { id, score in
             guard let chunk = chunks[id], query.boundary?.contains(chunk) ?? true else { return nil }

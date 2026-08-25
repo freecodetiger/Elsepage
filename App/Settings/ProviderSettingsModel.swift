@@ -11,6 +11,20 @@ import ReflectionCore
 final class ProviderSettingsModel {
     private static let secretReference = SecretReference(rawValue: "primary-model-provider")
 
+    /// SiliconFlow embedding model presets (selectable; custom stays editable).
+    static let siliconFlowEmbeddingModels: [(name: String, model: String)] = [
+        ("BGE-M3（多语言，推荐）", "BAAI/bge-m3"),
+        ("BGE Large ZH（中文）", "BAAI/bge-large-zh-v1.5"),
+        ("BGE Small ZH（中文轻量）", "BAAI/bge-small-zh-v1.5"),
+        ("BGE Large EN（英文）", "BAAI/bge-large-en-v1.5"),
+        ("BCE Embedding（中英）", "netease-youdao/bce-embedding-base_v1"),
+    ]
+    /// SiliconFlow cross-encoder rerank presets (RAG precision gate).
+    static let siliconFlowRerankerModels: [(name: String, model: String)] = [
+        ("BGE Reranker V2 M3（推荐）", "BAAI/bge-reranker-v2-m3"),
+        ("Jina Reranker V2（多语言）", "jina-reranker-v2-base-multilingual"),
+    ]
+
     private let configurations: any ProviderConfigurationRepository
     private let secrets: any SecretStore
     private let traceRepository: (any RoutingTraceRepository)?
@@ -35,6 +49,11 @@ final class ProviderSettingsModel {
     private(set) var embeddingEnabled = false
     private(set) var isEmbeddingWorking = false
     private(set) var embeddingStatusMessage: String?
+    /// Separate cross-encoder rerank model (RAG precision gate).
+    var rerankerModelID = ""
+    private(set) var rerankerEnabled = false
+    private(set) var isRerankerWorking = false
+    private(set) var rerankerStatusMessage: String?
     private(set) var hasSavedKey = false
     private(set) var isWorking = false
     private(set) var statusMessage: String?
@@ -72,6 +91,8 @@ final class ProviderSettingsModel {
             streamingEnabled = configuration.streamingEnabled
             embeddingModelID = configuration.embeddingModelID ?? ""
             embeddingEnabled = configuration.embeddingModelID != nil
+            rerankerModelID = configuration.rerankerModelID ?? ""
+            rerankerEnabled = configuration.rerankerModelID != nil
             hasSavedKey = try await secrets.secret(for: configuration.secretReference) != nil
         } catch { errorMessage = Self.message(for: error) }
         await loadDiagnostics()
@@ -167,12 +188,57 @@ final class ProviderSettingsModel {
         let config = ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: nil
+            streamingEnabled: base.streamingEnabled, embeddingModelID: nil,
+            rerankerModelID: base.rerankerModelID
         )
         try? await configurations.save(config)
         embeddingModelID = ""
         embeddingEnabled = false
         embeddingStatusMessage = "语义检索已停用"
+    }
+
+    // MARK: - Reranker（RAG 精排门禁）
+
+    func testReranker() async {
+        guard let configuration = rerankerConfiguration() else { return }
+        isRerankerWorking = true
+        rerankerStatusMessage = nil
+        defer { isRerankerWorking = false }
+        do {
+            let key = try await resolvedKey()
+            try await ProviderRerankerTester().test(configuration: configuration, apiKey: key)
+            rerankerStatusMessage = "Reranker 连接成功"
+        } catch { errorMessage = Self.message(for: error) }
+    }
+
+    /// Persists the reranker model. No re-embedding needed — reranking happens
+    /// at query time on existing fused candidates.
+    func enableReranker() async {
+        guard let configuration = rerankerConfiguration() else { return }
+        isRerankerWorking = true
+        rerankerStatusMessage = nil
+        defer { isRerankerWorking = false }
+        do {
+            let key = try await resolvedKey()
+            try await ProviderRerankerTester().test(configuration: configuration, apiKey: key)
+            try await configurations.save(configuration)
+            rerankerEnabled = true
+            rerankerStatusMessage = "Reranker 已启用（检索精排门禁）"
+        } catch { errorMessage = Self.message(for: error) }
+    }
+
+    func disableReranker() async {
+        guard let base = configuration() else { return }
+        let config = ProviderConfiguration(
+            id: base.id, provider: base.provider, baseURL: base.baseURL,
+            modelID: base.modelID, secretReference: base.secretReference,
+            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
+            rerankerModelID: nil
+        )
+        try? await configurations.save(config)
+        rerankerModelID = ""
+        rerankerEnabled = false
+        rerankerStatusMessage = "Reranker 已停用"
     }
 
     func deleteConfiguration() async {
@@ -196,6 +262,7 @@ final class ProviderSettingsModel {
     private func configuration() -> ProviderConfiguration? {
         let model = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         let embedding = embeddingModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reranker = rerankerModelID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
               ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.host != nil,
@@ -209,8 +276,20 @@ final class ProviderSettingsModel {
             modelID: model,
             secretReference: Self.secretReference,
             streamingEnabled: streamingEnabled,
-            embeddingModelID: embedding.isEmpty ? nil : embedding
+            embeddingModelID: embedding.isEmpty ? nil : embedding,
+            rerankerModelID: reranker.isEmpty ? nil : reranker
         )
+    }
+
+    /// Picker selection: the matching preset model, or "" for custom/free text.
+    var embeddingPresetSelection: String {
+        get { Self.siliconFlowEmbeddingModels.first(where: { $0.model == embeddingModelID })?.model ?? "" }
+        set { embeddingModelID = newValue }
+    }
+
+    var rerankerPresetSelection: String {
+        get { Self.siliconFlowRerankerModels.first(where: { $0.model == rerankerModelID })?.model ?? "" }
+        set { rerankerModelID = newValue }
     }
 
     private func embeddingConfiguration() -> ProviderConfiguration? {
@@ -223,7 +302,23 @@ final class ProviderSettingsModel {
         return ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: embedding
+            streamingEnabled: base.streamingEnabled, embeddingModelID: embedding,
+            rerankerModelID: base.rerankerModelID
+        )
+    }
+
+    private func rerankerConfiguration() -> ProviderConfiguration? {
+        guard let base = configuration() else { return nil }
+        let reranker = rerankerModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reranker.isEmpty else {
+            errorMessage = "请填写 Reranker 模型名称。"
+            return nil
+        }
+        return ProviderConfiguration(
+            id: base.id, provider: base.provider, baseURL: base.baseURL,
+            modelID: base.modelID, secretReference: base.secretReference,
+            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
+            rerankerModelID: reranker
         )
     }
 

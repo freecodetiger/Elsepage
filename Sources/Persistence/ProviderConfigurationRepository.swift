@@ -32,6 +32,7 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
     let id, provider, baseURL, modelID, secretReference: String
     let streamingEnabled: Bool
     let embeddingModelID: String?
+    let rerankerModelID: String?
 
     init(_ configuration: ProviderConfiguration) {
         id = configuration.id.uuidString.lowercased()
@@ -41,6 +42,7 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
         secretReference = configuration.secretReference.rawValue
         streamingEnabled = configuration.streamingEnabled
         embeddingModelID = configuration.embeddingModelID
+        rerankerModelID = configuration.rerankerModelID
     }
 
     func domain() throws -> ProviderConfiguration {
@@ -58,7 +60,8 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
             modelID: modelID,
             secretReference: .init(rawValue: secretReference),
             streamingEnabled: streamingEnabled,
-            embeddingModelID: embeddingModelID
+            embeddingModelID: embeddingModelID,
+            rerankerModelID: rerankerModelID
         )
     }
 }

@@ -47,11 +47,19 @@ final class AppModel {
                       let key = try? await secrets.secret(for: configuration.secretReference), !key.isEmpty else { return nil }
                 return try? OpenAICompatibleEmbeddingProvider(configuration: configuration, apiKey: key)
             }
+            // Optional cross-encoder rerank gate (RAG precision). Resolved at
+            // query time so Settings enable/disable takes effect immediately.
+            let makeReranker: @Sendable () async -> (any Reranker)? = { [providerConfigurations, secrets] in
+                guard let configuration = try? await providerConfigurations.currentConfiguration(),
+                      let model = configuration.rerankerModelID, !model.isEmpty,
+                      let key = try? await secrets.secret(for: configuration.secretReference), !key.isEmpty else { return nil }
+                return try? SiliconFlowReranker(configuration: configuration, apiKey: key)
+            }
             let readerAgent = ReaderAgent(
                 reflections: reflections,
                 models: modelClientFactory,
                 contextBuilder: ReaderAgentContextBuilder(
-                    retriever: LocalBookRetriever(repository: bookIndex, embeddingProvider: makeEmbeddingProvider),
+                    retriever: LocalBookRetriever(repository: bookIndex, embeddingProvider: makeEmbeddingProvider, reranker: makeReranker),
                     repository: bookIndex
                 ),
                 sessionContextBuilder: SessionContextBuilder(
