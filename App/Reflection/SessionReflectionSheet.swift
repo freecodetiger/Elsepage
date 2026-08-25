@@ -215,13 +215,16 @@ struct SessionReflectionSheet: View {
                     Text(message.author == .user ? "你继续说" : "回应")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(message.content).fixedSize(horizontal: false, vertical: true)
+                    if message.author == .agent {
+                        AgentMarkdownText(content: message.content)
+                    } else {
+                        Text(message.content).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             if !model.streamingResponse.isEmpty {
-                Text(model.streamingResponse)
+                AgentMarkdownText(content: model.streamingResponse)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             } else if model.isResponding {
                 ProgressView("正在回应…")
             }

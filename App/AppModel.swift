@@ -6,6 +6,7 @@ import Persistence
 import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
+import RetrievalCore
 
 @MainActor @Observable
 final class AppModel {
@@ -25,6 +26,7 @@ final class AppModel {
             let reading = GRDBReadingRepository(database: database)
             let sessions = GRDBReadingSessionRepository(database: database)
             let reflections = GRDBReflectionRepository(database: database)
+            let bookIndex = GRDBBookIndexRepository(database: database)
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
             let readerAgent = ReaderAgent(
@@ -32,10 +34,15 @@ final class AppModel {
                 models: ConfiguredModelClientFactory(
                     configurations: providerConfigurations,
                     secrets: secrets
+                ),
+                contextBuilder: ReaderAgentContextBuilder(
+                    retriever: LocalBookRetriever(repository: bookIndex),
+                    repository: bookIndex
                 )
             )
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
+            let indexCoordinator = BookIndexCoordinator(repository: bookIndex, readium: readium, files: files)
             library = LibraryModel(
                 books: books,
                 reading: reading,
@@ -44,7 +51,8 @@ final class AppModel {
                 readerAgent: readerAgent,
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),
-                readium: readium
+                readium: readium,
+                indexCoordinator: indexCoordinator
             )
             providerSettings = ProviderSettingsModel(
                 configurations: providerConfigurations,
@@ -57,6 +65,7 @@ final class AppModel {
             )
             await providerSettings?.load()
             await library?.reload()
+            await library?.resumeBookIndexing()
         } catch {
             startupError = error.localizedDescription
         }

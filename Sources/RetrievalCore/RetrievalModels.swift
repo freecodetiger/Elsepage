@@ -1,0 +1,190 @@
+import Foundation
+import LibraryCore
+import ReaderCore
+
+public struct BookTextBlockID: Hashable, Codable, Sendable, RawRepresentable {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+}
+
+public struct BookChunkID: Hashable, Codable, Sendable, RawRepresentable {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+}
+
+public struct BookTextBlock: Hashable, Sendable {
+    public let id: BookTextBlockID
+    public let bookID: BookID
+    public let resourceHref: String
+    public let chapterID: String?
+    public let chapterTitle: String?
+    public let sectionID: String?
+    public let sectionTitle: String?
+    public let resourceOrdinal: Int
+    public let ordinal: Int
+    public let text: String
+    public let startLocator: BookLocator
+    public let endLocator: BookLocator
+
+    public init(id: BookTextBlockID, bookID: BookID, resourceHref: String,
+                chapterID: String? = nil, chapterTitle: String? = nil,
+                sectionID: String? = nil, sectionTitle: String? = nil,
+                resourceOrdinal: Int, ordinal: Int, text: String,
+                startLocator: BookLocator, endLocator: BookLocator) {
+        self.id = id; self.bookID = bookID; self.resourceHref = resourceHref
+        self.chapterID = chapterID; self.chapterTitle = chapterTitle
+        self.sectionID = sectionID; self.sectionTitle = sectionTitle
+        self.resourceOrdinal = resourceOrdinal; self.ordinal = ordinal; self.text = text
+        self.startLocator = startLocator; self.endLocator = endLocator
+    }
+}
+
+public struct BookChunk: Hashable, Sendable, Identifiable {
+    public let id: BookChunkID
+    public let bookID: BookID
+    public let resourceHref: String
+    public let chapterID: String?
+    public let chapterTitle: String?
+    public let sectionID: String?
+    public let sectionTitle: String?
+    public let resourceOrdinal: Int
+    public let ordinal: Int
+    public let text: String
+    public let normalizedText: String
+    public let startLocator: BookLocator
+    public let endLocator: BookLocator
+    public let sourceBlockIDs: [BookTextBlockID]
+
+    public init(id: BookChunkID, bookID: BookID, resourceHref: String,
+                chapterID: String? = nil, chapterTitle: String? = nil,
+                sectionID: String? = nil, sectionTitle: String? = nil,
+                resourceOrdinal: Int, ordinal: Int, text: String, normalizedText: String,
+                startLocator: BookLocator, endLocator: BookLocator,
+                sourceBlockIDs: [BookTextBlockID]) {
+        self.id = id; self.bookID = bookID; self.resourceHref = resourceHref
+        self.chapterID = chapterID; self.chapterTitle = chapterTitle
+        self.sectionID = sectionID; self.sectionTitle = sectionTitle
+        self.resourceOrdinal = resourceOrdinal; self.ordinal = ordinal; self.text = text
+        self.normalizedText = normalizedText; self.startLocator = startLocator
+        self.endLocator = endLocator; self.sourceBlockIDs = sourceBlockIDs
+    }
+}
+
+public enum BookIndexState: String, Codable, Sendable {
+    case pending, extracting, lexicalReady, embedding, ready, failed
+}
+
+public struct BookIndexJob: Hashable, Sendable {
+    public let bookID: BookID
+    public let indexVersion: Int
+    public var state: BookIndexState
+    public var nextResourceOrdinal: Int
+    public var lastError: String?
+    public var updatedAt: Date
+
+    public init(bookID: BookID, indexVersion: Int, state: BookIndexState = .pending,
+                nextResourceOrdinal: Int = 0, lastError: String? = nil, updatedAt: Date = .init()) {
+        self.bookID = bookID; self.indexVersion = indexVersion; self.state = state
+        self.nextResourceOrdinal = nextResourceOrdinal; self.lastError = lastError; self.updatedAt = updatedAt
+    }
+}
+
+public struct ReadingBoundary: Hashable, Sendable {
+    public let resourceOrdinal: Int
+    public let progression: Double?
+    public init(resourceOrdinal: Int, progression: Double? = nil) {
+        self.resourceOrdinal = resourceOrdinal; self.progression = progression
+    }
+
+    public func contains(_ chunk: BookChunk) -> Bool {
+        if chunk.resourceOrdinal != resourceOrdinal { return chunk.resourceOrdinal < resourceOrdinal }
+        guard let limit = progression else { return true }
+        return (chunk.startLocator.progression ?? 0) <= limit
+    }
+}
+
+public struct BookEvidence: Hashable, Sendable, Identifiable {
+    public let id: BookChunkID
+    public let bookID: BookID
+    public let chapterTitle: String?
+    public let sectionTitle: String?
+    public let excerpt: String
+    public let locator: BookLocator
+    public let score: Double
+}
+
+public struct RetrievalQuery: Hashable, Sendable {
+    public let bookID: BookID
+    public let text: String
+    public let boundary: ReadingBoundary?
+    public let limit: Int
+    public init(bookID: BookID, text: String, boundary: ReadingBoundary?, limit: Int = 4) {
+        self.bookID = bookID; self.text = text; self.boundary = boundary; self.limit = limit
+    }
+}
+
+public protocol BookRetriever: Sendable {
+    func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence]
+}
+
+public protocol BookIndexRepository: Sendable {
+    func job(for bookID: BookID, version: Int) async throws -> BookIndexJob?
+    func save(job: BookIndexJob) async throws
+    func replace(chunks: [BookChunk], for bookID: BookID, version: Int) async throws
+    func replace(chunks: [BookChunk], inResource href: String, for bookID: BookID, version: Int) async throws
+    func replace(blocks: [BookTextBlock], inResource href: String, for bookID: BookID, version: Int) async throws
+    func chunks(for bookID: BookID, version: Int) async throws -> [BookChunk]
+    func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int) async throws -> [(BookChunk, Double)]
+    func readingBoundary(bookID: BookID, locator: BookLocator) async throws -> ReadingBoundary?
+    func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws
+    func embeddings(bookID: BookID, model: String) async throws -> [BookChunkID: [Float]]
+}
+
+public protocol BookContentExtractor: Sendable {
+    func blocks(for bookID: BookID, startingAtResource ordinal: Int) async throws -> AsyncThrowingStream<BookTextBlock, Error>
+}
+
+public struct ReaderAgentBookContext: Hashable, Sendable {
+    public let evidence: [BookEvidence]
+    public init(evidence: [BookEvidence]) { self.evidence = evidence }
+}
+
+public struct ReaderAgentContextBuilder: Sendable {
+    private let retriever: any BookRetriever
+    private let repository: any BookIndexRepository
+    private let characterBudget: Int
+    public init(retriever: any BookRetriever, repository: any BookIndexRepository, characterBudget: Int = 4_000) {
+        self.retriever = retriever; self.repository = repository; self.characterBudget = max(0, characterBudget)
+    }
+    public func build(bookID: BookID, reflection: String, currentLocator: BookLocator?) async throws -> ReaderAgentBookContext {
+        let boundary: ReadingBoundary?
+        if let currentLocator {
+            boundary = try await repository.readingBoundary(bookID: bookID, locator: currentLocator)
+        } else {
+            boundary = nil
+        }
+        // No known reading boundary means no broad book retrieval. This is the
+        // conservative anti-spoiler default, not an invitation to search all.
+        guard boundary != nil else { return ReaderAgentBookContext(evidence: []) }
+        let retrieved = try await retriever.retrieve(.init(bookID: bookID, text: reflection, boundary: boundary))
+        var remaining = characterBudget
+        let evidence = retrieved.compactMap { item -> BookEvidence? in
+            guard remaining > 0 else { return nil }
+            let excerpt = String(item.excerpt.prefix(remaining)); remaining -= excerpt.count
+            return BookEvidence(id: item.id, bookID: item.bookID, chapterTitle: item.chapterTitle,
+                sectionTitle: item.sectionTitle, excerpt: excerpt, locator: item.locator, score: item.score)
+        }
+        return ReaderAgentBookContext(evidence: evidence)
+    }
+}
+
+public protocol EmbeddingProvider: Sendable {
+    var modelIdentifier: String { get }
+    var dimensions: Int { get }
+    func embed(_ texts: [String]) async throws -> [[Float]]
+}
+
+public protocol VectorIndex: Sendable {
+    func upsert(_ vectors: [BookChunkID: [Float]]) async throws
+    func search(vector: [Float], candidates: Set<BookChunkID>?, limit: Int) async throws -> [(BookChunkID, Double)]
+}

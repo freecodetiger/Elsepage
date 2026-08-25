@@ -40,6 +40,8 @@ targets:
       - package: ReadLoopCore
         product: ReflectionCore
       - package: ReadLoopCore
+        product: RetrievalCore
+      - package: ReadLoopCore
         product: AgentRuntime
       - package: ReadLoopCore
         product: ReaderAgent
@@ -87,6 +89,8 @@ targets:
       - package: ReadLoopCore
         product: ReflectionCore
       - package: ReadLoopCore
+        product: RetrievalCore
+      - package: ReadLoopCore
         product: AgentRuntime
       - package: ReadLoopCore
         product: ReaderAgent
@@ -112,9 +116,13 @@ targets:
       - package: ReadLoopCore
         product: LibraryCore
       - package: ReadLoopCore
+        product: ReaderCore
+      - package: ReadLoopCore
         product: AppInfrastructure
       - package: ReadLoopCore
         product: Persistence
+      - package: ReadLoopCore
+        product: RetrievalCore
       - package: Readium
         product: ReadiumShared
       - package: Readium

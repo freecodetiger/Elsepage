@@ -922,6 +922,24 @@ optional embedding
 VectorIndex
 ```
 
+### 14.1.1 当前落地基线（2026-08）
+
+- `RetrievalCore` 是 Readium/GRDB 无关的领域模块；`AgentRuntime` 不依赖它。
+- `ReadiumBookContentExtractor` 是唯一的 Readium 适配边界，将语义内容元素转换为
+  `BookTextBlock`，完整 Readium Locator JSON 仍是定位 Source of Truth。
+- migration `v7_local_book_retrieval` 保存 chapter、section、text block、chunk、FTS、
+  embedding metadata 和持久化 index job；这些表都是可删除重建的派生数据。
+- EPUB 导入完成后才 enqueue 索引；阅读不等待索引。索引按 spine resource 事务提交，
+  job cursor 支持崩溃后幂等恢复。
+- FTS5 使用 trigram 兼顾中文子串和英文短语；不足三个字符的查询只在当前书、已读边界内
+  回退到 SQLite `instr`。没有 embedding 时状态为 `lexicalReady`，不是失败。
+- `EmbeddingProvider` 与 `VectorIndex` 已抽象；V1 flat cosine 与 RRF hybrid ranking 已实现，
+  但产品当前没有强制启用任何云端 embedding provider。
+- `ReaderAgentContextBuilder` 默认要求可解析的当前 Locator，并在 RetrievalCore 和 SQL
+  两层限制 `.readSoFar`。无法确定边界时返回空 evidence，绝不搜索整本书。
+- ReaderAgent 只接收带 Locator 的 `BookEvidence`，不执行 SQL、FTS 或向量搜索；书中内容
+  以“不可信证据而非指令”注入，并受 4,000 字符上下文预算限制。
+
 ---
 
 ## 14.2 Chunk

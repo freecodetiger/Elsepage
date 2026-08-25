@@ -19,6 +19,7 @@ final class LibraryModel {
     private let importer: BookImporter
     private let metadataReader: ReadiumMetadataReader
     private let readium: ReadiumServices
+    private let indexCoordinator: BookIndexCoordinator
     let readerAgent: ReaderAgent
 
     private(set) var books: [Book] = []
@@ -39,7 +40,8 @@ final class LibraryModel {
         readerAgent: ReaderAgent,
         files: BookFileStore,
         metadataReader: ReadiumMetadataReader,
-        readium: ReadiumServices
+        readium: ReadiumServices,
+        indexCoordinator: BookIndexCoordinator
     ) {
         booksRepository = books; readingRepository = reading; self.files = files
         reflectionRepository = reflections
@@ -49,6 +51,7 @@ final class LibraryModel {
         importer = BookImporter(repository: books, files: files)
         self.metadataReader = metadataReader
         self.readium = readium
+        self.indexCoordinator = indexCoordinator
     }
 
     func reload() async {
@@ -72,11 +75,15 @@ final class LibraryModel {
             defer { try? FileManager.default.removeItem(at: stagedURL.deletingLastPathComponent()) }
             let metadata = try await metadataReader.metadata(at: stagedURL)
             switch try await importer.importEPUB(at: stagedURL, metadata: metadata) {
-            case .imported: await reload()
+            case .imported(let book):
+                await reload()
+                indexCoordinator.enqueue(book)
             case .duplicate(let book): duplicateTitle = book.title
             }
         } catch { errorMessage = error.localizedDescription }
     }
+
+    func resumeBookIndexing() async { await indexCoordinator.resume(books) }
 
     func readerModel(for book: Book, locator: BookLocator? = nil) -> ReaderModel {
         ReaderModel(

@@ -106,6 +106,7 @@ private struct OpenAIRequest: Encodable {
     let temperature: Double?
     let maxTokens: Int?
     let stream: Bool
+    let thinking: Thinking?
 
     init(configuration: ProviderConfiguration, request: ModelRequest) {
         model = configuration.modelID
@@ -113,9 +114,16 @@ private struct OpenAIRequest: Encodable {
         temperature = request.temperature
         maxTokens = request.maxOutputTokens
         stream = false
+        thinking = configuration.baseURL.host?.lowercased() == "api.deepseek.com"
+            ? Thinking(type: "disabled")
+            : nil
     }
 
-    enum CodingKeys: String, CodingKey { case model, messages, temperature, maxTokens = "max_tokens", stream }
+    struct Thinking: Encodable { let type: String }
+
+    enum CodingKeys: String, CodingKey {
+        case model, messages, temperature, maxTokens = "max_tokens", stream, thinking
+    }
 }
 
 private struct OpenAIMessage: Codable {

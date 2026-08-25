@@ -165,6 +165,74 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "relevance >= 0 AND relevance <= 1")
             }
         }
+        migrator.registerMigration("v7_local_book_retrieval") { db in
+            try db.create(table: "bookIndexJobs") { t in
+                t.column("bookID", .text).notNull().references("books", onDelete: .cascade)
+                t.column("indexVersion", .integer).notNull()
+                t.column("state", .text).notNull()
+                t.column("nextResourceOrdinal", .integer).notNull().defaults(to: 0)
+                t.column("lastError", .text)
+                t.column("updatedAt", .datetime).notNull()
+                t.primaryKey(["bookID", "indexVersion"])
+                t.check(sql: "state IN ('pending','extracting','lexicalReady','embedding','ready','failed')")
+            }
+            try db.create(table: "bookChunks") { t in
+                t.column("id", .text).primaryKey()
+                t.column("bookID", .text).notNull().indexed().references("books", onDelete: .cascade)
+                t.column("indexVersion", .integer).notNull()
+                t.column("resourceHref", .text).notNull()
+                t.column("chapterID", .text); t.column("chapterTitle", .text)
+                t.column("sectionID", .text); t.column("sectionTitle", .text)
+                t.column("resourceOrdinal", .integer).notNull()
+                t.column("ordinal", .integer).notNull()
+                t.column("text", .text).notNull()
+                t.column("normalizedText", .text).notNull()
+                t.column("startLocatorJSON", .blob).notNull(); t.column("endLocatorJSON", .blob).notNull()
+                t.column("startHref", .text).notNull(); t.column("endHref", .text).notNull()
+                t.column("startProgression", .double); t.column("endProgression", .double)
+                t.column("startTotalProgression", .double); t.column("endTotalProgression", .double)
+                t.column("sourceBlockIDsJSON", .blob).notNull()
+                t.uniqueKey(["bookID", "indexVersion", "resourceOrdinal", "ordinal"])
+            }
+            try db.create(table: "bookChapters") { t in
+                t.column("bookID", .text).notNull().references("books", onDelete: .cascade)
+                t.column("indexVersion", .integer).notNull(); t.column("id", .text).notNull()
+                t.column("title", .text); t.column("resourceHref", .text).notNull(); t.column("ordinal", .integer).notNull()
+                t.primaryKey(["bookID", "indexVersion", "id"])
+            }
+            try db.create(table: "bookSections") { t in
+                t.column("bookID", .text).notNull().references("books", onDelete: .cascade)
+                t.column("indexVersion", .integer).notNull(); t.column("id", .text).notNull()
+                t.column("chapterID", .text); t.column("title", .text); t.column("ordinal", .integer).notNull()
+                t.primaryKey(["bookID", "indexVersion", "id"])
+            }
+            try db.create(table: "bookTextBlocks") { t in
+                t.column("id", .text).primaryKey(); t.column("bookID", .text).notNull().indexed().references("books", onDelete: .cascade)
+                t.column("indexVersion", .integer).notNull(); t.column("resourceHref", .text).notNull()
+                t.column("chapterID", .text); t.column("sectionID", .text)
+                t.column("resourceOrdinal", .integer).notNull(); t.column("ordinal", .integer).notNull(); t.column("text", .text).notNull()
+                t.column("startLocatorJSON", .blob).notNull(); t.column("endLocatorJSON", .blob).notNull()
+                t.column("startHref", .text).notNull(); t.column("endHref", .text).notNull()
+                t.column("startProgression", .double); t.column("endProgression", .double)
+                t.uniqueKey(["bookID", "indexVersion", "resourceOrdinal", "ordinal"])
+            }
+            // Trigram supports CJK substring search while remaining useful for exact
+            // English phrases. Query construction falls back for very short terms.
+            try db.execute(sql: "CREATE VIRTUAL TABLE bookChunksFTS USING fts5(chunkID UNINDEXED, bookID UNINDEXED, normalizedText, tokenize='trigram')")
+            try db.execute(sql: """
+                CREATE TRIGGER bookChunks_after_delete AFTER DELETE ON bookChunks BEGIN
+                    DELETE FROM bookChunksFTS WHERE chunkID = old.id;
+                END
+                """)
+            try db.create(table: "bookChunkEmbeddings") { t in
+                t.column("chunkID", .text).notNull().references("bookChunks", onDelete: .cascade)
+                t.column("model", .text).notNull()
+                t.column("dimensions", .integer).notNull()
+                t.column("vector", .blob).notNull()
+                t.primaryKey(["chunkID", "model"])
+                t.check(sql: "dimensions > 0")
+            }
+        }
         return migrator
     }
 

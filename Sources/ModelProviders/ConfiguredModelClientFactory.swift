@@ -25,18 +25,28 @@ public struct ConfiguredModelClientFactory: ModelClientFactory {
 }
 
 public struct ProviderConnectionTester: Sendable {
-    public init() {}
+    private let transport: any HTTPDataTransport
+
+    public init(transport: any HTTPDataTransport = URLSessionDataTransport()) {
+        self.transport = transport
+    }
 
     public func test(configuration: ProviderConfiguration, apiKey: String) async throws {
-        let client = try OpenAICompatibleModelClient(configuration: configuration, apiKey: apiKey)
-        var completed = false
+        let client = try OpenAICompatibleModelClient(
+            configuration: configuration,
+            apiKey: apiKey,
+            transport: transport
+        )
+        var visibleText: String?
         for try await event in client.stream(request: ModelRequest(
             messages: [ModelMessage(role: .user, content: "Reply with OK.")],
             temperature: 0,
             maxOutputTokens: 8
         )) {
-            if case .completed = event { completed = true }
+            if case .completed(let response) = event {
+                visibleText = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
         }
-        guard completed else { throw ModelFailure.invalidResponse }
+        guard let visibleText, !visibleText.isEmpty else { throw ModelFailure.invalidResponse }
     }
 }

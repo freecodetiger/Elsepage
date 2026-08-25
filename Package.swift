@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "ReaderCore", targets: ["ReaderCore"]),
         .library(name: "ReadingSessionCore", targets: ["ReadingSessionCore"]),
         .library(name: "ReflectionCore", targets: ["ReflectionCore"]),
+        .library(name: "RetrievalCore", targets: ["RetrievalCore"]),
         .library(name: "AgentRuntime", targets: ["AgentRuntime"]),
         .library(name: "ReaderAgent", targets: ["ReaderAgent"]),
         .library(name: "ModelProviders", targets: ["ModelProviders"]),
@@ -24,12 +25,13 @@ let package = Package(
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore"]),
         .target(name: "AgentRuntime"),
-        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ReflectionCore"]),
+        .target(name: "RetrievalCore", dependencies: ["LibraryCore", "ReaderCore"]),
+        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ReflectionCore", "RetrievalCore"]),
         .target(name: "ModelProviders", dependencies: ["AgentRuntime"]),
         .target(
             name: "Persistence",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "ModelProviders",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "RetrievalCore", "ModelProviders",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
@@ -37,7 +39,7 @@ let package = Package(
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "RetrievalCore",
                 "AgentRuntime", "ReaderAgent", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],

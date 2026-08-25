@@ -76,6 +76,44 @@ import Testing
     #expect(captured.body.contains("\"stream\":false"))
 }
 
+@Test func deepSeekCompatibleRequestDisablesThinkingForConciseReaderReplies() async throws {
+    let transport = RecordedTransport(data: Data("""
+    {"choices":[{"message":{"content":"A visible reply."},"finish_reason":"stop"}]}
+    """.utf8))
+    let configuration = ProviderConfiguration(
+        provider: .openAICompatible, baseURL: ModelProviderPreset.deepSeek.baseURL!,
+        modelID: "deepseek-chat", secretReference: SecretReference(rawValue: "provider-key")
+    )
+    let client = try OpenAICompatibleModelClient(configuration: configuration, apiKey: "secret-for-test", transport: transport)
+
+    for try await _ in client.stream(request: ModelRequest(messages: [
+        ModelMessage(role: .user, content: "Reply briefly.")
+    ])) {}
+
+    let captured = await transport.captured()
+    #expect(captured.body.contains("\"thinking\":{\"type\":\"disabled\"}"))
+}
+
+@Test func providerConnectionTestRejectsCompletedResponseWithoutVisibleText() async throws {
+    let transport = RecordedTransport(data: Data("""
+    {"choices":[{"message":{"content":"   "},"finish_reason":"length"}]}
+    """.utf8))
+    let configuration = ProviderConfiguration(
+        provider: .openAICompatible, baseURL: URL(string: "https://provider.example/v1")!,
+        modelID: "model-a", secretReference: SecretReference(rawValue: "provider-key")
+    )
+
+    do {
+        try await ProviderConnectionTester(transport: transport).test(
+            configuration: configuration,
+            apiKey: "secret-for-test"
+        )
+        Issue.record("Expected an empty provider response to fail connection testing")
+    } catch let failure as ModelFailure {
+        #expect(failure == .invalidResponse)
+    }
+}
+
 @Test func compatibleClientTranslatesProviderErrors() async throws {
     let transport = RecordedTransport(
         statusCode: 401,
@@ -159,9 +197,23 @@ import Testing
 
     #expect(input.metadata.agentKind == "reader.reflection")
     #expect(input.metadata.promptVersion == "reader-test-v2")
-    #expect(input.metadata.contextRecipeVersion == "reflection-history-lexical-v1")
+    #expect(input.metadata.contextRecipeVersion == "reflection-book-hybrid-read-so-far-v1")
     #expect(input.messages.last?.role == .user)
     #expect(input.messages.last?.content == reflection.originalText)
+}
+
+@Test func defaultReaderAgentPromptUsesElsepageReaderCompanionPolicyV3() {
+    let reflection = Reflection(bookID: .init(), originalText: "我好像开始觉得自由并不是越多越好。", inputKind: .text)
+    let input = ReaderAgentPolicy().input(for: reflection)
+    let systemPrompt = input.messages.first?.content ?? ""
+
+    #expect(input.metadata.promptVersion == "reader-reflection-v3")
+    #expect(systemPrompt.contains("# Elsepage Reader Agent"))
+    #expect(systemPrompt.contains("回应优先，提问稀缺"))
+    #expect(systemPrompt.contains("70%–80% 的回应：不提问"))
+    #expect(systemPrompt.contains("Reflection Mode 与 Conversation Mode"))
+    #expect(systemPrompt.contains("默认禁止再次提出新的问题"))
+    #expect(systemPrompt.contains("理解 → 回应 → 留白"))
 }
 
 @Test func failedAgentReplyDoesNotMutatePersistedReflectionOrAppendMessage() async throws {

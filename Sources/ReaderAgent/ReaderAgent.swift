@@ -1,6 +1,7 @@
 import AgentRuntime
 import Foundation
 import ReflectionCore
+import RetrievalCore
 
 public enum ReaderAgentEvent: Equatable, Sendable {
     case started
@@ -26,17 +27,20 @@ public struct ReaderAgent: Sendable {
     private let models: any ModelClientFactory
     private let policy: ReaderAgentPolicy
     private let budget: ExecutionBudget
+    private let contextBuilder: ReaderAgentContextBuilder?
 
     public init(
         reflections: any ReflectionRepository,
         models: any ModelClientFactory,
         policy: ReaderAgentPolicy = .init(),
-        budget: ExecutionBudget = .readerReply
+        budget: ExecutionBudget = .readerReply,
+        contextBuilder: ReaderAgentContextBuilder? = nil
     ) {
         self.reflections = reflections
         self.models = models
         self.policy = policy
         self.budget = budget
+        self.contextBuilder = contextBuilder
     }
 
     public func respond(to reflectionID: ReflectionID) -> AsyncStream<ReaderAgentEvent> {
@@ -113,12 +117,23 @@ public struct ReaderAgent: Sendable {
                         prior = nil
                     }
                     let evidence = (try? await reflections.evidence(for: reflection.id)) ?? []
+                    let bookContext: ReaderAgentBookContext?
+                    if let contextBuilder {
+                        bookContext = try? await contextBuilder.build(
+                            bookID: reflection.bookID,
+                            reflection: followUp?.text ?? reflection.originalText,
+                            currentLocator: evidence.compactMap(\.locator).first
+                        )
+                    } else {
+                        bookContext = nil
+                    }
                     for await event in AgentExecutor(client: client, budget: budget).run(
                         input: policy.input(
                             for: reflection,
                             messages: messages,
                             currentEvidence: evidence,
-                            previousReflection: prior
+                            previousReflection: prior,
+                            bookEvidence: bookContext?.evidence ?? []
                         )
                     ) {
                         switch event {
