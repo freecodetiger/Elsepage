@@ -10,8 +10,39 @@ public enum ReaderAgentEvent: Equatable, Sendable {
     case contextPrepared(ReflectionConnection?)
     case textDelta(String)
     case completed(ReflectionMessage)
+    case contextDisclosed(ContextDisclosure)
     case cancelled
     case failed(ReaderAgentFailure)
+}
+
+/// User-visible summary of the context the reply actually drew on. Delivered
+/// after a successful reply so the conversation can surface what was used.
+public struct ContextDisclosure: Equatable, Sendable {
+    public let includedNearbyPassage: Bool
+    public let retrievedBookEvidenceCount: Int
+    public let connectedReflectionID: ReflectionID?
+    public let usedFallback: Bool
+    public let fallbackReason: RoutingFallbackReason?
+    public let routingDuration: Duration
+    public let retrievalDuration: Duration
+
+    public init(
+        includedNearbyPassage: Bool,
+        retrievedBookEvidenceCount: Int,
+        connectedReflectionID: ReflectionID?,
+        usedFallback: Bool,
+        fallbackReason: RoutingFallbackReason?,
+        routingDuration: Duration,
+        retrievalDuration: Duration
+    ) {
+        self.includedNearbyPassage = includedNearbyPassage
+        self.retrievedBookEvidenceCount = retrievedBookEvidenceCount
+        self.connectedReflectionID = connectedReflectionID
+        self.usedFallback = usedFallback
+        self.fallbackReason = fallbackReason
+        self.routingDuration = routingDuration
+        self.retrievalDuration = retrievalDuration
+    }
 }
 
 public enum ReaderAgentFailure: Error, Equatable, Sendable {
@@ -32,6 +63,7 @@ public struct ReaderAgent: Sendable {
     private let contextBuilder: ReaderAgentContextBuilder?
     private let contextRouter: any ReaderContextRouting
     private let contextValidator: ContextPlanValidator
+    private let traceRepository: (any RoutingTraceRepository)?
 
     public init(
         reflections: any ReflectionRepository,
@@ -40,7 +72,8 @@ public struct ReaderAgent: Sendable {
         budget: ExecutionBudget = .readerReply,
         contextBuilder: ReaderAgentContextBuilder? = nil,
         contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
-        contextValidator: ContextPlanValidator = .init()
+        contextValidator: ContextPlanValidator = .init(),
+        traceRepository: (any RoutingTraceRepository)? = nil
     ) {
         self.reflections = reflections
         self.models = models
@@ -49,6 +82,7 @@ public struct ReaderAgent: Sendable {
         self.contextBuilder = contextBuilder
         self.contextRouter = contextRouter
         self.contextValidator = contextValidator
+        self.traceRepository = traceRepository
     }
 
     public func respond(to reflectionID: ReflectionID) -> AsyncStream<ReaderAgentEvent> {
@@ -140,7 +174,10 @@ public struct ReaderAgent: Sendable {
                         ),
                         previousAgentAskedQuestion: Self.previousAgentAskedQuestion(in: messages)
                     )
+                    let clock = ContinuousClock()
+                    let routingStart = clock.now
                     let routingResult = await contextRouter.route(routingInput, using: client)
+                    let routingDuration = routingStart.duration(to: clock.now)
                     let plan = contextValidator.validate(routingResult.plan, input: routingInput)
                     let connection = plan.pastThoughtRetrieval.flatMap { pastPlan in
                         strongestConnection(for: reflection, query: pastPlan.query, among: candidates)
@@ -148,6 +185,7 @@ public struct ReaderAgent: Sendable {
                     if let connection { try await reflections.saveConnection(connection) }
                     continuation.yield(.contextPrepared(connection))
                     let prior = connection.flatMap { id in candidates.first { $0.id == id.sourceReflectionID } }
+                    let retrievalStart = clock.now
                     let bookContext: ReaderAgentBookContext?
                     if let contextBuilder, let retrieval = plan.bookRetrieval {
                         bookContext = try? await contextBuilder.build(
@@ -161,6 +199,10 @@ public struct ReaderAgent: Sendable {
                     } else {
                         bookContext = nil
                     }
+                    let retrievalDuration = retrievalStart.duration(to: clock.now)
+                    var completedMessage: ReflectionMessage?
+                    var replyUsage: TokenUsage?
+                    let replyStart = clock.now
                     for await event in AgentExecutor(client: client, budget: budget).run(
                         input: policy.input(
                             for: reflection,
@@ -177,6 +219,7 @@ public struct ReaderAgent: Sendable {
                     ) {
                         switch event {
                         case .textDelta(let text): continuation.yield(.textDelta(text))
+                        case .usageUpdated(let usage): replyUsage = usage
                         case .completed(let result):
                             let content = result.response.content.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !content.isEmpty else {
@@ -197,10 +240,34 @@ public struct ReaderAgent: Sendable {
                                 return
                             }
                             continuation.yield(.completed(message))
+                            completedMessage = message
                         case .cancelled: continuation.yield(.cancelled)
                         case .failed(let failure): continuation.yield(.failed(.runtime(failure)))
-                        case .runStarted, .modelStarted, .usageUpdated: break
+                        case .runStarted, .modelStarted: break
                         }
+                    }
+                    let replyDuration = replyStart.duration(to: clock.now)
+                    if completedMessage != nil {
+                        continuation.yield(.contextDisclosed(ContextDisclosure(
+                            includedNearbyPassage: plan.nearbyPassage == .include,
+                            retrievedBookEvidenceCount: bookContext?.evidence.count ?? 0,
+                            connectedReflectionID: connection?.sourceReflectionID,
+                            usedFallback: routingResult.usedFallback,
+                            fallbackReason: routingResult.fallbackReason,
+                            routingDuration: routingDuration,
+                            retrievalDuration: retrievalDuration
+                        )))
+                        await saveTrace(
+                            reflection: reflection,
+                            routingResult: routingResult,
+                            plan: plan,
+                            bookContext: bookContext,
+                            connection: connection,
+                            routingDuration: routingDuration,
+                            retrievalDuration: retrievalDuration,
+                            replyDuration: replyDuration,
+                            replyUsage: replyUsage
+                        )
                     }
                 } catch is CancellationError {
                     continuation.yield(.cancelled)
@@ -211,6 +278,37 @@ public struct ReaderAgent: Sendable {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    private func saveTrace(
+        reflection: Reflection,
+        routingResult: ContextRoutingResult,
+        plan: ValidatedContextPlan,
+        bookContext: ReaderAgentBookContext?,
+        connection: ReflectionConnection?,
+        routingDuration: Duration,
+        retrievalDuration: Duration,
+        replyDuration: Duration,
+        replyUsage: TokenUsage?
+    ) async {
+        guard let traceRepository else { return }
+        let trace = ContextPlanTrace(
+            reflectionID: reflection.id.description,
+            proposedPlan: routingResult.plan,
+            validatedPlan: plan,
+            usedFallback: routingResult.usedFallback,
+            fallbackReason: routingResult.fallbackReason,
+            fallbackDetail: routingResult.fallbackDetail,
+            routingDuration: routingDuration,
+            retrievalDuration: retrievalDuration,
+            replyDuration: replyDuration,
+            selectedBookEvidenceIDs: bookContext?.evidence.map(\.id.rawValue) ?? [],
+            connectedReflectionID: connection?.sourceReflectionID.description,
+            routingTokenUsage: routingResult.tokenUsage,
+            replyTokenUsage: replyUsage
+        )
+        // Best-effort: a trace-save failure must never break the reply.
+        try? await traceRepository.save(trace)
     }
 
     private func strongestConnection(for reflection: Reflection, query: String, among candidates: [Reflection]) -> ReflectionConnection? {
