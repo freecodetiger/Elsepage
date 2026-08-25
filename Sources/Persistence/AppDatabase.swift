@@ -234,7 +234,10 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
         migrator.registerMigration("v8_agent_citations") { db in
-            try db.create(table: "agentResponseEvidence") { t in
+            // ifNotExists keeps the migration safe to re-run after the v8_pending_*
+            // → v8/v9/v10 renumbering, so databases created during development upgrade
+            // instead of needing to be deleted.
+            try db.create(table: "agentResponseEvidence", ifNotExists: true) { t in
                 t.column("messageID", .text).notNull().references("reflectionMessages", onDelete: .cascade)
                 t.column("id", .text).notNull()
                 t.column("kind", .text).notNull()
@@ -248,7 +251,7 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "length(trim(excerpt)) > 0")
                 t.check(sql: "(locatorJSON IS NULL AND href IS NULL) OR (locatorJSON IS NOT NULL AND href IS NOT NULL)")
             }
-            try db.create(table: "agentCitations") { t in
+            try db.create(table: "agentCitations", ifNotExists: true) { t in
                 t.column("id", .text).primaryKey()
                 t.column("messageID", .text).notNull().references("reflectionMessages", onDelete: .cascade)
                 t.column("evidenceID", .text).notNull()
@@ -263,7 +266,7 @@ public final class AppDatabase: @unchecked Sendable {
         // the encoded `ContextPlanTrace`; no raw user text or Reflection body.
         // Numbering is re-sequenced by the coordinator at merge time.
         migrator.registerMigration("v9_routing_trace") { db in
-            try db.create(table: "routingTraces") { t in
+            try db.create(table: "routingTraces", ifNotExists: true) { t in
                 t.column("id", .text).primaryKey()
                 t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
                 t.column("createdAt", .datetime).notNull().indexed()
@@ -275,7 +278,7 @@ public final class AppDatabase: @unchecked Sendable {
         // questions, citations, memory-change summaries) keyed by reflection.
         // Numbering is re-sequenced by the coordinator at merge time.
         migrator.registerMigration("v10_journal") { db in
-            try db.create(table: "journalThoughts") { t in
+            try db.create(table: "journalThoughts", ifNotExists: true) { t in
                 t.column("id", .text).primaryKey()
                 t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
                 t.column("messageID", .text).notNull()
@@ -283,7 +286,7 @@ public final class AppDatabase: @unchecked Sendable {
                 t.column("createdAt", .datetime).notNull()
                 t.check(sql: "length(trim(thought)) > 0")
             }
-            try db.create(table: "agentQuestions") { t in
+            try db.create(table: "agentQuestions", ifNotExists: true) { t in
                 t.column("id", .text).primaryKey()
                 t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
                 t.column("messageID", .text).notNull()
@@ -294,7 +297,7 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "status IN ('open', 'answered')")
                 t.check(sql: "length(trim(text)) > 0")
             }
-            try db.create(table: "reflectionCitations") { t in
+            try db.create(table: "reflectionCitations", ifNotExists: true) { t in
                 t.column("id", .text).primaryKey()
                 t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
                 t.column("messageID", .text).notNull()
@@ -308,7 +311,7 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "sourceType IN ('bookLocator', 'highlight', 'note', 'readingSession')")
                 t.check(sql: "(locatorJSON IS NULL AND href IS NULL) OR (locatorJSON IS NOT NULL AND href IS NOT NULL)")
             }
-            try db.create(table: "journalMemoryChanges") { t in
+            try db.create(table: "journalMemoryChanges", ifNotExists: true) { t in
                 t.column("id", .text).primaryKey()
                 t.column("journalID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
                 t.column("changeType", .text).notNull()

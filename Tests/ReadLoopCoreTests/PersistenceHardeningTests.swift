@@ -127,3 +127,28 @@ import Testing
     #expect(positions[included.id]?.bookID == included.id)
     #expect(positions[excluded.id] == nil)
 }
+
+@Test func preRenumberedDevDatabaseUpgradesWithoutDeletion() async throws {
+    // A dev database built during the v8_pending_* era already has the P0 tables and
+    // recorded the old migration identifiers. Upgrading to the renumbered migrations
+    // (v8_agent_citations/v9_routing_trace/v10_journal) must no-op on the existing
+    // tables via ifNotExists and still reach v11_polished_text — no deletion needed.
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v7_local_book_retrieval")
+
+    try await queue.write { db in
+        for name in ["v8_pending_citations", "v8_pending_router_trace", "v8_pending_journal"] {
+            try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES (?)", arguments: [name])
+        }
+    }
+
+    try AppDatabase.migrator.migrate(queue)
+    let identifiers = try await queue.read { db in
+        try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
+    }
+    #expect(identifiers.contains("v8_agent_citations"))
+    #expect(identifiers.contains("v9_routing_trace"))
+    #expect(identifiers.contains("v10_journal"))
+    #expect(identifiers.contains("v11_polished_text"))
+}
