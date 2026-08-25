@@ -54,15 +54,17 @@ struct ProviderSettingsView: View {
                 }
 
                 if let diagnostics = model.routingDiagnostics {
-                    Section("路由诊断") {
+                    let fallbacks = diagnostics.fallbackCounts.sorted { $0.value > $1.value }
+                        .map { "\($0.key): \($0.value)" }
+                        .joined(separator: "、")
+                    Section {
                         LabeledContent("总追踪数", value: "\(diagnostics.totalTraces)")
-                        let fallbacks = diagnostics.fallbackCounts.sorted { $0.value > $1.value }
-                            .map { "\($0.key): \($0.value)" }
-                            .joined(separator: "、")
                         LabeledContent("回退次数", value: fallbacks.isEmpty ? "0" : fallbacks)
                         LabeledContent("路由平均", value: Self.durationText(diagnostics.averageRoutingDuration))
                         LabeledContent("检索平均", value: Self.durationText(diagnostics.averageRetrievalDuration))
                         LabeledContent("回应平均", value: Self.durationText(diagnostics.averageReplyDuration))
+                    } header: {
+                        Text("路由诊断")
                     } footer: {
                         Text("记录每次 Agent 回应使用的上下文与耗时，仅存本机摘要，不保存原文。")
                     }
