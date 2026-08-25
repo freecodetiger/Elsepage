@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.svg" alt="Elsepage" width="128" height="128">
+  <img src="logo-transparent.png" alt="Elsepage" width="128" height="128">
 </p>
 
 <h1 align="center">Elsepage</h1>
