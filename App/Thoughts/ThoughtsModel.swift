@@ -1,3 +1,4 @@
+import ContextRouting
 import Foundation
 import LibraryCore
 import Observation
@@ -10,19 +11,24 @@ import ReflectionCore
 final class ThoughtsModel {
     private let archive: ReflectionArchiveService
     private let readerAgent: ReaderAgent
+    private let traceRepository: (any RoutingTraceRepository)?
 
     private(set) var entries: [ReflectionArchiveEntry] = []
     private(set) var isLoading = false
     private(set) var replyingTo: ReflectionID?
+    /// Latest stored trace per reflection, used for archive disclosure.
+    private(set) var tracesByReflection: [ReflectionID: ContextPlanTrace] = [:]
     var errorMessage: String?
 
     init(
         books: any BookRepository,
         reflections: any ReflectionRepository,
-        readerAgent: ReaderAgent
+        readerAgent: ReaderAgent,
+        traceRepository: (any RoutingTraceRepository)? = nil
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
         self.readerAgent = readerAgent
+        self.traceRepository = traceRepository
     }
 
     func reload() async {
@@ -31,6 +37,15 @@ final class ThoughtsModel {
         defer { isLoading = false }
         do {
             entries = try await archive.recentEntries()
+            if let traceRepository {
+                var traces: [ReflectionID: ContextPlanTrace] = [:]
+                for entry in entries {
+                    if let trace = try? await traceRepository.latestTrace(for: entry.reflection.id.description) {
+                        traces[entry.reflection.id] = trace
+                    }
+                }
+                tracesByReflection = traces
+            }
             errorMessage = nil
         } catch is CancellationError {
             return
@@ -49,7 +64,7 @@ final class ThoughtsModel {
                 await reload()
             case .failed(let failure):
                 errorMessage = Self.message(for: failure)
-            case .started, .contextPrepared, .textDelta, .cancelled:
+            case .started, .contextPrepared, .textDelta, .contextDisclosed, .cancelled:
                 break
             }
         }

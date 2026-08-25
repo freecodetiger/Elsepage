@@ -1,3 +1,4 @@
+import ContextRouting
 import LibraryCore
 import ReaderCore
 import ReflectionCore
@@ -152,6 +153,7 @@ struct ThoughtsView: View {
                 isExpanded: expandedEntryID == entry.id,
                 showsBook: showsBook,
                 isReplying: model.replyingTo == entry.reflection.id,
+                contextTrace: model.tracesByReflection[entry.reflection.id],
                 toggleExpanded: {
                     withAnimation(.snappy(duration: 0.24)) {
                         expandedEntryID = expandedEntryID == entry.id ? nil : entry.id
@@ -194,6 +196,7 @@ private struct ThoughtEntryCard: View {
     let isExpanded: Bool
     let showsBook: Bool
     let isReplying: Bool
+    var contextTrace: ContextPlanTrace?
     let toggleExpanded: () -> Void
     let requestReply: () -> Void
     let openSource: (Book, BookLocator) -> Void
@@ -266,6 +269,12 @@ private struct ThoughtEntryCard: View {
         if let response = entry.derivedAgentResponse {
             Divider()
             responseBlock(title: "回应", content: response.content)
+            if let line = contextDisclosureLine(contextTrace) {
+                Divider()
+                Label(line, systemImage: "doc.text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         } else {
             Divider()
             Button(action: requestReply) {
@@ -322,5 +331,17 @@ private struct ThoughtEntryCard: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func contextDisclosureLine(_ trace: ContextPlanTrace?) -> String? {
+        guard let trace else { return nil }
+        var parts: [String] = []
+        if !trace.selectedBookEvidenceIDs.isEmpty {
+            parts.append("参考了已读部分 \(trace.selectedBookEvidenceIDs.count) 处书内内容")
+        }
+        if trace.connectedReflectionID != nil {
+            parts.append("连接过去的一则想法")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "，")
     }
 }
