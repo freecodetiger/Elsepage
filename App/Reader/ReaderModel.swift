@@ -1,3 +1,4 @@
+import AgentRuntime
 import Foundation
 import LibraryCore
 import Observation
@@ -14,6 +15,7 @@ final class ReaderModel {
     private let books: any BookRepository
     let reflectionRepository: any ReflectionRepository
     let readerAgent: ReaderAgent
+    let polishService: TranscriptPolishService?
     private let sessions: ReadingSessionService
     let readium: ReadiumServices
     var initialLocatorJSON: Data?
@@ -54,12 +56,14 @@ final class ReaderModel {
         sessions: ReadingSessionService,
         reflections: any ReflectionRepository,
         readerAgent: ReaderAgent,
+        polishService: TranscriptPolishService? = nil,
         requestedLocator: BookLocator? = nil,
         readium: ReadiumServices
     ) {
         self.book = book; self.fileURL = fileURL; self.repository = repository; self.books = books
         self.sessions = sessions; reflectionRepository = reflections
         self.readerAgent = readerAgent
+        self.polishService = polishService
         self.readium = readium
         if let requestedLocator {
             initialLocatorJSON = requestedLocator.json
@@ -348,7 +352,8 @@ final class ReaderModel {
                 locator: locator,
                 linkedHighlightIDs: highlights(in: session).map(\.id),
                 reflectionRepository: reflectionRepository,
-                readerAgent: readerAgent
+                readerAgent: readerAgent,
+                polishService: polishService
             )
         } catch is CancellationError {
             return

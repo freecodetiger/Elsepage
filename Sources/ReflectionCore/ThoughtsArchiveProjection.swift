@@ -36,6 +36,7 @@ public enum ThoughtsArchiveProjection {
             guard passesFilter else { return false }
             guard !term.isEmpty else { return true }
             return entry.book.title.localizedCaseInsensitiveContains(term)
+                || entry.reflection.displayText.localizedCaseInsensitiveContains(term)
                 || entry.reflection.originalText.localizedCaseInsensitiveContains(term)
                 || entry.messages.contains { $0.content.localizedCaseInsensitiveContains(term) }
         }

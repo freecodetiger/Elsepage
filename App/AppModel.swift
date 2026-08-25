@@ -1,3 +1,4 @@
+import AgentRuntime
 import AppInfrastructure
 import Foundation
 import ModelProviders
@@ -31,12 +32,13 @@ final class AppModel {
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
             let routingTraces = GRDBRoutingTraceRepository(database: database)
+            let modelClientFactory = ConfiguredModelClientFactory(
+                configurations: providerConfigurations,
+                secrets: secrets
+            )
             let readerAgent = ReaderAgent(
                 reflections: reflections,
-                models: ConfiguredModelClientFactory(
-                    configurations: providerConfigurations,
-                    secrets: secrets
-                ),
+                models: modelClientFactory,
                 contextBuilder: ReaderAgentContextBuilder(
                     retriever: LocalBookRetriever(repository: bookIndex),
                     repository: bookIndex
@@ -48,6 +50,8 @@ final class AppModel {
                 ),
                 traceRepository: routingTraces
             )
+            // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
+            let polishService = TranscriptPolishService(clientFactory: modelClientFactory)
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
             let indexCoordinator = BookIndexCoordinator(repository: bookIndex, readium: readium, files: files)
@@ -57,6 +61,7 @@ final class AppModel {
                 sessions: sessions,
                 reflections: reflections,
                 readerAgent: readerAgent,
+                polishService: polishService,
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),
                 readium: readium,

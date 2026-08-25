@@ -319,6 +319,14 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "length(trim(summary)) > 0")
             }
         }
+
+        // P0 voice polish. Optional AI-tidied version of the user's own words;
+        // `originalText` remains the raw source of truth.
+        migrator.registerMigration("v11_polished_text") { db in
+            try db.alter(table: "reflections") { t in
+                t.add(column: "polishedText", .text)
+            }
+        }
         return migrator
     }
 

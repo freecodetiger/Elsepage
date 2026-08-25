@@ -221,7 +221,8 @@ struct ReaderScreen: View {
                 locator: locator,
                 linkedHighlightIDs: model.highlights(in: summary.session).map(\.id),
                 reflectionRepository: model.reflectionRepository,
-                readerAgent: model.readerAgent
+                readerAgent: model.readerAgent,
+                polishService: model.polishService
             )
         }
     }

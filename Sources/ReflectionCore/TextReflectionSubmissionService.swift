@@ -10,6 +10,7 @@ public struct TextReflectionDraft: Hashable, Sendable {
     public let sessionID: ReadingSessionID?
     public let locator: BookLocator
     public let originalText: String
+    public let polishedText: String?
     public let linkedHighlightIDs: [UUID]
     public let createdAt: Date
 
@@ -19,6 +20,7 @@ public struct TextReflectionDraft: Hashable, Sendable {
         sessionID: ReadingSessionID?,
         locator: BookLocator,
         originalText: String,
+        polishedText: String? = nil,
         linkedHighlightIDs: [UUID] = [],
         createdAt: Date = Date()
     ) {
@@ -27,6 +29,7 @@ public struct TextReflectionDraft: Hashable, Sendable {
         self.sessionID = sessionID
         self.locator = locator
         self.originalText = originalText
+        self.polishedText = polishedText
         self.linkedHighlightIDs = linkedHighlightIDs
         self.createdAt = createdAt
     }
@@ -52,7 +55,8 @@ public struct TextReflectionSubmissionService: Sendable {
             guard existing.bookID == draft.bookID,
                   existing.sessionID == draft.sessionID,
                   existing.originalText == draft.originalText,
-                  existing.inputKind == .text else {
+                  existing.inputKind == .text,
+                  existing.polishedText == draft.polishedText else {
                 throw TextReflectionSubmissionError.conflictingRetry
             }
             return existing
@@ -64,6 +68,7 @@ public struct TextReflectionSubmissionService: Sendable {
             sessionID: draft.sessionID,
             originalText: draft.originalText,
             inputKind: .text,
+            polishedText: draft.polishedText,
             createdAt: draft.createdAt
         )
         var evidence = [try ReflectionEvidence(

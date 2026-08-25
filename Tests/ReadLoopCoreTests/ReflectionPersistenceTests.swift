@@ -278,3 +278,24 @@ import Testing
         #expect(table == "reflectionEvidence"); #expect(recordID == evidenceID); #expect(field == "locatorJSON")
     }
 }
+
+@Test func polishedTextRoundTripsAndDisplayTextPrefersPolished() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(
+        bookID: book.id,
+        originalText: "原始 口述 乱句",
+        inputKind: .voiceTranscript,
+        polishedText: "整理后的文字",
+        createdAt: Date(timeIntervalSince1970: 50)
+    )
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    let loaded = try #require(try await repository.reflection(id: reflection.id))
+    #expect(loaded.originalText == "原始 口述 乱句")
+    #expect(loaded.polishedText == "整理后的文字")
+    #expect(loaded.displayText == "整理后的文字")
+    let plain = Reflection(bookID: book.id, originalText: "普通文字", inputKind: .text)
+    #expect(plain.displayText == "普通文字")
+}

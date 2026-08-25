@@ -35,7 +35,7 @@ final class VoiceReflectionRecorder {
         }
 
         do {
-            if state.saveAudio, let url = Self.audioDestinationURL() {
+            if state.saveAudio, let url = audioDestinationURL() {
                 try provider.prepareAudioRecording(at: url)
                 state.audioFileName = url.lastPathComponent
             } else {
@@ -93,82 +93,58 @@ final class VoiceReflectionRecorder {
         return directory
     }
 
-    private static func audioDestinationURL() -> URL? {
-        let name = "\(UUID().uuidString.lowercased())-\(Int(Date().timeIntervalSince1970)).caf"
-        return audioDirectory().appendingPathComponent(name)
+    private func audioDestinationURL() -> URL? {
+        let name = "\(UUID().uuidString.lowercased())-\(Int(Date().timeIntervalSince1970)).\(provider.preferredAudioFileExtension)"
+        return Self.audioDirectory().appendingPathComponent(name)
     }
 }
 
 struct VoiceReflectionControls: View {
     @Binding var editableText: String
     @Binding var audioFileName: String?
+    var canPolish = false
+    var onPolish: (() async -> Void)? = nil
     var onVoiceTranscript: () -> Void = {}
     @State private var recorder = VoiceReflectionRecorder()
     @State private var textBeforeRecording = ""
-    @State private var didLongPress = false
+    @State private var pressTask: Task<Void, Never>?
+    @State private var isHoldingLongPress = false
+    @State private var isPolishing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(spacing: ElsepageTheme.Spacing.small) {
-                Button {
-                    if didLongPress {
-                        didLongPress = false
-                        return
-                    }
-                    if recorder.isRecording {
-                        recorder.stop()
-                    } else {
-                        beginRecording()
-                    }
-                } label: {
-                    Label(recorder.isRecording ? "结束录音" : "语音输入", systemImage: recorder.isRecording ? "stop.fill" : "mic.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.3)
-                        .onChanged { _ in
-                            didLongPress = true
-                            haptic()
-                            if !recorder.isRecording {
-                                beginRecording()
-                            }
-                        }
-                        .onEnded { _ in
-                            haptic()
-                            if recorder.isRecording {
-                                recorder.stop()
-                            }
-                        }
-                )
-
-                if recorder.isRecording {
-                    Button("取消", role: .cancel) { recorder.cancel() }
-                        .buttonStyle(.bordered)
-                }
-
-                Spacer()
-
+        VStack(spacing: ElsepageTheme.Spacing.medium) {
+            statusLine
+            micButton
+            HStack(spacing: 12) {
                 Toggle("保存音频", isOn: Binding(
                     get: { recorder.saveAudio },
                     set: { recorder.saveAudio = $0 }
                 ))
-                .font(.footnote)
+                .font(.caption)
                 .toggleStyle(.switch)
                 .accessibilityLabel("保存这段音频")
+                Spacer()
+                if canPolish, !editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        Task {
+                            isPolishing = true
+                            await onPolish?()
+                            isPolishing = false
+                        }
+                    } label: {
+                        if isPolishing {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("一键润色", systemImage: "wand.and.stars")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isPolishing)
+                }
             }
             .disabled(recorder.state.phase == .requestingPermission)
-
-            if recorder.state.phase == .requestingPermission {
-                ProgressView("正在请求权限…")
-                    .font(.footnote)
-            } else if let failure = recorder.state.failureMessage {
-                Text(failure).font(.footnote).foregroundStyle(.secondary)
-            } else if recorder.isRecording {
-                Text("正在转写…结束后可以继续编辑文字。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
+        .frame(maxWidth: .infinity)
         .onChange(of: recorder.latestTranscript) { _, transcript in
             let prefix = textBeforeRecording.trimmingCharacters(in: .whitespacesAndNewlines)
             editableText = transcript.isEmpty ? textBeforeRecording : [prefix, transcript].filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -182,6 +158,80 @@ struct VoiceReflectionControls: View {
         .onDisappear { recorder.cancel() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("语音感想")
+    }
+
+    @ViewBuilder private var statusLine: some View {
+        if recorder.state.phase == .requestingPermission {
+            ProgressView("正在请求权限…")
+                .font(.footnote)
+        } else if let failure = recorder.state.failureMessage {
+            Text(failure).font(.footnote).foregroundStyle(.secondary)
+        } else if recorder.isRecording {
+            Text("正在转写…点击或松手结束")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else if recorder.state.hasTranscript {
+            Text("已转写，可继续编辑或润色")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Prominent bottom-center mic button. Both default interactions work:
+    /// tap to start / tap to stop, and hold to start / release to stop.
+    private var micButton: some View {
+        ZStack {
+            Circle()
+                .fill(recorder.isRecording ? Color.red.opacity(0.12) : Color.elsepageAccent.opacity(0.10))
+                .frame(width: 76, height: 76)
+                .overlay(
+                    Circle().strokeBorder(recorder.isRecording ? Color.red : Color.elsepageAccent, lineWidth: 2)
+                )
+            Image(systemName: recorder.isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 30))
+                .foregroundStyle(recorder.isRecording ? Color.red : Color.elsepageAccent)
+        }
+        .scaleEffect(recorder.isRecording ? 1.1 : 1.0)
+        .animation(.snappy(duration: 0.2), value: recorder.isRecording)
+        .contentShape(Circle())
+        .accessibilityLabel(recorder.isRecording ? "结束录音" : "开始语音输入")
+        .gesture(recordingGesture)
+    }
+
+    private var recordingGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                // A deliberate scroll that starts on the button cancels the pending press.
+                guard abs(value.translation.width) < 20, abs(value.translation.height) < 20 else {
+                    pressTask?.cancel()
+                    pressTask = nil
+                    return
+                }
+                guard pressTask == nil else { return }
+                pressTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    guard !Task.isCancelled else { return }
+                    isHoldingLongPress = true
+                    haptic()
+                    if !recorder.isRecording {
+                        beginRecording()
+                    }
+                }
+            }
+            .onEnded { _ in
+                let wasLongPress = isHoldingLongPress
+                pressTask?.cancel()
+                pressTask = nil
+                isHoldingLongPress = false
+                if wasLongPress {
+                    if recorder.isRecording { recorder.stop() }
+                    haptic()
+                } else if recorder.isRecording {
+                    recorder.stop()
+                } else {
+                    beginRecording()
+                }
+            }
     }
 
     private func beginRecording() {

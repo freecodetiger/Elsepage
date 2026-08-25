@@ -13,6 +13,8 @@ public struct ReflectionID: Hashable, Codable, Sendable, RawRepresentable, Custo
 public enum ReflectionInputKind: String, Codable, Sendable { case text, voiceTranscript }
 
 /// User-authored source data. Agent output is intentionally not represented by this type.
+/// `originalText` is always the user's raw words (PRD P2: never overwritten by AI);
+/// `polishedText` is the optional AI-tidied version shown in place of it.
 public struct Reflection: Hashable, Codable, Sendable, Identifiable {
     public let id: ReflectionID
     public let bookID: BookID
@@ -20,13 +22,14 @@ public struct Reflection: Hashable, Codable, Sendable, Identifiable {
     public let originalText: String
     public let inputKind: ReflectionInputKind
     public let audioFileName: String?
+    public let polishedText: String?
     public let createdAt: Date
 
     public init(
         id: ReflectionID = ReflectionID(), bookID: BookID,
         sessionID: ReadingSessionID? = nil, originalText: String,
         inputKind: ReflectionInputKind, audioFileName: String? = nil,
-        createdAt: Date = Date()
+        polishedText: String? = nil, createdAt: Date = Date()
     ) {
         self.id = id
         self.bookID = bookID
@@ -34,8 +37,12 @@ public struct Reflection: Hashable, Codable, Sendable, Identifiable {
         self.originalText = originalText
         self.inputKind = inputKind
         self.audioFileName = audioFileName
+        self.polishedText = polishedText
         self.createdAt = createdAt
     }
+
+    /// What the user reads first: the polished version when present, else the raw words.
+    public var displayText: String { polishedText ?? originalText }
 }
 
 public enum ReflectionMessageAuthor: String, Codable, Sendable { case user, agent }

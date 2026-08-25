@@ -23,6 +23,7 @@ struct ThoughtsView: View {
         guard !term.isEmpty else { return model.journalEntries }
         return model.journalEntries.filter { entry in
             entry.book.title.localizedCaseInsensitiveContains(term)
+                || entry.reflection.displayText.localizedCaseInsensitiveContains(term)
                 || entry.reflection.originalText.localizedCaseInsensitiveContains(term)
                 || entry.whatIThink.contains { $0.thought.localizedCaseInsensitiveContains(term) }
         }
@@ -250,7 +251,7 @@ private struct ThoughtEntryCard: View {
             Button(action: toggleExpanded) {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                     metadata
-                    Text(entry.reflection.originalText)
+                    Text(entry.reflection.displayText)
                         .font(.body)
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)

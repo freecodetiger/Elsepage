@@ -390,11 +390,13 @@ private struct ReflectionRecord: Codable, FetchableRecord, PersistableRecord {
     var sessionID: String?
     var originalText, inputKind: String
     var audioFileName: String?
+    var polishedText: String?
     var createdAt: Date
     init(_ reflection: Reflection) {
         id = reflection.id.description; bookID = reflection.bookID.description
         sessionID = reflection.sessionID?.description; originalText = reflection.originalText
-        inputKind = reflection.inputKind.rawValue; audioFileName = reflection.audioFileName; createdAt = reflection.createdAt
+        inputKind = reflection.inputKind.rawValue; audioFileName = reflection.audioFileName
+        polishedText = reflection.polishedText; createdAt = reflection.createdAt
     }
     var domain: Reflection {
         get throws {
@@ -409,7 +411,7 @@ private struct ReflectionRecord: Codable, FetchableRecord, PersistableRecord {
                 id: .init(rawValue: try decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id")),
                 bookID: .init(rawValue: try decodeUUID(bookID, table: Self.databaseTableName, recordID: id, field: "bookID")),
                 sessionID: decodedSessionID, originalText: originalText, inputKind: decodedInputKind,
-                audioFileName: audioFileName, createdAt: createdAt
+                audioFileName: audioFileName, polishedText: polishedText, createdAt: createdAt
             )
         }
     }

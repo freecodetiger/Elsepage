@@ -1,3 +1,4 @@
+import AgentRuntime
 import LibraryCore
 import Observation
 import ReaderCore
@@ -25,6 +26,7 @@ final class SessionReflectionModel: Identifiable {
     private let voiceSubmission: VoiceReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
     private let readerAgent: ReaderAgent
+    private let polishService: TranscriptPolishService?
     private let draftID = ReflectionID()
 
     var text = "" {
@@ -47,6 +49,9 @@ final class SessionReflectionModel: Identifiable {
     private(set) var connectedReflection: Reflection?
     private(set) var isResponding = false
     private(set) var contextDisclosure: ContextDisclosure?
+    /// The user's words captured right before an AI polish, so the raw version is
+    /// never lost (PRD P2). Non-nil means a polish has been applied.
+    private(set) var rawTranscript: String?
     var followUpText = ""
     var agentNotice: String?
     var errorMessage: String?
@@ -58,7 +63,8 @@ final class SessionReflectionModel: Identifiable {
         locator: BookLocator,
         linkedHighlightIDs: [UUID] = [],
         reflectionRepository: any ReflectionRepository,
-        readerAgent: ReaderAgent
+        readerAgent: ReaderAgent,
+        polishService: TranscriptPolishService? = nil
     ) {
         self.book = book
         self.summary = summary
@@ -66,8 +72,33 @@ final class SessionReflectionModel: Identifiable {
         self.linkedHighlightIDs = linkedHighlightIDs
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
+        self.polishService = polishService
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
         voiceSubmission = VoiceReflectionSubmissionService(repository: reflectionRepository)
+    }
+
+    /// A polish button is offered once a provider is configured and there is text.
+    var canPolish: Bool {
+        polishService != nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var polishedApplied: Bool { rawTranscript != nil }
+
+    /// One-tap AI tidy-up of the spoken/typed words. Keeps the pre-polish text as
+    /// the raw source of truth; replaces the editor with the polished version.
+    func polishCurrentText() async {
+        let current = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !current.isEmpty, let polishService else { return }
+        if rawTranscript == nil {
+            rawTranscript = text
+        }
+        do {
+            let polished = try await polishService.polish(current)
+            guard !polished.isEmpty else { return }
+            text = polished
+        } catch {
+            errorMessage = "润色暂不可用，已保留你的原话。"
+        }
     }
 
     var canSubmit: Bool {
@@ -80,9 +111,20 @@ final class SessionReflectionModel: Identifiable {
         do {
             let reflection: Reflection
             if inputKind == .voiceTranscript {
-                reflection = try await voiceSubmission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, editedTranscript: text, audioFileName: audioFileName, linkedHighlightIDs: linkedHighlightIDs))
+                reflection = try await voiceSubmission.submit(.init(
+                    id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator,
+                    editedTranscript: rawTranscript ?? text,
+                    audioFileName: audioFileName,
+                    polishedText: polishedApplied ? text : nil,
+                    linkedHighlightIDs: linkedHighlightIDs
+                ))
             } else {
-                reflection = try await submission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, originalText: text, linkedHighlightIDs: linkedHighlightIDs))
+                reflection = try await submission.submit(.init(
+                    id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator,
+                    originalText: rawTranscript ?? text,
+                    polishedText: polishedApplied ? text : nil,
+                    linkedHighlightIDs: linkedHighlightIDs
+                ))
             }
             self.reflection = reflection
             state = .saved
@@ -193,14 +235,36 @@ struct SessionReflectionSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-                    header
-                    if model.reflection == nil { editor } else { conversation }
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
+                        header
+                        if model.reflection == nil { editor } else { conversation }
+                    }
+                    .padding(ElsepageTheme.Spacing.page)
                 }
-                .padding(ElsepageTheme.Spacing.page)
+                .background(Color.elsepageBackground)
+
+                if model.reflection == nil {
+                    Divider()
+                    VoiceReflectionControls(
+                        editableText: Binding(
+                            get: { model.text },
+                            set: { model.text = $0 }
+                        ),
+                        audioFileName: Binding(
+                            get: { model.audioFileName },
+                            set: { model.audioFileName = $0 }
+                        ),
+                        canPolish: model.canPolish,
+                        onPolish: { await model.polishCurrentText() },
+                        onVoiceTranscript: { model.markVoiceTranscript() }
+                    )
+                    .padding(.horizontal, ElsepageTheme.Spacing.page)
+                    .padding(.vertical, ElsepageTheme.Spacing.medium)
+                    .background(Color.elsepageBackground)
+                }
             }
-            .background(Color.elsepageBackground)
             .navigationTitle("留下些什么")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -232,17 +296,6 @@ struct SessionReflectionSheet: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            VoiceReflectionControls(
-                editableText: Binding(
-                    get: { model.text },
-                    set: { model.text = $0 }
-                ),
-                audioFileName: Binding(
-                    get: { model.audioFileName },
-                    set: { model.audioFileName = $0 }
-                ),
-                onVoiceTranscript: { model.markVoiceTranscript() }
-            )
             TextField("写下一点此刻真正留下来的东西…", text: $model.text, axis: .vertical)
                 .lineLimit(5...12)
                 .padding(ElsepageTheme.Spacing.medium)
@@ -259,7 +312,7 @@ struct SessionReflectionSheet: View {
             Text("已经留在本机")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.elsepageAccent)
-            Text(model.reflection?.originalText ?? model.text)
+            Text(model.reflection?.displayText ?? model.text)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(model.messages) { message in
