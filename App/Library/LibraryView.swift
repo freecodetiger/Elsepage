@@ -101,7 +101,15 @@ struct LibraryView: View {
 
     private func bookList(_ model: LibraryModel) -> some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: ElsepageTheme.Spacing.medium)], spacing: ElsepageTheme.Spacing.xLarge) {
+            // Use two equal, compressible columns. An adaptive column can use a
+            // wide cover image's ideal width and make neighboring cards overlap.
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 0), spacing: ElsepageTheme.Spacing.medium),
+                    GridItem(.flexible(minimum: 0), spacing: ElsepageTheme.Spacing.medium)
+                ],
+                spacing: ElsepageTheme.Spacing.xLarge
+            ) {
                 ForEach(model.visibleBooks) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
@@ -145,6 +153,7 @@ struct LibraryView: View {
                         Button(role: .destructive) { deletingBook = book } label: {
                             Label("从书架移除", systemImage: "trash")
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
