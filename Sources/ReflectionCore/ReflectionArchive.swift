@@ -9,6 +9,7 @@ public struct ReflectionArchiveEntry: Hashable, Sendable, Identifiable {
     public let messages: [ReflectionMessage]
     public let evidence: [ReflectionEvidence]
     public let connections: [ReflectionArchiveConnection]
+    public let responseProvenance: [UUID: AgentResponseProvenance]
 
     public var derivedAgentResponse: ReflectionMessage? {
         messages.last(where: { $0.source == .agentGenerated })
@@ -25,13 +26,15 @@ public struct ReflectionArchiveEntry: Hashable, Sendable, Identifiable {
         book: Book,
         messages: [ReflectionMessage] = [],
         evidence: [ReflectionEvidence] = [],
-        connections: [ReflectionArchiveConnection] = []
+        connections: [ReflectionArchiveConnection] = [],
+        responseProvenance: [UUID: AgentResponseProvenance] = [:]
     ) {
         self.reflection = reflection
         self.book = book
         self.messages = messages
         self.evidence = evidence
         self.connections = connections
+        self.responseProvenance = responseProvenance
     }
 }
 
@@ -74,6 +77,10 @@ public struct ReflectionArchiveService: Sendable {
             for reflection in items {
                 let messages = try await reflections.messages(for: reflection.id)
                 let evidence = try await reflections.evidence(for: reflection.id)
+                var responseProvenance: [UUID: AgentResponseProvenance] = [:]
+                for message in messages where message.author == .agent {
+                    responseProvenance[message.id] = try await reflections.provenance(for: message.id)
+                }
                 let connections = try await reflections.connections(for: reflection.id)
                 var archiveConnections: [ReflectionArchiveConnection] = []
                 for connection in connections {
@@ -92,7 +99,8 @@ public struct ReflectionArchiveService: Sendable {
                     book: book,
                     messages: messages,
                     evidence: evidence,
-                    connections: archiveConnections
+                    connections: archiveConnections,
+                    responseProvenance: responseProvenance
                 ))
             }
         }

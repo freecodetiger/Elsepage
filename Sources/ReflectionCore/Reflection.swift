@@ -66,6 +66,53 @@ public struct ReflectionMessage: Hashable, Codable, Sendable, Identifiable {
     public var isUserSourceOfTruth: Bool { source == .userInput }
 }
 
+public enum AgentEvidenceKind: String, Codable, Sendable {
+    case nearbyPassage, bookPassage, pastReflection
+}
+
+/// Immutable snapshot of context actually sent to the model for one Agent reply.
+/// Keeping the full Locator JSON makes provenance independently inspectable and navigable.
+public struct AgentResponseEvidence: Hashable, Codable, Sendable, Identifiable {
+    public let id: String
+    public let messageID: UUID
+    public let kind: AgentEvidenceKind
+    public let sourceID: String
+    public let bookID: BookID
+    public let title: String?
+    public let excerpt: String
+    public let locator: BookLocator?
+
+    public init(
+        id: String, messageID: UUID, kind: AgentEvidenceKind, sourceID: String,
+        bookID: BookID, title: String? = nil, excerpt: String, locator: BookLocator? = nil
+    ) {
+        self.id = id; self.messageID = messageID; self.kind = kind; self.sourceID = sourceID
+        self.bookID = bookID; self.title = title; self.excerpt = excerpt; self.locator = locator
+    }
+}
+
+/// A model-requested reference accepted only after it resolves to evidence in the
+/// exact context sent for this response.
+public struct AgentCitation: Hashable, Codable, Sendable, Identifiable {
+    public let id: UUID
+    public let messageID: UUID
+    public let evidenceID: String
+    public let marker: String
+
+    public init(id: UUID = UUID(), messageID: UUID, evidenceID: String, marker: String) {
+        self.id = id; self.messageID = messageID; self.evidenceID = evidenceID; self.marker = marker
+    }
+}
+
+public struct AgentResponseProvenance: Hashable, Codable, Sendable {
+    public let evidence: [AgentResponseEvidence]
+    public let citations: [AgentCitation]
+
+    public init(evidence: [AgentResponseEvidence], citations: [AgentCitation]) {
+        self.evidence = evidence; self.citations = citations
+    }
+}
+
 /// A deterministic, evidence-backed link from the current thought to one past
 /// user-authored Reflection. It is derived data and never replaces either source.
 public struct ReflectionConnection: Hashable, Codable, Sendable, Identifiable {
@@ -122,6 +169,12 @@ public protocol ReflectionRepository: Sendable {
     func linkedHighlightIDs(for reflectionID: ReflectionID) async throws -> [UUID]
     func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage]
     func appendMessage(_ message: ReflectionMessage) async throws
+    func appendAgentMessage(
+        _ message: ReflectionMessage,
+        evidence: [AgentResponseEvidence],
+        citations: [AgentCitation]
+    ) async throws
+    func provenance(for messageID: UUID) async throws -> AgentResponseProvenance
     func message(id: UUID) async throws -> ReflectionMessage?
     func recentReflections(limit: Int) async throws -> [Reflection]
     func connections(for reflectionID: ReflectionID) async throws -> [ReflectionConnection]

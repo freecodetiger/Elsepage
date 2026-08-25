@@ -265,7 +265,7 @@ private struct ThoughtEntryCard: View {
     @ViewBuilder private var expandedContent: some View {
         if let response = entry.derivedAgentResponse {
             Divider()
-            responseBlock(title: "回应", content: response.content)
+            responseBlock(title: "回应", message: response)
         } else {
             Divider()
             Button(action: requestReply) {
@@ -282,7 +282,11 @@ private struct ThoughtEntryCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 if message.author == .agent {
-                    AgentMarkdownText(content: message.content).font(.subheadline)
+                    AgentMarkdownText(
+                        content: message.content,
+                        provenance: entry.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
+                        openCitation: openEvidence
+                    ).font(.subheadline)
                 } else {
                     Text(message.content).font(.subheadline).fixedSize(horizontal: false, vertical: true)
                 }
@@ -315,12 +319,34 @@ private struct ThoughtEntryCard: View {
         }
     }
 
-    private func responseBlock(title: String, content: String) -> some View {
+    private func responseBlock(title: String, message: ReflectionMessage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            AgentMarkdownText(content: content)
+            AgentMarkdownText(
+                content: message.content,
+                provenance: entry.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
+                openCitation: openEvidence
+            )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if let provenance = entry.responseProvenance[message.id], !provenance.evidence.isEmpty {
+                DisclosureGroup("查看本次使用的上下文") {
+                    ForEach(provenance.evidence) { evidence in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(evidence.title ?? "阅读证据").font(.caption.weight(.semibold))
+                            Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                            if evidence.locator != nil {
+                                Button("回到原文") { openEvidence(evidence) }.font(.caption)
+                            }
+                        }.padding(.vertical, 3)
+                    }
+                }.font(.footnote)
+            }
         }
+    }
+
+    private func openEvidence(_ evidence: AgentResponseEvidence) {
+        guard evidence.bookID == entry.book.id, let locator = evidence.locator else { return }
+        openSource(entry.book, locator)
     }
 }

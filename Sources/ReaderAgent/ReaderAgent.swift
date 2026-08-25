@@ -1,6 +1,7 @@
 import AgentRuntime
 import ContextRouting
 import Foundation
+import LibraryCore
 import ReaderCore
 import ReflectionCore
 import RetrievalCore
@@ -161,6 +162,17 @@ public struct ReaderAgent: Sendable {
                     } else {
                         bookContext = nil
                     }
+                    let messageID = UUID()
+                    let responseEvidence = Self.responseEvidence(
+                        messageID: messageID,
+                        reflection: reflection,
+                        currentEvidence: evidence,
+                        previousReflection: prior,
+                        bookEvidence: bookContext?.evidence ?? [],
+                        includeNearbyPassage: plan.nearbyPassage == .include,
+                        nearbyCharacterBudget: plan.budget.nearbyCharacters,
+                        pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters
+                    )
                     for await event in AgentExecutor(client: client, budget: budget).run(
                         input: policy.input(
                             for: reflection,
@@ -168,6 +180,7 @@ public struct ReaderAgent: Sendable {
                             currentEvidence: evidence,
                             previousReflection: prior,
                             bookEvidence: bookContext?.evidence ?? [],
+                            responseEvidence: responseEvidence,
                             includeNearbyPassage: plan.nearbyPassage == .include,
                             responseGuidance: plan.responseGuidance,
                             nearbyCharacterBudget: plan.budget.nearbyCharacters,
@@ -178,19 +191,31 @@ public struct ReaderAgent: Sendable {
                         switch event {
                         case .textDelta(let text): continuation.yield(.textDelta(text))
                         case .completed(let result):
-                            let content = result.response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let validated = AgentCitationValidator().validate(
+                                content: result.response.content,
+                                messageID: messageID,
+                                evidence: responseEvidence
+                            )
+                            let content = validated.content
                             guard !content.isEmpty else {
                                 continuation.yield(.failed(.emptyResponse))
                                 continuation.finish()
                                 return
                             }
                             let message = try ReflectionMessage(
+                                id: messageID,
                                 reflectionID: reflection.id,
                                 author: .agent,
                                 source: .agentGenerated,
                                 content: content
                             )
-                            do { try await reflections.appendMessage(message) }
+                            do {
+                                try await reflections.appendAgentMessage(
+                                    message,
+                                    evidence: responseEvidence,
+                                    citations: validated.citations
+                                )
+                            }
                             catch {
                                 continuation.yield(.failed(.persistence))
                                 continuation.finish()
@@ -234,6 +259,43 @@ public struct ReaderAgent: Sendable {
     private static func previousAgentAskedQuestion(in messages: [ReflectionMessage]) -> Bool {
         guard let agent = messages.last(where: { $0.author == .agent }) else { return false }
         return agent.content.contains("？") || agent.content.contains("?")
+    }
+
+    private static func responseEvidence(
+        messageID: UUID,
+        reflection: Reflection,
+        currentEvidence: [ReflectionEvidence],
+        previousReflection: Reflection?,
+        bookEvidence: [BookEvidence],
+        includeNearbyPassage: Bool,
+        nearbyCharacterBudget: Int,
+        pastThoughtCharacterBudget: Int
+    ) -> [AgentResponseEvidence] {
+        var snapshots: [(AgentEvidenceKind, String, BookID, String?, String, BookLocator?)] = []
+        if includeNearbyPassage, let source = currentEvidence.first(where: { $0.locator != nil }),
+           let locator = source.locator {
+            let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
+            let excerpt = String(text.prefix(max(0, nearbyCharacterBudget)))
+            if !excerpt.isEmpty {
+                snapshots.append((.nearbyPassage, source.id.uuidString.lowercased(), reflection.bookID, "当前阅读位置", excerpt, locator))
+            }
+        }
+        snapshots.append(contentsOf: bookEvidence.map { item in
+            let title = [item.chapterTitle, item.sectionTitle].compactMap { $0 }.joined(separator: " / ")
+            return (.bookPassage, item.id.rawValue, item.bookID, title.isEmpty ? item.locator.href : title, item.excerpt, item.locator)
+        })
+        if let previousReflection {
+            snapshots.append((
+                .pastReflection, previousReflection.id.description, previousReflection.bookID, "过去的想法",
+                String(previousReflection.originalText.prefix(max(0, pastThoughtCharacterBudget))), nil
+            ))
+        }
+        return snapshots.enumerated().map { offset, item in
+            AgentResponseEvidence(
+                id: "E\(offset + 1)", messageID: messageID, kind: item.0, sourceID: item.1,
+                bookID: item.2, title: item.3, excerpt: item.4, locator: item.5
+            )
+        }
     }
 }
 

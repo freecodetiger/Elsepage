@@ -29,6 +29,7 @@ final class SessionReflectionModel: Identifiable {
     private(set) var state: SubmissionState = .editing
     private(set) var reflection: Reflection?
     private(set) var messages: [ReflectionMessage] = []
+    private(set) var responseProvenance: [UUID: AgentResponseProvenance] = [:]
     private(set) var streamingResponse = ""
     private(set) var connectedReflection: Reflection?
     private(set) var isResponding = false
@@ -128,6 +129,11 @@ final class SessionReflectionModel: Identifiable {
     private func reloadMessages() async {
         guard let reflection else { return }
         messages = (try? await reflectionRepository.messages(for: reflection.id)) ?? messages
+        for message in messages where message.author == .agent {
+            if let provenance = try? await reflectionRepository.provenance(for: message.id) {
+                responseProvenance[message.id] = provenance
+            }
+        }
     }
 
     private static func message(for failure: ReaderAgentFailure) -> String {
@@ -149,6 +155,7 @@ struct SessionReflectionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: SessionReflectionModel
     let onSaved: @MainActor (Reflection) -> Void
+    var openCitation: ((AgentResponseEvidence) -> Void)?
 
     var body: some View {
         NavigationStack {
@@ -216,10 +223,29 @@ struct SessionReflectionSheet: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if message.author == .agent {
-                        AgentMarkdownText(content: message.content)
+                        AgentMarkdownText(
+                            content: message.content,
+                            provenance: model.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
+                            openCitation: openCitation
+                        )
                     } else {
                         Text(message.content).fixedSize(horizontal: false, vertical: true)
                     }
+                }
+                if let provenance = model.responseProvenance[message.id], !provenance.evidence.isEmpty {
+                    DisclosureGroup("查看本次使用的上下文") {
+                        ForEach(provenance.evidence) { evidence in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(evidence.title ?? "阅读证据").font(.caption.weight(.semibold))
+                                Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                                if evidence.locator != nil {
+                                    Button("回到原文") { openCitation?(evidence) }.font(.caption)
+                                }
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                    .font(.footnote)
                 }
             }
             if !model.streamingResponse.isEmpty {
