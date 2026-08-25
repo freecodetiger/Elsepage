@@ -5,6 +5,7 @@ import SwiftUI
 struct AppShell: View {
     @Bindable var library: LibraryModel
     @Bindable var thoughts: ThoughtsModel
+    @Bindable var myMind: MyMindModel
     @Bindable var providerSettings: ProviderSettingsModel
     @State private var selection: AppTab = .today
     @State private var readerDestination: ReaderDestination?
@@ -28,6 +29,12 @@ struct AppShell: View {
             }
             .tabItem { Label("思想", systemImage: "brain.head.profile") }
             .tag(AppTab.mind)
+
+            MyMindView(model: myMind) { book, locator in
+                readerDestination = .init(book: book, locator: locator)
+            }
+            .tabItem { Label("我的头脑", systemImage: "person.crop.rectangle") }
+            .tag(AppTab.myMind)
         }
         .tint(.elsepageAccent)
         .fullScreenCover(item: $readerDestination) { destination in
@@ -49,4 +56,5 @@ private enum AppTab: Hashable {
     case today
     case library
     case mind
+    case myMind
 }

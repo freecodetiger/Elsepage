@@ -13,6 +13,7 @@ import RetrievalCore
 final class AppModel {
     private(set) var library: LibraryModel?
     private(set) var thoughts: ThoughtsModel?
+    private(set) var myMind: MyMindModel?
     private(set) var providerSettings: ProviderSettingsModel?
     private(set) var startupError: String?
 
@@ -103,6 +104,11 @@ final class AppModel {
                 readerAgent: readerAgent,
                 traceRepository: routingTraces,
                 memoryRepository: memories
+            )
+            myMind = MyMindModel(
+                memories: memories,
+                reflections: reflections,
+                books: books
             )
             await providerSettings?.load()
             await library?.reload()
