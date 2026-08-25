@@ -1,6 +1,7 @@
 import Observation
 import SpeechCore
 import SwiftUI
+import UIKit
 
 @MainActor @Observable
 final class VoiceReflectionRecorder {
@@ -15,6 +16,10 @@ final class VoiceReflectionRecorder {
 
     var latestTranscript: String { state.transcript }
     var isRecording: Bool { state.phase == .recording || state.phase == .stopping }
+    var saveAudio: Bool {
+        get { state.saveAudio }
+        set { state.saveAudio = newValue }
+    }
 
     func start() async {
         guard !isRecording else { return }
@@ -30,6 +35,13 @@ final class VoiceReflectionRecorder {
         }
 
         do {
+            if state.saveAudio, let url = Self.audioDestinationURL() {
+                try provider.prepareAudioRecording(at: url)
+                state.audioFileName = url.lastPathComponent
+            } else {
+                try provider.prepareAudioRecording(at: nil)
+                state.audioFileName = nil
+            }
             let stream = try provider.start(localeIdentifier: nil)
             state.apply(.recordingStarted)
             streamTask = Task { [weak self] in
@@ -49,6 +61,7 @@ final class VoiceReflectionRecorder {
             }
         } catch {
             state.apply(.failed(error.localizedDescription))
+            discardAudioFile()
         }
     }
 
@@ -63,33 +76,85 @@ final class VoiceReflectionRecorder {
         streamTask = nil
         provider.cancel()
         state.apply(.cancelled)
+        discardAudioFile()
+    }
+
+    /// Deletes the audio file for the current recording and clears the reference.
+    private func discardAudioFile() {
+        guard let name = state.audioFileName else { return }
+        try? FileManager.default.removeItem(at: Self.audioDirectory().appendingPathComponent(name))
+        state.audioFileName = nil
+    }
+
+    private static func audioDirectory() -> URL {
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Reflections", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private static func audioDestinationURL() -> URL? {
+        let name = "\(UUID().uuidString.lowercased())-\(Int(Date().timeIntervalSince1970)).caf"
+        return audioDirectory().appendingPathComponent(name)
     }
 }
 
 struct VoiceReflectionControls: View {
     @Binding var editableText: String
+    @Binding var audioFileName: String?
+    var onVoiceTranscript: () -> Void = {}
     @State private var recorder = VoiceReflectionRecorder()
     @State private var textBeforeRecording = ""
+    @State private var didLongPress = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(spacing: ElsepageTheme.Spacing.small) {
                 Button {
+                    if didLongPress {
+                        didLongPress = false
+                        return
+                    }
                     if recorder.isRecording {
                         recorder.stop()
                     } else {
-                        textBeforeRecording = editableText
-                        Task { await recorder.start() }
+                        beginRecording()
                     }
                 } label: {
                     Label(recorder.isRecording ? "结束录音" : "语音输入", systemImage: recorder.isRecording ? "stop.fill" : "mic.fill")
                 }
                 .buttonStyle(.borderedProminent)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.3)
+                        .onChanged { _ in
+                            didLongPress = true
+                            haptic()
+                            if !recorder.isRecording {
+                                beginRecording()
+                            }
+                        }
+                        .onEnded { _ in
+                            haptic()
+                            if recorder.isRecording {
+                                recorder.stop()
+                            }
+                        }
+                )
 
                 if recorder.isRecording {
                     Button("取消", role: .cancel) { recorder.cancel() }
                         .buttonStyle(.bordered)
                 }
+
+                Spacer()
+
+                Toggle("保存音频", isOn: Binding(
+                    get: { recorder.saveAudio },
+                    set: { recorder.saveAudio = $0 }
+                ))
+                .font(.footnote)
+                .toggleStyle(.switch)
+                .accessibilityLabel("保存这段音频")
             }
             .disabled(recorder.state.phase == .requestingPermission)
 
@@ -107,9 +172,24 @@ struct VoiceReflectionControls: View {
         .onChange(of: recorder.latestTranscript) { _, transcript in
             let prefix = textBeforeRecording.trimmingCharacters(in: .whitespacesAndNewlines)
             editableText = transcript.isEmpty ? textBeforeRecording : [prefix, transcript].filter { !$0.isEmpty }.joined(separator: "\n\n")
+            if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                onVoiceTranscript()
+            }
+        }
+        .onChange(of: recorder.state.audioFileName) { _, name in
+            audioFileName = name
         }
         .onDisappear { recorder.cancel() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("语音感想")
+    }
+
+    private func beginRecording() {
+        textBeforeRecording = editableText
+        Task { await recorder.start() }
+    }
+
+    private func haptic() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 }
