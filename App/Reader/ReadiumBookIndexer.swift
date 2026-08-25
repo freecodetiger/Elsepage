@@ -104,4 +104,11 @@ final class BookIndexCoordinator {
             if state != .ready && state != .lexicalReady { enqueue(book) }
         }
     }
+
+    /// Cancels all in-flight indexing tasks (e.g. when every book is deleted).
+    /// The DB-side `bookIndexJobs`/`bookChunks` rows are cleared by the FK cascade.
+    func cancelAll() {
+        tasks.values.forEach { $0.cancel() }
+        tasks.removeAll()
+    }
 }
