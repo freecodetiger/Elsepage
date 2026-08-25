@@ -81,11 +81,17 @@ public struct BookIndexJob: Hashable, Sendable {
     public var nextResourceOrdinal: Int
     public var lastError: String?
     public var updatedAt: Date
+    /// The embedding model this book's vectors were produced with. A job that is
+    /// `.ready` but whose `embeddingModel` differs from the currently configured
+    /// model needs a re-embed (no full re-chunk).
+    public var embeddingModel: String?
 
     public init(bookID: BookID, indexVersion: Int, state: BookIndexState = .pending,
-                nextResourceOrdinal: Int = 0, lastError: String? = nil, updatedAt: Date = .init()) {
+                nextResourceOrdinal: Int = 0, lastError: String? = nil, updatedAt: Date = .init(),
+                embeddingModel: String? = nil) {
         self.bookID = bookID; self.indexVersion = indexVersion; self.state = state
         self.nextResourceOrdinal = nextResourceOrdinal; self.lastError = lastError; self.updatedAt = updatedAt
+        self.embeddingModel = embeddingModel
     }
 }
 
@@ -158,6 +164,10 @@ public protocol BookIndexRepository: Sendable {
     func chapters(for bookID: BookID, from startLocator: BookLocator, to endLocator: BookLocator?) async throws -> [BookChapterRef]
     func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws
     func embeddings(bookID: BookID, model: String) async throws -> [BookChunkID: [Float]]
+    /// Clears a book's persisted index (blocks/chunks/chapters/sections/job) for
+    /// one version, so a later `index` run rebuilds from scratch. Embeddings and
+    /// FTS rows cascade with their chunks.
+    func deleteIndex(for bookID: BookID, version: Int) async throws
 }
 
 public protocol BookContentExtractor: Sendable {

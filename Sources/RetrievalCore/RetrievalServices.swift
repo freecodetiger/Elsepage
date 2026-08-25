@@ -31,15 +31,19 @@ public enum HybridRanker {
 
 public struct LocalBookRetriever: BookRetriever {
     private let repository: any BookIndexRepository
-    private let embeddingProvider: (any EmbeddingProvider)?
-    public init(repository: any BookIndexRepository, embeddingProvider: (any EmbeddingProvider)? = nil) {
+    /// Resolves the embedding provider at query time (a factory, not a resolved
+    /// instance) so a Settings enable/disable/model-switch takes effect without
+    /// rebuilding the ReaderAgent graph. Nil factory or throw → pure lexical.
+    private let embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)?
+    public init(repository: any BookIndexRepository, embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)? = nil) {
         self.repository = repository; self.embeddingProvider = embeddingProvider
     }
     public func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence] {
         let lexical = try await repository.lexicalSearch(bookID: query.bookID, query: query.text, boundary: query.boundary, limit: max(12, query.limit * 3), scope: query.scope)
         var ranked = lexical.map { ($0.0.id, $0.1) }
         var chunks = Dictionary(uniqueKeysWithValues: lexical.map { ($0.0.id, $0.0) })
-        if let provider = embeddingProvider,
+        if let embeddingProvider,
+           let provider = await embeddingProvider(),
            let queryVector = try? await provider.embed([query.text]).first {
             let stored = try await repository.embeddings(bookID: query.bookID, model: provider.modelIdentifier)
             let allChunks = try await repository.chunks(for: query.bookID, version: BookIndexPipeline.currentVersion)
@@ -63,16 +67,20 @@ public struct LocalBookRetriever: BookRetriever {
 
 public struct BookIndexPipeline: Sendable {
     public static let currentVersion = 1
-    private let extractor: any BookContentExtractor
+    /// Batches per `/embeddings` request. Keeps payloads small and lets the
+    /// `bookChunkEmbeddings` table count double as live progress.
+    public static let embeddingBatchSize = 100
+    private let extractor: (any BookContentExtractor)?
     private let repository: any BookIndexRepository
     private let chunker: StructureAwareChunker
-    private let embeddings: (any EmbeddingProvider)?
-    public init(extractor: any BookContentExtractor, repository: any BookIndexRepository,
-                chunker: StructureAwareChunker = .init(), embeddings: (any EmbeddingProvider)? = nil) {
+    private let embeddings: (@Sendable () async -> (any EmbeddingProvider)?)?
+    public init(extractor: (any BookContentExtractor)? = nil, repository: any BookIndexRepository,
+                chunker: StructureAwareChunker = .init(), embeddings: (@Sendable () async -> (any EmbeddingProvider)?)? = nil) {
         self.extractor = extractor; self.repository = repository; self.chunker = chunker; self.embeddings = embeddings
     }
 
     public func index(bookID: BookID) async throws {
+        guard let extractor else { throw RetrievalError.missingExtractor }
         var job = try await repository.job(for: bookID, version: Self.currentVersion)
             ?? BookIndexJob(bookID: bookID, indexVersion: Self.currentVersion)
         job.state = .extracting; job.lastError = nil; job.updatedAt = .init(); try await repository.save(job: job)
@@ -96,18 +104,58 @@ public struct BookIndexPipeline: Sendable {
             }
             let chunks = try await repository.chunks(for: bookID, version: Self.currentVersion)
             job.state = .lexicalReady; job.updatedAt = .init(); try await repository.save(job: job)
-            if let embeddings, !chunks.isEmpty {
-                job.state = .embedding; try await repository.save(job: job)
-                let vectors = try await embeddings.embed(chunks.map(\.text))
-                guard vectors.count == chunks.count, vectors.allSatisfy({ $0.count == embeddings.dimensions }) else { throw RetrievalError.invalidEmbeddings }
-                try await repository.saveEmbeddings(Dictionary(uniqueKeysWithValues: zip(chunks.map(\.id), vectors)), model: embeddings.modelIdentifier, dimensions: embeddings.dimensions)
-                job.state = .ready; try await repository.save(job: job)
+            if let embeddings, !chunks.isEmpty, let provider = await embeddings() {
+                try await embed(chunks: chunks, provider: provider, job: &job)
             }
         } catch is CancellationError { throw CancellationError() }
         catch {
             job.state = .failed; job.lastError = String(describing: error); job.updatedAt = .init()
             try? await repository.save(job: job); throw error
         }
+    }
+
+    /// Runs just the embedding phase over an already-indexed book. Used when
+    /// semantic indexing is enabled after the book is `.lexicalReady`, or when
+    /// the configured embedding model changes (no full re-chunk needed).
+    public func embed(bookID: BookID, force: Bool = false) async throws {
+        var job = try await repository.job(for: bookID, version: Self.currentVersion)
+            ?? BookIndexJob(bookID: bookID, indexVersion: Self.currentVersion)
+        guard job.state == .lexicalReady || job.state == .ready else { return }
+        let chunks = try await repository.chunks(for: bookID, version: Self.currentVersion)
+        guard !chunks.isEmpty, let embeddings, let provider = await embeddings() else { return }
+        if !force, job.state == .ready, job.embeddingModel == provider.modelIdentifier {
+            let existing = try await repository.embeddings(bookID: bookID, model: provider.modelIdentifier)
+            guard existing.count < chunks.count else { return } // already fully embedded with this model
+        }
+        do {
+            try await embed(chunks: chunks, provider: provider, job: &job)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            job.state = .failed; job.lastError = String(describing: error); job.updatedAt = .init()
+            try? await repository.save(job: job); throw error
+        }
+    }
+
+    private func embed(chunks: [BookChunk], provider: any EmbeddingProvider, job: inout BookIndexJob) async throws {
+        job.state = .embedding
+        job.embeddingModel = provider.modelIdentifier
+        job.lastError = nil
+        job.updatedAt = .init()
+        try await repository.save(job: job)
+        for batch in chunks.batched(by: Self.embeddingBatchSize) {
+            try Task.checkCancellation()
+            let vectors = try await provider.embed(batch.map(\.text))
+            guard vectors.count == batch.count, vectors.allSatisfy({ $0.count == provider.dimensions }) else { throw RetrievalError.invalidEmbeddings }
+            try await repository.saveEmbeddings(
+                Dictionary(uniqueKeysWithValues: zip(batch.map(\.id), vectors)),
+                model: provider.modelIdentifier, dimensions: provider.dimensions
+            )
+            job.updatedAt = .init(); try await repository.save(job: job)
+        }
+        job.state = .ready
+        job.updatedAt = .init()
+        try await repository.save(job: job)
     }
 
     private func persist(_ blocks: [BookTextBlock], href: String, bookID: BookID) async throws {
@@ -117,7 +165,16 @@ public struct BookIndexPipeline: Sendable {
     }
 }
 
-public enum RetrievalError: Error { case invalidEmbeddings }
+private extension Array {
+    func batched(by size: Int) -> [[Element]] {
+        let strideSize = Swift.max(1, size)
+        return Swift.stride(from: 0, to: count, by: strideSize).map { start in
+            Array(self[start..<Swift.min(start + strideSize, count)])
+        }
+    }
+}
+
+public enum RetrievalError: Error { case invalidEmbeddings, missingExtractor }
 
 public struct AnnotationContext: Hashable, Sendable {
     public let nearby: [BookEvidence]

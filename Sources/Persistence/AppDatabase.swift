@@ -351,6 +351,19 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "status IN ('provisional', 'active', 'superseded')")
             }
         }
+
+        // RAG semantic layer. A separate, user-configured embedding model on the
+        // provider config (nil = lexical-only), and a per-job record of which
+        // model the book was embedded with (drives re-embed on model switch and
+        // the per-book RAG progress page). Additive: old installs upgrade intact.
+        migrator.registerMigration("v13_embedding_config") { db in
+            try db.alter(table: "providerConfigurations") { t in
+                t.add(column: "embeddingModelID", .text)
+            }
+            try db.alter(table: "bookIndexJobs") { t in
+                t.add(column: "embeddingModel", .text)
+            }
+        }
         return migrator
     }
 

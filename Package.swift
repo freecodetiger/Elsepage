@@ -31,7 +31,7 @@ let package = Package(
         .target(name: "ContextRouting", dependencies: ["AgentRuntime", "LibraryCore"]),
         .target(name: "RetrievalCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ContextRouting", "ReaderCore", "ReflectionCore", "RetrievalCore"]),
-        .target(name: "ModelProviders", dependencies: ["AgentRuntime"]),
+        .target(name: "ModelProviders", dependencies: ["AgentRuntime", "RetrievalCore"]),
         .target(
             name: "Persistence",
             dependencies: [
@@ -44,7 +44,7 @@ let package = Package(
             name: "ReadLoopCoreTests",
             dependencies: [
                 "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "SpeechCore", "RetrievalCore", "ContextRouting",
-                "AgentRuntime", "ReaderAgent", "Persistence", "AppInfrastructure",
+                "AgentRuntime", "ReaderAgent", "ModelProviders", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [.copy("Fixtures")]

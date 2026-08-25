@@ -12,15 +12,16 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         try await database.writer.read { db in
             guard let row = try Row.fetchOne(db, sql: "SELECT * FROM bookIndexJobs WHERE bookID=? AND indexVersion=?", arguments: [bookID.description, version]) else { return nil }
             return BookIndexJob(bookID: bookID, indexVersion: version, state: BookIndexState(rawValue: row["state"]) ?? .failed,
-                nextResourceOrdinal: row["nextResourceOrdinal"], lastError: row["lastError"], updatedAt: row["updatedAt"])
+                nextResourceOrdinal: row["nextResourceOrdinal"], lastError: row["lastError"], updatedAt: row["updatedAt"],
+                embeddingModel: row["embeddingModel"])
         }
     }
 
     public func save(job: BookIndexJob) async throws {
         try await database.writer.write { db in try db.execute(sql: """
-            INSERT INTO bookIndexJobs(bookID,indexVersion,state,nextResourceOrdinal,lastError,updatedAt) VALUES(?,?,?,?,?,?)
-            ON CONFLICT(bookID,indexVersion) DO UPDATE SET state=excluded.state,nextResourceOrdinal=excluded.nextResourceOrdinal,lastError=excluded.lastError,updatedAt=excluded.updatedAt
-            """, arguments: [job.bookID.description, job.indexVersion, job.state.rawValue, job.nextResourceOrdinal, job.lastError, job.updatedAt]) }
+            INSERT INTO bookIndexJobs(bookID,indexVersion,state,nextResourceOrdinal,lastError,updatedAt,embeddingModel) VALUES(?,?,?,?,?,?,?)
+            ON CONFLICT(bookID,indexVersion) DO UPDATE SET state=excluded.state,nextResourceOrdinal=excluded.nextResourceOrdinal,lastError=excluded.lastError,updatedAt=excluded.updatedAt,embeddingModel=excluded.embeddingModel
+            """, arguments: [job.bookID.description, job.indexVersion, job.state.rawValue, job.nextResourceOrdinal, job.lastError, job.updatedAt, job.embeddingModel]) }
     }
 
     public func replace(chunks: [BookChunk], for bookID: BookID, version: Int) async throws {
@@ -76,12 +77,15 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
     }
 
     public func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope = .readSoFar) async throws -> [(BookChunk, Double)] {
-        let terms = query.lowercased().split { !$0.isLetter && !$0.isNumber }
-            .map(String.init).filter { $0.count >= 3 }
-            .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }
+        // CJK-aware term building: a long Chinese sentence becomes a run of
+        // overlapping trigrams OR'd (recall) instead of one giant quoted phrase
+        // (which degraded to near-exact matching). Latin words ≥3 chars stay
+        // exact phrases. Short-only queries fall through to the instr() path.
+        let terms = Self.ftsTerms(for: query)
         return try await database.writer.read { db in
             if terms.isEmpty {
-                let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let needle = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !needle.isEmpty else { return [] }
                 var sql = "SELECT c.* FROM bookChunks c WHERE c.bookID=? AND instr(c.normalizedText, ?) > 0"
                 var arguments: StatementArguments = [bookID.description, needle]
@@ -145,6 +149,16 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         return try Int.fetchOne(db, sql: "SELECT resourceOrdinal FROM bookChunks WHERE bookID=? AND resourceHref=? ORDER BY resourceOrdinal LIMIT 1", arguments: [bookID.description, stripped])
     }
 
+    public func deleteIndex(for bookID: BookID, version: Int) async throws {
+        try await database.writer.write { db in
+            try db.execute(sql: "DELETE FROM bookTextBlocks WHERE bookID=? AND indexVersion=?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookChunks WHERE bookID=? AND indexVersion=?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookChapters WHERE bookID=? AND indexVersion=?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookSections WHERE bookID=? AND indexVersion=?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookIndexJobs WHERE bookID=? AND indexVersion=?", arguments: [bookID.description, version])
+        }
+    }
+
     public func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws {
         try await database.writer.write { db in
             for (id, vector) in embeddings {
@@ -191,5 +205,34 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
     private static func decode(_ data: Data, dimensions: Int) throws -> [Float] {
         guard data.count == dimensions * MemoryLayout<Float>.size else { throw RetrievalError.invalidEmbeddings }
         return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+
+    /// Builds FTS5 MATCH terms: CJK runs → overlapping trigrams OR'd (recall,
+    /// capped for FTS5 trigram query limits), latin words ≥3 chars → exact quoted
+    /// phrases. Empty when no token qualifies, in which case the caller uses the
+    /// instr() substring fallback (covers 2-char CJK words, e.g. 时间).
+    private static func ftsTerms(for query: String) -> [String] {
+        let folded = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        var terms: [String] = []
+        for token in folded.split { !$0.isLetter && !$0.isNumber }.map(String.init) {
+            if Self.containsCJK(token) {
+                if token.count >= 3 {
+                    let scalars = Array(token)
+                    for start in 0...(scalars.count - 3) {
+                        terms.append("\"\(String(scalars[start..<(start + 3)]))\"")
+                    }
+                }
+            } else if token.count >= 3 {
+                terms.append("\"\(token.replacingOccurrences(of: "\"", with: "\"\""))\"")
+            }
+        }
+        var seen = Set<String>()
+        return Array(terms.filter { seen.insert($0).inserted }.prefix(16))
+    }
+
+    private static func containsCJK(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            (0x3400...0x4DBF).contains(scalar.value) || (0x4E00...0x9FFF).contains(scalar.value)
+        }
     }
 }

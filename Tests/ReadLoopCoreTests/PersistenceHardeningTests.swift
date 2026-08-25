@@ -27,7 +27,7 @@ import Testing
             .map { row in String.fromDatabaseValue(row["name"])! }
     }
     #expect(columns.sorted() == [
-        "baseURL", "id", "modelID", "provider", "secretReference", "streamingEnabled"
+        "baseURL", "embeddingModelID", "id", "modelID", "provider", "secretReference", "streamingEnabled"
     ])
     #expect(!columns.contains("apiKey"))
 
@@ -56,8 +56,45 @@ import Testing
         "v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop",
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
-        "v11_polished_text", "v12_memory"
+        "v11_polished_text", "v12_memory", "v13_embedding_config"
     ])
+}
+
+@Test func migratesV12DatabaseToV13WithoutLosingData() async throws {
+    // A database created under v12 (Memory phase) must upgrade to v13 (embedding
+    // config columns) without deletion, keeping the pre-existing provider config
+    // and book index job rows intact.
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v12_memory")
+
+    let reference = SecretReference(rawValue: "legacy-provider-key")
+    try await queue.write { db in
+        try db.execute(
+            sql: "INSERT INTO providerConfigurations (id, provider, baseURL, modelID, secretReference, streamingEnabled) VALUES (?,?,?,?,?,?)",
+            arguments: ["00000000-0000-0000-0000-000000000001", "openAICompatible", "https://api.example.com/v1", "legacy-chat", reference.rawValue, 1]
+        )
+        try db.execute(
+            sql: "INSERT INTO books (id, fingerprint, title, fileName, fileSize, importedAt) VALUES (?,?,?,?,?,?)",
+            arguments: ["00000000-0000-0000-0000-000000000002", "legacy-book", "Legacy", "legacy.epub", 100, Date()]
+        )
+        try db.execute(
+            sql: "INSERT INTO bookIndexJobs (bookID, indexVersion, state, nextResourceOrdinal, lastError, updatedAt) VALUES (?,?,?,?,?,?)",
+            arguments: ["00000000-0000-0000-0000-000000000002", 1, "lexicalReady", 5, nil, Date()]
+        )
+    }
+
+    try AppDatabase.migrator.migrate(queue)
+    let repo = GRDBProviderConfigurationRepository(database: try AppDatabase(writer: queue))
+    let config = try await repo.currentConfiguration()
+    #expect(config?.modelID == "legacy-chat")
+    #expect(config?.embeddingModelID == nil)
+
+    let jobRow = try await queue.read { db in
+        try Row.fetchOne(db, sql: "SELECT state, embeddingModel FROM bookIndexJobs WHERE bookID=?", arguments: ["00000000-0000-0000-0000-000000000002"])
+    }
+    #expect(jobRow.flatMap { String.fromDatabaseValue($0["state"]) } == "lexicalReady")
+    #expect(jobRow.flatMap { String.fromDatabaseValue($0["embeddingModel"]) } == nil)
 }
 
 @Test func bookDeletionCascadesPositionHighlightsNotesAndPreferences() async throws {

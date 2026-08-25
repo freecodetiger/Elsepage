@@ -90,11 +90,15 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
     public let modelID: String
     public let secretReference: SecretReference
     public let streamingEnabled: Bool
+    /// Separate embedding model for the semantic retrieval layer. Nil means the
+    /// RAG stays lexical-only. Non-nil enables the `/embeddings` path against
+    /// the same `baseURL` and key as the chat model.
+    public let embeddingModelID: String?
 
     public init(
         id: UUID = UUID(), provider: ModelProviderKind, baseURL: URL,
         modelID: String, secretReference: SecretReference,
-        streamingEnabled: Bool = true
+        streamingEnabled: Bool = true, embeddingModelID: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -102,6 +106,7 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
         self.modelID = modelID
         self.secretReference = secretReference
         self.streamingEnabled = streamingEnabled
+        self.embeddingModelID = embeddingModelID
     }
 }
 
