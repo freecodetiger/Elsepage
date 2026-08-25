@@ -33,7 +33,7 @@ let package = Package(
         .target(
             name: "Persistence",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "RetrievalCore", "ModelProviders",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "RetrievalCore", "ModelProviders", "ContextRouting",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),

@@ -233,6 +233,18 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "dimensions > 0")
             }
         }
+        // P0-3 Router observability. Derives only: plan summary, statistics,
+        // durations, evidence IDs, token usage and fallback cause live inside
+        // the encoded `ContextPlanTrace`; no raw user text or Reflection body.
+        // Numbering is re-sequenced by the coordinator at merge time.
+        migrator.registerMigration("v8_pending_router_trace") { db in
+            try db.create(table: "routingTraces") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("createdAt", .datetime).notNull().indexed()
+                t.column("traceJSON", .blob).notNull()
+            }
+        }
         return migrator
     }
 
