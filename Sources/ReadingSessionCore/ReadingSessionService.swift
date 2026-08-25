@@ -74,6 +74,26 @@ public struct SessionEndingSummary: Hashable, Sendable {
     }
 
     public var shouldOfferReflection: Bool {
-        session.endedAt != nil
+        MeaningfulReadingSessionPolicy().shouldOfferReflection(for: self)
+    }
+}
+
+/// A deterministic product policy which prevents accidental or very short opens
+/// from becoming Reflection prompts.
+public struct MeaningfulReadingSessionPolicy: Sendable {
+    public let minimumDuration: TimeInterval
+    public let minimumProgressDelta: Double
+
+    public init(minimumDuration: TimeInterval = 3 * 60, minimumProgressDelta: Double = 0.005) {
+        self.minimumDuration = minimumDuration
+        self.minimumProgressDelta = minimumProgressDelta
+    }
+
+    public func shouldOfferReflection(for summary: SessionEndingSummary) -> Bool {
+        guard summary.session.endedAt != nil else { return false }
+        return summary.wallClockDuration >= minimumDuration
+            || (summary.progressDelta ?? 0) >= minimumProgressDelta
+            || summary.session.highlightCount > 0
+            || summary.session.noteCount > 0
     }
 }

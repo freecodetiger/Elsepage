@@ -41,7 +41,7 @@ import Testing
 
     #expect(summary.wallClockDuration == 0)
     #expect(summary.progressDelta == 0)
-    #expect(summary.shouldOfferReflection)
+    #expect(!summary.shouldOfferReflection)
 }
 
 @Test func textReflectionSavesRawTextBeforeAnyDerivedContentAndRetriesIdempotently() async throws {

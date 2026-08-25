@@ -66,6 +66,27 @@ public struct ReflectionMessage: Hashable, Codable, Sendable, Identifiable {
     public var isUserSourceOfTruth: Bool { source == .userInput }
 }
 
+/// A deterministic, evidence-backed link from the current thought to one past
+/// user-authored Reflection. It is derived data and never replaces either source.
+public struct ReflectionConnection: Hashable, Codable, Sendable, Identifiable {
+    public let id: UUID
+    public let reflectionID: ReflectionID
+    public let sourceReflectionID: ReflectionID
+    public let relevance: Double
+    public let createdAt: Date
+
+    public init(
+        id: UUID = UUID(), reflectionID: ReflectionID, sourceReflectionID: ReflectionID,
+        relevance: Double, createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.reflectionID = reflectionID
+        self.sourceReflectionID = sourceReflectionID
+        self.relevance = min(1, max(0, relevance))
+        self.createdAt = createdAt
+    }
+}
+
 public enum ReflectionEvidenceSourceType: String, Codable, Sendable {
     case bookLocator, highlight, note, readingSession
 }
@@ -101,6 +122,10 @@ public protocol ReflectionRepository: Sendable {
     func linkedHighlightIDs(for reflectionID: ReflectionID) async throws -> [UUID]
     func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage]
     func appendMessage(_ message: ReflectionMessage) async throws
+    func message(id: UUID) async throws -> ReflectionMessage?
+    func recentReflections(limit: Int) async throws -> [Reflection]
+    func connections(for reflectionID: ReflectionID) async throws -> [ReflectionConnection]
+    func saveConnection(_ connection: ReflectionConnection) async throws
     func evidence(for reflectionID: ReflectionID) async throws -> [ReflectionEvidence]
     func appendEvidence(_ evidence: ReflectionEvidence) async throws
     func delete(id: ReflectionID) async throws

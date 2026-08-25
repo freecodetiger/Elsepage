@@ -7,15 +7,8 @@ import SwiftUI
 
 @MainActor @Observable
 final class TodayModel {
-    enum State {
-        case noBook
-        case ready(Book)
-        case reflectionAvailable(Book, SessionEndingSummary, BookLocator)
-        case reflectionComplete(Book)
-    }
-
     let library: LibraryModel
-    private(set) var state: State = .noBook
+    private(set) var state: TodayProductState = .noCurrentBook
     private(set) var isLoading = false
 
     init(library: LibraryModel) { self.library = library }
@@ -26,25 +19,21 @@ final class TodayModel {
         defer { isLoading = false }
         await library.reload()
         guard let book = library.books.max(by: { ($0.lastOpenedAt ?? $0.importedAt) < ($1.lastOpenedAt ?? $1.importedAt) }) else {
-            state = .noBook
+            state = .noCurrentBook
             return
         }
         do {
             let reflections = try await library.reflectionRepository.reflections(for: book.id)
             let sessions = try await library.sessionRepository.sessions(for: book.id)
-            if let session = sessions.first(where: { session in
-                session.endedAt != nil && !reflections.contains(where: { $0.sessionID == session.id })
-            }), let locator = session.endLocator {
-                state = .reflectionAvailable(book, .init(session: session), locator)
-            } else if reflections.contains(where: { Calendar.current.isDateInToday($0.createdAt) }) {
-                state = .reflectionComplete(book)
-            } else {
-                state = .ready(book)
-            }
+            state = TodayProductStateResolver.resolve(
+                currentBook: book,
+                sessions: sessions,
+                reflections: reflections
+            )
         } catch is CancellationError {
             return
         } catch {
-            state = .ready(book)
+            state = .continueReading(book)
         }
     }
 }
@@ -52,11 +41,16 @@ final class TodayModel {
 struct TodayView: View {
     @State private var model: TodayModel
     @State private var reflection: SessionReflectionModel?
-    @State private var showsReflection = false
+    let openBook: (Book) -> Void
     let openLibrary: () -> Void
 
-    init(library: LibraryModel, openLibrary: @escaping () -> Void) {
+    init(
+        library: LibraryModel,
+        openBook: @escaping (Book) -> Void,
+        openLibrary: @escaping () -> Void
+    ) {
         _model = State(initialValue: TodayModel(library: library))
+        self.openBook = openBook
         self.openLibrary = openLibrary
     }
 
@@ -71,9 +65,9 @@ struct TodayView: View {
             .navigationTitle("今天")
             .navigationBarTitleDisplayMode(.large)
             .task { await model.reload() }
-            .sheet(isPresented: $showsReflection) {
-                if let reflection {
-                    SessionReflectionSheet(model: reflection) { _ in Task { await model.reload() } }
+            .sheet(item: $reflection) { reflection in
+                SessionReflectionSheet(model: reflection) { _ in
+                    Task { await model.reload() }
                 }
             }
         }
@@ -81,17 +75,23 @@ struct TodayView: View {
 
     @ViewBuilder private var content: some View {
         switch model.state {
-        case .noBook:
+        case .noCurrentBook:
             ContentUnavailableView("带一本书进来", systemImage: "books.vertical", description: Text("从书架导入 EPUB，今天就可以从一页开始。"))
-        case .ready(let book):
-            todayCard(book: book, title: "读一点就好。", action: "去书架") { openLibrary() }
-        case .reflectionAvailable(let book, let summary, let locator):
+        case .continueReading(let book):
+            todayCard(book: book, title: "今天，读一点就好。", action: "继续阅读") { openBook(book) }
+        case .offerReflection(let book, let session):
             todayCard(book: book, title: "刚才有什么东西，还留在脑子里吗？", action: "留下一点想法") {
-                reflection = SessionReflectionModel(book: book, summary: summary, locator: locator, reflectionRepository: model.library.reflectionRepository)
-                showsReflection = true
+                guard let locator = session.endLocator else { return }
+                reflection = SessionReflectionModel(
+                    book: book,
+                    summary: SessionEndingSummary(session: session),
+                    locator: locator,
+                    reflectionRepository: model.library.reflectionRepository,
+                    readerAgent: model.library.readerAgent
+                )
             }
         case .reflectionComplete(let book):
-            todayCard(book: book, title: "今天已经留下来了。", action: "继续阅读") { openLibrary() }
+            todayCard(book: book, title: "今天已经留下来了。", action: "继续阅读") { openBook(book) }
         }
     }
 

@@ -41,6 +41,7 @@ final class AppModel {
                 reading: reading,
                 sessions: sessions,
                 reflections: reflections,
+                readerAgent: readerAgent,
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),
                 readium: readium

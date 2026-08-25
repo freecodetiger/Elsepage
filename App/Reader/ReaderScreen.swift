@@ -7,6 +7,14 @@ struct ReaderScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State var model: ReaderModel
     @State private var presentedSheet: ReaderSheet?
+    @State private var reflectionPrompt: SessionReflectionModel?
+    @State private var dismissAfterReflection = false
+    let onReflectionSaved: () -> Void
+
+    init(model: ReaderModel, onReflectionSaved: @escaping () -> Void = {}) {
+        _model = State(initialValue: model)
+        self.onReflectionSaved = onReflectionSaved
+    }
 
     var body: some View {
         ZStack {
@@ -50,6 +58,14 @@ struct ReaderScreen: View {
         }
         .sheet(item: $model.noteEditor) { request in
             ReaderNoteEditorSheet(model: model, request: request)
+        }
+        .sheet(item: $model.contextReflection) { reflection in
+            SessionReflectionSheet(model: reflection) { _ in }
+        }
+        .sheet(item: $reflectionPrompt, onDismiss: {
+            if dismissAfterReflection { dismiss() }
+        }) { reflection in
+            SessionReflectionSheet(model: reflection) { _ in onReflectionSaved() }
         }
         .alert("无法完成操作", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -130,7 +146,9 @@ struct ReaderScreen: View {
     private var readerChrome: some View {
         VStack(spacing: ElsepageTheme.Spacing.small) {
             HStack(spacing: ElsepageTheme.Spacing.medium) {
-                ElsepageIconButton(systemName: "chevron.left", accessibilityLabel: "返回书架") { dismiss() }
+                ElsepageIconButton(systemName: "chevron.left", accessibilityLabel: "读到这里并返回") {
+                    finishReading()
+                }
                 if model.canNavigateBack {
                     ElsepageIconButton(systemName: "arrow.uturn.backward", accessibilityLabel: "返回跳转前位置") {
                         model.navigateBack()
@@ -161,6 +179,9 @@ struct ReaderScreen: View {
                 Button { presentedSheet = .annotations } label: {
                     Label("标注", systemImage: "highlighter").labelStyle(.iconOnly)
                 }
+                Button { finishReading() } label: {
+                    Label("读到这里", systemImage: "bookmark")
+                }
                 ProgressView(value: model.progress)
                     .tint(.elsepageAccent)
                     .accessibilityLabel("阅读进度")
@@ -176,6 +197,28 @@ struct ReaderScreen: View {
             .background(ElsepageTheme.MaterialToken.chrome)
         }
         .foregroundStyle(.primary)
+    }
+
+    private func finishReading() {
+        Task {
+            guard let summary = await model.endReadingSession(),
+                  let locator = summary.session.endLocator else {
+                dismiss()
+                return
+            }
+            guard summary.shouldOfferReflection else {
+                dismiss()
+                return
+            }
+            dismissAfterReflection = true
+            reflectionPrompt = SessionReflectionModel(
+                book: model.book,
+                summary: summary,
+                locator: locator,
+                reflectionRepository: model.reflectionRepository,
+                readerAgent: model.readerAgent
+            )
+        }
     }
 
     private var themeBackground: Color {

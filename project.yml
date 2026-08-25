@@ -87,6 +87,10 @@ targets:
       - package: ReadLoopCore
         product: ReflectionCore
       - package: ReadLoopCore
+        product: AgentRuntime
+      - package: ReadLoopCore
+        product: ReaderAgent
+      - package: ReadLoopCore
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure

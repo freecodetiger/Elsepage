@@ -159,7 +159,7 @@ import Testing
 
     #expect(input.metadata.agentKind == "reader.reflection")
     #expect(input.metadata.promptVersion == "reader-test-v2")
-    #expect(input.metadata.contextRecipeVersion == "reflection-only-v1")
+    #expect(input.metadata.contextRecipeVersion == "reflection-history-lexical-v1")
     #expect(input.messages.last?.role == .user)
     #expect(input.messages.last?.content == reflection.originalText)
 }
@@ -233,6 +233,10 @@ private actor ReflectionRepositoryFake: ReflectionRepository {
     func linkedHighlightIDs(for reflectionID: ReflectionID) -> [UUID] { [] }
     func messages(for reflectionID: ReflectionID) -> [ReflectionMessage] { messages }
     func appendMessage(_ message: ReflectionMessage) { messages.append(message) }
+    func message(id: UUID) -> ReflectionMessage? { messages.first { $0.id == id } }
+    func recentReflections(limit: Int) -> [Reflection] { stored.map { [$0] } ?? [] }
+    func connections(for reflectionID: ReflectionID) -> [ReflectionConnection] { [] }
+    func saveConnection(_ connection: ReflectionConnection) {}
     func evidence(for reflectionID: ReflectionID) -> [ReflectionEvidence] { [] }
     func appendEvidence(_ evidence: ReflectionEvidence) throws {}
     func delete(id: ReflectionID) throws {}

@@ -153,6 +153,18 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "length(trim(modelID)) > 0")
             }
         }
+        migrator.registerMigration("v6_reflection_connections") { db in
+            try db.create(table: "reflectionConnections") { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("sourceReflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("relevance", .double).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.uniqueKey(["reflectionID", "sourceReflectionID"])
+                t.check(sql: "reflectionID <> sourceReflectionID")
+                t.check(sql: "relevance >= 0 AND relevance <= 1")
+            }
+        }
         return migrator
     }
 

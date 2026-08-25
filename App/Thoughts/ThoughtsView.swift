@@ -1,3 +1,5 @@
+import LibraryCore
+import ReaderCore
 import ReflectionCore
 import SwiftUI
 
@@ -5,6 +7,7 @@ struct ThoughtsView: View {
     @Bindable var model: ThoughtsModel
     @Bindable var providerSettings: ProviderSettingsModel
     @State private var showsProviderSettings = false
+    let openSource: (Book, BookLocator) -> Void
 
     var body: some View {
         NavigationStack {
@@ -30,7 +33,8 @@ struct ThoughtsView: View {
                                         } else {
                                             showsProviderSettings = true
                                         }
-                                    }
+                                    },
+                                    openSource: openSource
                                 )
                             }
                         }
@@ -70,6 +74,7 @@ private struct ThoughtEntryCard: View {
     let entry: ReflectionArchiveEntry
     let isReplying: Bool
     let requestReply: () -> Void
+    let openSource: (Book, BookLocator) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
@@ -112,6 +117,40 @@ private struct ThoughtEntryCard: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(isReplying)
+            }
+            if !entry.messages.isEmpty {
+                ForEach(entry.messages.filter { $0.id != entry.derivedAgentResponse?.id }) { message in
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(message.author == .user ? "继续说" : "回应")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(message.content).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            if let connection = entry.connections.first {
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("过去的你")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.elsepageAccent)
+                    Text(connection.sourceReflection.originalText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                    if let locator = connection.sourceLocator {
+                        Button("回到《\(connection.sourceBook.title)》") {
+                            openSource(connection.sourceBook, locator)
+                        }
+                        .font(.footnote.weight(.medium))
+                    }
+                }
+            }
+            if let locator = entry.sourceLocator {
+                Divider()
+                Button("回到原文") { openSource(entry.book, locator) }
+                    .font(.footnote.weight(.medium))
             }
         }
         .padding(ElsepageTheme.Spacing.medium)

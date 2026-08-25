@@ -3,6 +3,7 @@ import Foundation
 import LibraryCore
 import Observation
 import ReaderCore
+import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
 import UIKit
@@ -18,6 +19,7 @@ final class LibraryModel {
     private let importer: BookImporter
     private let metadataReader: ReadiumMetadataReader
     private let readium: ReadiumServices
+    let readerAgent: ReaderAgent
 
     private(set) var books: [Book] = []
     private(set) var readingProgress: [BookID: Double] = [:]
@@ -34,6 +36,7 @@ final class LibraryModel {
         reading: any ReadingRepository,
         sessions: any ReadingSessionRepository,
         reflections: any ReflectionRepository,
+        readerAgent: ReaderAgent,
         files: BookFileStore,
         metadataReader: ReadiumMetadataReader,
         readium: ReadiumServices
@@ -42,6 +45,7 @@ final class LibraryModel {
         reflectionRepository = reflections
         sessionRepository = sessions
         sessionService = ReadingSessionService(repository: sessions)
+        self.readerAgent = readerAgent
         importer = BookImporter(repository: books, files: files)
         self.metadataReader = metadataReader
         self.readium = readium
@@ -74,7 +78,7 @@ final class LibraryModel {
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func readerModel(for book: Book) -> ReaderModel {
+    func readerModel(for book: Book, locator: BookLocator? = nil) -> ReaderModel {
         ReaderModel(
             book: book,
             fileURL: files.url(for: book.id),
@@ -82,6 +86,8 @@ final class LibraryModel {
             books: booksRepository,
             sessions: sessionService,
             reflections: reflectionRepository,
+            readerAgent: readerAgent,
+            requestedLocator: locator,
             readium: readium
         )
     }

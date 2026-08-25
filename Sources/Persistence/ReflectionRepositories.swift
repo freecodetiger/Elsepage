@@ -112,7 +112,43 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
     }
 
     public func appendMessage(_ message: ReflectionMessage) async throws {
-        try await db.writer.write { db in try ReflectionMessageRecord(message).insert(db) }
+        try await db.writer.write { db in
+            if let existing = try ReflectionMessageRecord.fetchOne(db, key: message.id.uuidString.lowercased()) {
+                guard try existing.domain() == message else { throw PersistenceError.inconsistentReflectionContext }
+                return
+            }
+            try ReflectionMessageRecord(message).insert(db)
+        }
+    }
+
+    public func message(id: UUID) async throws -> ReflectionMessage? {
+        try await db.writer.read { db in
+            try ReflectionMessageRecord.fetchOne(db, key: id.uuidString.lowercased())?.domain()
+        }
+    }
+
+    public func recentReflections(limit: Int) async throws -> [Reflection] {
+        try await db.writer.read { db in
+            try ReflectionRecord.order(Column("createdAt").desc)
+                .limit(max(0, limit)).fetchAll(db).map { try $0.domain }
+        }
+    }
+
+    public func connections(for reflectionID: ReflectionID) async throws -> [ReflectionConnection] {
+        try await db.writer.read { db in
+            try ReflectionConnectionRecord.filter(Column("reflectionID") == reflectionID.description)
+                .order(Column("relevance").desc, Column("createdAt").desc)
+                .fetchAll(db).map { try $0.domain() }
+        }
+    }
+
+    public func saveConnection(_ connection: ReflectionConnection) async throws {
+        try await db.writer.write { db in
+            guard connection.reflectionID != connection.sourceReflectionID else {
+                throw PersistenceError.inconsistentReflectionContext
+            }
+            try ReflectionConnectionRecord(connection).insert(db, onConflict: .ignore)
+        }
     }
 
     public func evidence(for reflectionID: ReflectionID) async throws -> [ReflectionEvidence] {
@@ -156,6 +192,38 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
             db, sql: "SELECT bookID FROM \(table) WHERE id = ?", arguments: [sourceID.lowercased()]
         )
         guard sourceBookID == bookID.description else { throw PersistenceError.inconsistentReflectionContext }
+    }
+}
+
+private struct ReflectionConnectionRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "reflectionConnections"
+    var id, reflectionID, sourceReflectionID: String
+    var relevance: Double
+    var createdAt: Date
+
+    init(_ connection: ReflectionConnection) {
+        id = connection.id.uuidString.lowercased()
+        reflectionID = connection.reflectionID.description
+        sourceReflectionID = connection.sourceReflectionID.description
+        relevance = connection.relevance
+        createdAt = connection.createdAt
+    }
+
+    func domain() throws -> ReflectionConnection {
+        guard let id = UUID(uuidString: id),
+              let reflectionID = UUID(uuidString: reflectionID),
+              let sourceReflectionID = UUID(uuidString: sourceReflectionID) else {
+            throw PersistenceError.corruptRecord(
+                table: Self.databaseTableName, recordID: self.id, field: "identity"
+            )
+        }
+        return ReflectionConnection(
+            id: id,
+            reflectionID: .init(rawValue: reflectionID),
+            sourceReflectionID: .init(rawValue: sourceReflectionID),
+            relevance: relevance,
+            createdAt: createdAt
+        )
     }
 }
 

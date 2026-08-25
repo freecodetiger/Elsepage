@@ -49,7 +49,7 @@ final class ThoughtsModel {
                 await reload()
             case .failed(let failure):
                 errorMessage = Self.message(for: failure)
-            case .started, .textDelta, .cancelled:
+            case .started, .contextPrepared, .textDelta, .cancelled:
                 break
             }
         }
@@ -60,6 +60,7 @@ final class ThoughtsModel {
         case .missingReflection: "找不到这条 Reflection。"
         case .providerNotConfigured: "请先配置并测试 AI Provider。"
         case .emptyResponse: "Provider 没有返回可显示的内容。"
+        case .emptyUserMessage: "请先写下想继续说的内容。"
         case .persistence: "Agent 回复无法保存到本机。"
         case .runtime(let failure):
             switch failure {

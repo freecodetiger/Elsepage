@@ -2,6 +2,7 @@ import Foundation
 import LibraryCore
 import Observation
 import ReaderCore
+import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
 
@@ -12,6 +13,7 @@ final class ReaderModel {
     let repository: any ReadingRepository
     private let books: any BookRepository
     let reflectionRepository: any ReflectionRepository
+    let readerAgent: ReaderAgent
     private let sessions: ReadingSessionService
     let readium: ReadiumServices
     var initialLocatorJSON: Data?
@@ -29,6 +31,7 @@ final class ReaderModel {
     var jumpTargetJSON: Data?
     var selectedHighlightID: UUID?
     var noteEditor: ReaderNoteEditorRequest?
+    var contextReflection: SessionReflectionModel?
     private(set) var currentLocator: BookLocator?
     private(set) var canNavigateBack = false
     private(set) var activeSession: ReadingSession?
@@ -50,20 +53,30 @@ final class ReaderModel {
         books: any BookRepository,
         sessions: ReadingSessionService,
         reflections: any ReflectionRepository,
+        readerAgent: ReaderAgent,
+        requestedLocator: BookLocator? = nil,
         readium: ReadiumServices
     ) {
         self.book = book; self.fileURL = fileURL; self.repository = repository; self.books = books
         self.sessions = sessions; reflectionRepository = reflections
+        self.readerAgent = readerAgent
         self.readium = readium
+        if let requestedLocator {
+            initialLocatorJSON = requestedLocator.json
+            currentLocator = requestedLocator
+            progress = requestedLocator.totalProgression ?? 0
+        }
     }
     func prepare() async {
         guard !isPrepared else { return }
         do {
             let position = try await repository.position(for: book.id)
             try Task.checkCancellation()
-            initialLocatorJSON = position?.locator.json
-            currentLocator = position?.locator
-            progress = position?.locator.totalProgression ?? 0
+            if initialLocatorJSON == nil {
+                initialLocatorJSON = position?.locator.json
+                currentLocator = position?.locator
+                progress = position?.locator.totalProgression ?? 0
+            }
             preferences = try await repository.preferences(for: book.id)
             try Task.checkCancellation()
             highlights = try await repository.highlights(for: book.id)
@@ -91,6 +104,11 @@ final class ReaderModel {
             try? await Task.sleep(for: .milliseconds(750))
             guard !Task.isCancelled else { return }
             await self?.flushPosition()
+        }
+        if let activeSession, activeSession.endedAt != nil,
+           let end = activeSession.endLocator,
+           !end.identifiesSameAnchor(as: locator) {
+            self.activeSession = nil
         }
         if activeSession == nil {
             Task { [weak self] in await self?.startSessionIfNeeded(at: locator) }
@@ -296,8 +314,8 @@ final class ReaderModel {
             let completed = try await sessions.end(
                 id: session.id,
                 at: locator,
-                highlightCount: highlights.count,
-                noteCount: notes.count
+                highlightCount: highlights.filter { $0.createdAt >= session.startedAt }.count,
+                noteCount: notes.filter { $0.createdAt >= session.startedAt }.count
             )
             activeSession = completed
             return SessionEndingSummary(session: completed)
@@ -306,6 +324,29 @@ final class ReaderModel {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    func reflect(on locator: BookLocator) async {
+        do {
+            let session: ReadingSession
+            if let activeSession, activeSession.endedAt == nil {
+                session = activeSession
+            } else {
+                session = try await sessions.start(bookID: book.id, at: locator)
+                activeSession = session
+            }
+            contextReflection = SessionReflectionModel(
+                book: book,
+                summary: SessionEndingSummary(session: session),
+                locator: locator,
+                reflectionRepository: reflectionRepository,
+                readerAgent: readerAgent
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

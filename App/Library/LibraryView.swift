@@ -4,9 +4,15 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Bindable var model: LibraryModel
+    let onReflectionSaved: () -> Void
     @State private var importing = false
     @State private var selectedBook: Book?
     @State private var deletingBook: Book?
+
+    init(model: LibraryModel, onReflectionSaved: @escaping () -> Void = {}) {
+        self.model = model
+        self.onReflectionSaved = onReflectionSaved
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,7 +47,7 @@ struct LibraryView: View {
                 if case .success(let urls) = result, let url = urls.first { Task { await model.importBook(url) } }
             }
             .navigationDestination(item: $selectedBook) { book in
-                ReaderScreen(model: model.readerModel(for: book))
+                ReaderScreen(model: model.readerModel(for: book), onReflectionSaved: onReflectionSaved)
             }
             .searchable(text: $model.searchQuery, prompt: "搜索书名或作者")
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }

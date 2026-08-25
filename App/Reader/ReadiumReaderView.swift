@@ -53,6 +53,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     let actions = [
                         EditingAction(title: "高亮", action: #selector(ReaderHostViewController.highlightSelection)),
                         EditingAction(title: "笔记", action: #selector(ReaderHostViewController.noteSelection)),
+                        EditingAction(title: "聊聊这句", action: #selector(ReaderHostViewController.reflectOnSelection)),
                         .copy,
                     ]
                     let navigator = try EPUBNavigatorViewController(
@@ -302,5 +303,12 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
               let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
         model.noteEditor = .init(locator: anchor, note: nil, highlight: nil)
         navigator.clearSelection()
+    }
+
+    @objc func reflectOnSelection() {
+        guard let navigator, let selection = navigator.currentSelection,
+              let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
+        navigator.clearSelection()
+        Task { await model.reflect(on: anchor) }
     }
 }

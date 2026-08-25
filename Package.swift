@@ -38,7 +38,7 @@ let package = Package(
             name: "ReadLoopCoreTests",
             dependencies: [
                 "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore",
-                "Persistence", "AppInfrastructure",
+                "AgentRuntime", "ReaderAgent", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [.copy("Fixtures")]
