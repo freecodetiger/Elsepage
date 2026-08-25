@@ -34,12 +34,14 @@ final class ThoughtsModel {
         index: any BookIndexRepository,
         journal: any JournalRepository,
         readerAgent: ReaderAgent,
-        traceRepository: (any RoutingTraceRepository)? = nil
+        traceRepository: (any RoutingTraceRepository)? = nil,
+        memoryRepository: (any MemoryRepository)? = nil
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
         journalService = JournalEntryService(
             books: books, reflections: reflections,
-            sessions: sessions, index: index, reading: reading, journal: journal
+            sessions: sessions, index: index, reading: reading, journal: journal,
+            memoryRepository: memoryRepository
         )
         self.readerAgent = readerAgent
         self.traceRepository = traceRepository
