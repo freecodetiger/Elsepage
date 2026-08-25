@@ -24,8 +24,8 @@ import Testing
 
     let repository = GRDBRoutingTraceRepository(database: database)
     let reflectionID = reflection.id.description
-    let first = makeTrace(reflectionID: reflectionID, detail: "network", seconds: [0.2, 0.5, 1.5])
-    let second = makeTrace(reflectionID: reflectionID, detail: "rateLimited", seconds: [0.3, 0.6, 2.0])
+    let first = makeTrace(reflectionID: reflectionID, detail: "network", seconds: [0.2, 0.5, 1.5], createdAt: Date(timeIntervalSince1970: 1000))
+    let second = makeTrace(reflectionID: reflectionID, detail: "rateLimited", seconds: [0.3, 0.6, 2.0], createdAt: Date(timeIntervalSince1970: 2000))
     try await repository.save(first)
     try await repository.save(second)
 
@@ -99,7 +99,7 @@ import Testing
     #expect(try await repository.latestTrace(for: reflection.id.description) == nil)
 }
 
-private func makeTrace(reflectionID: String, detail: String?, seconds: [Double]) -> ContextPlanTrace {
+private func makeTrace(reflectionID: String, detail: String?, seconds: [Double], createdAt: Date = Date()) -> ContextPlanTrace {
     let proposed = ReaderContextPlan(
         intent: .passageObservation, nearbyPassage: .include, bookRetrieval: nil,
         pastThoughtRetrieval: nil,
@@ -116,6 +116,7 @@ private func makeTrace(reflectionID: String, detail: String?, seconds: [Double])
     let validated = ContextPlanValidator().validate(proposed, input: input)
     return ContextPlanTrace(
         reflectionID: reflectionID,
+        createdAt: createdAt,
         proposedPlan: proposed,
         validatedPlan: validated,
         usedFallback: detail != nil,
