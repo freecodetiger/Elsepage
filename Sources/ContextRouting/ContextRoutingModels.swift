@@ -37,8 +37,23 @@ public struct AvailableContextSources: Hashable, Codable, Sendable {
     public let hasNearbyPassage: Bool
     public let hasBookIndex: Bool
     public let hasPastThoughts: Bool
+    /// Session-scoped availability signals. Nullable so existing call sites keep
+    /// the compact initializer and the Router can treat absence as "unknown".
+    public let hasSessionHighlight: Bool?
+    public let hasSessionNote: Bool?
+    public let hasBookReflections: Bool?
+
     public init(hasNearbyPassage: Bool, hasBookIndex: Bool, hasPastThoughts: Bool) {
         self.hasNearbyPassage = hasNearbyPassage; self.hasBookIndex = hasBookIndex; self.hasPastThoughts = hasPastThoughts
+        self.hasSessionHighlight = nil; self.hasSessionNote = nil; self.hasBookReflections = nil
+    }
+
+    public init(
+        hasNearbyPassage: Bool, hasBookIndex: Bool, hasPastThoughts: Bool,
+        hasSessionHighlight: Bool?, hasSessionNote: Bool?, hasBookReflections: Bool?
+    ) {
+        self.hasNearbyPassage = hasNearbyPassage; self.hasBookIndex = hasBookIndex; self.hasPastThoughts = hasPastThoughts
+        self.hasSessionHighlight = hasSessionHighlight; self.hasSessionNote = hasSessionNote; self.hasBookReflections = hasBookReflections
     }
 }
 

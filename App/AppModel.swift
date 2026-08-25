@@ -38,6 +38,11 @@ final class AppModel {
                 contextBuilder: ReaderAgentContextBuilder(
                     retriever: LocalBookRetriever(repository: bookIndex),
                     repository: bookIndex
+                ),
+                sessionContextBuilder: SessionContextBuilder(
+                    sessions: sessions,
+                    reading: reading,
+                    reflections: reflections
                 )
             )
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
