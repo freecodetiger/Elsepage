@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?style=for-the-badge&logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/Local%20first-No%20backend-9cb099?style=for-the-badge" alt="Local first">
   <img src="https://img.shields.io/badge/BYOK-Your%20key%2C%20your%20data-5f6e5f?style=for-the-badge" alt="BYOK">
-  <img src="https://img.shields.io/badge/tests-123%20passing-9cb099?style=for-the-badge" alt="123 tests">
+  <img src="https://img.shields.io/badge/tests-149%20passing-9cb099?style=for-the-badge" alt="149 tests">
 </p>
 
 <p align="center">
@@ -91,16 +91,16 @@ If you want an iOS reader that treats **what you thought** as the deliverable, y
 
 ## Status
 
-A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **123 tests green**, and an unsigned iOS build gate passes.
+A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **149 tests green**, and an unsigned iOS build gate passes.
 
 | Area | State |
 |------|-------|
 | Reader foundation | ~85% |
-| Reflection loop | ~70% |
-| Book context / Agent | ~60% (citations now grounded and locally verified) |
+| Reflection loop | ~80% |
+| Book context / Agent | ~75% (citations grounded; cross-book + memory retrieval) |
 | Voice reflection | shipped: hold/tap, MP3, AI polish |
-| Memory / personal context | early — the next phase |
-| Habit / onboarding / release polish | early |
+| Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall |
+| Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
 
 Open backlog and ideas: [Issues](https://github.com/freecodetiger/Elsepage/issues).
 
@@ -124,7 +124,7 @@ open ReadLoop.xcodeproj    # resolve packages, run the ReadLoop scheme
 The portable suite needs no Xcode:
 
 ```bash
-swift test                 # 123 tests
+swift test                 # 149 tests
 ```
 
 A device/simulator run needs the full Xcode install — Readium's navigator is UIKit-based. Manual-device checks are tracked in `docs/READER_FOUNDATION_XCODE_GATE.md`.
