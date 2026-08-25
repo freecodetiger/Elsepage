@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#1F2420"/>
+  <!-- open book, app sage palette: dark #9CB099, light #5F6E5F -->
+  <path d="M64 34 C 50 24, 28 27, 22 34 L 22 94 C 28 87, 50 85, 64 96 Z" fill="#9CB099"/>
+  <path d="M64 34 C 78 24, 100 27, 106 34 L 106 94 C 100 87, 78 85, 64 96 Z" fill="#5F6E5F"/>
+  <path d="M64 34 L 64 96" stroke="#1F2420" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M34 46 C 42 41, 54 41, 60 45" stroke="#1F2420" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M34 60 C 42 55, 54 55, 60 59" stroke="#1F2420" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M94 46 C 86 41, 74 41, 68 45" stroke="#1F2420" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>
