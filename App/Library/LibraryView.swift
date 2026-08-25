@@ -104,10 +104,10 @@ struct LibraryView: View {
             // Use two equal, compressible columns. An adaptive column can use a
             // wide cover image's ideal width and make neighboring cards overlap.
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(minimum: 0), spacing: ElsepageTheme.Spacing.medium),
-                    GridItem(.flexible(minimum: 0), spacing: ElsepageTheme.Spacing.medium)
-                ],
+                columns: Array(
+                    repeating: GridItem(.flexible(minimum: 0), spacing: ElsepageTheme.Spacing.medium),
+                    count: LibraryGridLayout.columnCount
+                ),
                 spacing: ElsepageTheme.Spacing.xLarge
             ) {
                 ForEach(model.visibleBooks) { book in
@@ -126,7 +126,7 @@ struct LibraryView: View {
                                 )
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
-                            .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                            .aspectRatio(LibraryGridLayout.coverAspectRatio, contentMode: .fit)
                             .task(id: book.id) { await model.loadCover(for: book) }
                             Text(book.title)
                                 .font(ElsepageTheme.Typography.itemTitle)
@@ -144,6 +144,7 @@ struct LibraryView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .clipped()
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .ignore)
