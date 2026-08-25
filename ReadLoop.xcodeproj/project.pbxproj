@@ -684,7 +684,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Reader;
+				INFOPLIST_KEY_CFBundleDisplayName = "页外";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录下你的阅读感想并在本机转写。";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于把你的语音感想转成可编辑文字。";
@@ -858,7 +858,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Reader;
+				INFOPLIST_KEY_CFBundleDisplayName = "页外";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录下你的阅读感想并在本机转写。";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于把你的语音感想转成可编辑文字。";
