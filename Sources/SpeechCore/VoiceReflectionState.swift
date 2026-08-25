@@ -100,6 +100,9 @@ public protocol LiveTranscriptionProvider: AnyObject {
     func start(localeIdentifier: String?) throws -> AsyncThrowingStream<TranscriptionEvent, Error>
     func stop()
     func cancel()
+    /// File extension the recorder should use for the saved audio destination.
+    /// Defaults to "m4a"; MP3-capable providers override with "mp3".
+    var preferredAudioFileExtension: String { get }
     /// Best-effort audio persistence hook. Called before `start` with the destination
     /// file URL (or nil to disable). Default implementation is a no-op.
     func prepareAudioRecording(at url: URL?) throws
@@ -108,6 +111,7 @@ public protocol LiveTranscriptionProvider: AnyObject {
 @MainActor
 public extension LiveTranscriptionProvider {
     func prepareAudioRecording(at url: URL?) throws {}
+    var preferredAudioFileExtension: String { "m4a" }
 }
 
 public enum SpeechProviderError: LocalizedError, Equatable, Sendable {
