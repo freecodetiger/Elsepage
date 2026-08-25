@@ -1,15 +1,23 @@
 #if os(iOS)
 import AVFAudio
+import AVFoundation
+import CoreMedia
 import Foundation
 import Speech
 
-/// Apple system Speech adapter. The app streams audio without persisting an audio file.
+/// Apple system Speech adapter. Streams audio to Speech and, when requested via
+/// `prepareAudioRecording(at:)`, mirrors the input buffers to an `.caf` file so the
+/// reflection can optionally keep the raw recording.
 @MainActor
 public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider {
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
+
+    private var audioDestination: URL?
+    private var assetWriter: AVAssetWriter?
+    private var assetWriterInput: AVAssetWriterInput?
 
     public init() {}
 
@@ -39,6 +47,11 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         return microphone ? .authorized : .denied
     }
 
+    public func prepareAudioRecording(at url: URL?) throws {
+        finishAudioWriter()
+        audioDestination = url
+    }
+
     public func start(localeIdentifier: String?) throws -> AsyncThrowingStream<TranscriptionEvent, Error> {
         cancel()
         let recognizer = localeIdentifier.map { SFSpeechRecognizer(locale: Locale(identifier: $0)) } ?? SFSpeechRecognizer()
@@ -48,8 +61,17 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         request.shouldReportPartialResults = true
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        let audioInput = makeAudioWriterInput(for: format, at: audioDestination)
+        var lastPTS = CMTime.zero
         inputNode.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
             request.append(buffer)
+            guard let audioInput, audioInput.isReadyForMoreMediaData,
+                  let sample = Self.makeSampleBuffer(from: buffer, at: lastPTS) else { return }
+            audioInput.append(sample)
+            lastPTS = CMTimeAdd(
+                lastPTS,
+                CMTime(value: CMTimeValue(buffer.frameLength), timescale: CMTimeScale(buffer.format.sampleRate))
+            )
         }
 
         do {
@@ -60,6 +82,7 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
             try audioEngine.start()
         } catch {
             inputNode.removeTap(onBus: 0)
+            finishAudioWriter()
             throw SpeechProviderError.recordingCouldNotStart(error.localizedDescription)
         }
 
@@ -94,6 +117,7 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
+        finishAudioWriter()
     }
 
     public func cancel() {
@@ -107,10 +131,61 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
     }
 
     private func finishAudio() {
+        finishAudioWriter()
         recognitionTask = nil
         recognitionRequest = nil
         recognizer = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// Sets up an AVAssetWriter mirroring the mic buffers to a `.caf` file, or returns nil
+    /// (best-effort: audio persistence failing never blocks transcription).
+    private func makeAudioWriterInput(for format: AVAudioFormat, at destination: URL?) -> AVAssetWriterInput? {
+        guard let destination else { return nil }
+        do {
+            let writer = try AVAssetWriter(outputURL: destination, fileType: .caf)
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: format.settings)
+            input.expectsMediaDataInRealTime = true
+            guard writer.canAdd(input) else { return nil }
+            writer.add(input)
+            guard writer.startWriting() else { return nil }
+            writer.startSession(atSourceTime: .zero)
+            assetWriter = writer
+            assetWriterInput = input
+            return input
+        } catch {
+            return nil
+        }
+    }
+
+    private func finishAudioWriter() {
+        guard let writer = assetWriter else { return }
+        assetWriterInput?.markAsFinished()
+        if writer.status == .writing {
+            writer.finishWriting { }
+        }
+        assetWriter = nil
+        assetWriterInput = nil
+    }
+
+    nonisolated private static func makeSampleBuffer(from buffer: AVAudioPCMBuffer, at presentationTime: CMTime) -> CMSampleBuffer? {
+        guard let formatDescription = buffer.format.formatDescription else { return nil }
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 1, timescale: CMTimeScale(buffer.format.sampleRate)),
+            presentationTimeStamp: presentationTime,
+            decodeTimeStamp: .invalid
+        )
+        var out: CMSampleBuffer?
+        let status = CMSampleBufferCreateReadyWithAudioBufferPCMData(
+            allocator: kCFAllocatorDefault,
+            audioBufferList: buffer.audioBufferList,
+            formatDescription: formatDescription,
+            sampleCount: CMItemCount(buffer.frameLength),
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &out
+        )
+        return status == noErr ? out : nil
     }
 
     private static func map(_ status: SFSpeechRecognizerAuthorizationStatus) -> SpeechAuthorization {

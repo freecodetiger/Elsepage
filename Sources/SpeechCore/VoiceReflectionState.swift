@@ -39,6 +39,10 @@ public struct VoiceReflectionState: Equatable, Sendable {
     public private(set) var phase: VoiceReflectionPhase = .idle
     public private(set) var transcript = ""
     public private(set) var failureMessage: String?
+    /// Whether a voice reflection should also persist the raw audio file (default: off per PRD "可选").
+    public var saveAudio = false
+    /// Name of the written audio file inside the Reflections directory, or nil when not saving audio.
+    public var audioFileName: String?
 
     public init() {}
 
@@ -96,6 +100,14 @@ public protocol LiveTranscriptionProvider: AnyObject {
     func start(localeIdentifier: String?) throws -> AsyncThrowingStream<TranscriptionEvent, Error>
     func stop()
     func cancel()
+    /// Best-effort audio persistence hook. Called before `start` with the destination
+    /// file URL (or nil to disable). Default implementation is a no-op.
+    func prepareAudioRecording(at url: URL?) throws
+}
+
+@MainActor
+public extension LiveTranscriptionProvider {
+    func prepareAudioRecording(at url: URL?) throws {}
 }
 
 public enum SpeechProviderError: LocalizedError, Equatable, Sendable {
