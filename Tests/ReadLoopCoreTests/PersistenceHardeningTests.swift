@@ -1,9 +1,38 @@
 import Foundation
 import GRDB
 import LibraryCore
+import ModelProviders
 import Persistence
 import ReaderCore
 import Testing
+
+@Test func providerConfigurationPersistsOnlyNonSecretFieldsAndCanBeDeleted() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBProviderConfigurationRepository(database: database)
+    let reference = SecretReference(rawValue: "primary-provider-key")
+    let configuration = ProviderConfiguration(
+        provider: .openAICompatible,
+        baseURL: URL(string: "https://api.example.com/v1")!,
+        modelID: "example-chat",
+        secretReference: reference,
+        streamingEnabled: false
+    )
+
+    try await repository.save(configuration)
+    #expect(try await repository.currentConfiguration() == configuration)
+
+    let columns = try await database.writer.read { db in
+        try Row.fetchAll(db, sql: "PRAGMA table_info(providerConfigurations)")
+            .map { row in String.fromDatabaseValue(row["name"])! }
+    }
+    #expect(columns.sorted() == [
+        "baseURL", "id", "modelID", "provider", "secretReference", "streamingEnabled"
+    ])
+    #expect(!columns.contains("apiKey"))
+
+    try await repository.deleteCurrentConfiguration()
+    #expect(try await repository.currentConfiguration() == nil)
+}
 
 @Test func migratesV1DatabaseForwardWithoutChangingExistingBook() async throws {
     var configuration = Configuration(); configuration.foreignKeysEnabled = true
@@ -22,7 +51,10 @@ import Testing
     #expect(try await books.book(id: book.id)?.fingerprint == book.fingerprint)
     #expect(try await reading.preferences(for: book.id) == .default)
     let migrations = try await queue.read { db in try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid") }
-    #expect(migrations == ["v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop", "v4_reflection_provenance"])
+    #expect(migrations == [
+        "v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop",
+        "v4_reflection_provenance", "v5_model_provider_configuration"
+    ])
 }
 
 @Test func bookDeletionCascadesPositionHighlightsNotesAndPreferences() async throws {

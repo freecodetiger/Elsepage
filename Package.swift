@@ -22,12 +22,12 @@ let package = Package(
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore"]),
-        .target(name: "AgentCore", dependencies: ["ReflectionCore"]),
+        .target(name: "AgentCore", dependencies: ["ReflectionCore", "ModelProviders"]),
         .target(name: "ModelProviders"),
         .target(
             name: "Persistence",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "ModelProviders",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
@@ -43,7 +43,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentProviderTests",
-            dependencies: ["AgentCore", "ModelProviders", "ReflectionCore"]
+            dependencies: ["AgentCore", "ModelProviders", "ReflectionCore", "LibraryCore"]
         ),
     ]
 )

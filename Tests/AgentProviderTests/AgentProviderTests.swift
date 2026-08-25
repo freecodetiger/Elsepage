@@ -1,5 +1,6 @@
 import AgentCore
 import Foundation
+import LibraryCore
 import ModelProviders
 import ReflectionCore
 import Testing
@@ -84,6 +85,40 @@ import Testing
     }
 }
 
+@Test func agentReplyLoadsPersistedReflectionBeforeCallingModelAndStoresDerivedMessage() async throws {
+    let reflection = Reflection(
+        bookID: .init(), originalText: "我开始怀疑效率是否总是一件好事。", inputKind: .text
+    )
+    let repository = ReflectionRepositoryFake(reflection: reflection)
+    let response = ModelResponse(content: "效率服务于什么，或许比效率本身更值得追问。")
+    let service = ReflectionAgentReplyService(
+        reflections: repository,
+        client: FakeModelClient(script: [.started, .completed(response)])
+    )
+
+    let message = try await service.reply(to: reflection.id)
+
+    #expect(message.reflectionID == reflection.id)
+    #expect(message.author == .agent)
+    #expect(message.source == .agentGenerated)
+    #expect(await repository.savedMessages() == [message])
+}
+
+@Test func failedAgentReplyDoesNotMutatePersistedReflectionOrAppendMessage() async throws {
+    let reflection = Reflection(bookID: .init(), originalText: "原始想法", inputKind: .text)
+    let repository = ReflectionRepositoryFake(reflection: reflection)
+    let service = ReflectionAgentReplyService(
+        reflections: repository,
+        client: FakeModelClient(script: [.completed(ModelResponse(content: "  "))])
+    )
+
+    await #expect(throws: ReflectionAgentReplyError.emptyProviderResponse) {
+        try await service.reply(to: reflection.id)
+    }
+    #expect(await repository.savedMessages().isEmpty)
+    #expect(await repository.persistedReflection()?.originalText == "原始想法")
+}
+
 private actor RecordedTransport: HTTPDataTransport {
     struct Captured: Sendable {
         let url: URL?
@@ -109,4 +144,22 @@ private actor RecordedTransport: HTTPDataTransport {
     }
 
     func captured() -> Captured { latest! }
+}
+
+private actor ReflectionRepositoryFake: ReflectionRepository {
+    private let stored: Reflection?
+    private var messages: [ReflectionMessage] = []
+
+    init(reflection: Reflection?) { stored = reflection }
+    func reflection(id: ReflectionID) -> Reflection? { stored?.id == id ? stored : nil }
+    func reflections(for bookID: BookID) -> [Reflection] { stored?.bookID == bookID ? [stored!]: [] }
+    func insert(_ reflection: Reflection, linkedHighlightIDs: [UUID], evidence: [ReflectionEvidence]) throws {}
+    func linkedHighlightIDs(for reflectionID: ReflectionID) -> [UUID] { [] }
+    func messages(for reflectionID: ReflectionID) -> [ReflectionMessage] { messages }
+    func appendMessage(_ message: ReflectionMessage) { messages.append(message) }
+    func evidence(for reflectionID: ReflectionID) -> [ReflectionEvidence] { [] }
+    func appendEvidence(_ evidence: ReflectionEvidence) throws {}
+    func delete(id: ReflectionID) throws {}
+    func savedMessages() -> [ReflectionMessage] { messages }
+    func persistedReflection() -> Reflection? { stored }
 }

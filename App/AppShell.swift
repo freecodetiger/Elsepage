@@ -3,6 +3,7 @@ import SwiftUI
 struct AppShell: View {
     @Bindable var library: LibraryModel
     @Bindable var thoughts: ThoughtsModel
+    @Bindable var providerSettings: ProviderSettingsModel
     @State private var selection: AppTab = .library
 
     var body: some View {
@@ -15,7 +16,7 @@ struct AppShell: View {
                 .tabItem { Label("书架", systemImage: "books.vertical") }
                 .tag(AppTab.library)
 
-            ThoughtsView(model: thoughts)
+            ThoughtsView(model: thoughts, providerSettings: providerSettings)
             .tabItem { Label("思想", systemImage: "brain.head.profile") }
             .tag(AppTab.mind)
         }

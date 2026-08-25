@@ -141,6 +141,18 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "(locatorJSON IS NULL AND href IS NULL) OR (locatorJSON IS NOT NULL AND href IS NOT NULL)")
             }
         }
+        migrator.registerMigration("v5_model_provider_configuration") { db in
+            try db.create(table: "providerConfigurations") { t in
+                t.column("id", .text).primaryKey()
+                t.column("provider", .text).notNull()
+                t.column("baseURL", .text).notNull()
+                t.column("modelID", .text).notNull()
+                t.column("secretReference", .text).notNull()
+                t.column("streamingEnabled", .boolean).notNull()
+                t.check(sql: "provider IN ('openAI', 'openAICompatible')")
+                t.check(sql: "length(trim(modelID)) > 0")
+            }
+        }
         return migrator
     }
 

@@ -37,6 +37,10 @@ targets:
       - package: ReadLoopCore
         product: ReflectionCore
       - package: ReadLoopCore
+        product: AgentCore
+      - package: ReadLoopCore
+        product: ModelProviders
+      - package: ReadLoopCore
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure

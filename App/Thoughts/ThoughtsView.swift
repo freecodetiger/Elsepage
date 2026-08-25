@@ -3,6 +3,8 @@ import SwiftUI
 
 struct ThoughtsView: View {
     @Bindable var model: ThoughtsModel
+    @Bindable var providerSettings: ProviderSettingsModel
+    @State private var showsProviderSettings = false
 
     var body: some View {
         NavigationStack {
@@ -19,7 +21,17 @@ struct ThoughtsView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
                             ForEach(model.entries) { entry in
-                                ThoughtEntryCard(entry: entry)
+                                ThoughtEntryCard(
+                                    entry: entry,
+                                    isReplying: model.replyingTo == entry.reflection.id,
+                                    requestReply: {
+                                        if providerSettings.hasSavedKey {
+                                            Task { await model.requestAgentReply(for: entry.reflection) }
+                                        } else {
+                                            showsProviderSettings = true
+                                        }
+                                    }
+                                )
                             }
                         }
                         .padding(ElsepageTheme.Spacing.page)
@@ -30,8 +42,19 @@ struct ThoughtsView: View {
             .background(Color.elsepageBackground)
             .navigationTitle("思想")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showsProviderSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("AI Provider 设置")
+                }
+            }
             .task { await model.reload() }
-            .alert("暂时无法读取思想档案", isPresented: Binding(
+            .sheet(isPresented: $showsProviderSettings) {
+                ProviderSettingsView(model: providerSettings)
+            }
+            .alert("暂时无法完成操作", isPresented: Binding(
                 get: { model.errorMessage != nil },
                 set: { if !$0 { model.errorMessage = nil } }
             )) {
@@ -45,6 +68,8 @@ struct ThoughtsView: View {
 
 private struct ThoughtEntryCard: View {
     let entry: ReflectionArchiveEntry
+    let isReplying: Bool
+    let requestReply: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
@@ -76,6 +101,17 @@ private struct ThoughtEntryCard: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            } else {
+                Divider()
+                Button(action: requestReply) {
+                    if isReplying {
+                        Label("正在回应…", systemImage: "ellipsis.bubble")
+                    } else {
+                        Label("请 Agent 回应", systemImage: "sparkles")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isReplying)
             }
         }
         .padding(ElsepageTheme.Spacing.medium)

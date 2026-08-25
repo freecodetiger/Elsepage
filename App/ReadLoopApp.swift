@@ -9,8 +9,10 @@ struct ReadLoopApp: App {
             Group {
                 if let message = appModel.startupError {
                     ContentUnavailableView("无法打开本地书库", systemImage: "externaldrive.badge.exclamationmark", description: Text(message))
-                } else if let library = appModel.library, let thoughts = appModel.thoughts {
-                    AppShell(library: library, thoughts: thoughts)
+                } else if let library = appModel.library,
+                          let thoughts = appModel.thoughts,
+                          let providerSettings = appModel.providerSettings {
+                    AppShell(library: library, thoughts: thoughts, providerSettings: providerSettings)
                 } else {
                     ProgressView("正在打开书库…")
                 }

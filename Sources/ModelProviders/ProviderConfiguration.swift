@@ -36,3 +36,9 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
         self.streamingEnabled = streamingEnabled
     }
 }
+
+public protocol ProviderConfigurationRepository: Sendable {
+    func currentConfiguration() async throws -> ProviderConfiguration?
+    func save(_ configuration: ProviderConfiguration) async throws
+    func deleteCurrentConfiguration() async throws
+}

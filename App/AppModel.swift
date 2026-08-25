@@ -1,5 +1,6 @@
 import AppInfrastructure
 import Foundation
+import ModelProviders
 import Observation
 import Persistence
 import ReadingSessionCore
@@ -9,6 +10,7 @@ import ReflectionCore
 final class AppModel {
     private(set) var library: LibraryModel?
     private(set) var thoughts: ThoughtsModel?
+    private(set) var providerSettings: ProviderSettingsModel?
     private(set) var startupError: String?
 
     func start() async {
@@ -22,6 +24,8 @@ final class AppModel {
             let reading = GRDBReadingRepository(database: database)
             let sessions = GRDBReadingSessionRepository(database: database)
             let reflections = GRDBReflectionRepository(database: database)
+            let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
+            let secrets = KeychainSecretStore()
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
             library = LibraryModel(
@@ -33,7 +37,17 @@ final class AppModel {
                 metadataReader: ReadiumMetadataReader(readium: readium),
                 readium: readium
             )
-            thoughts = ThoughtsModel(books: books, reflections: reflections)
+            providerSettings = ProviderSettingsModel(
+                configurations: providerConfigurations,
+                secrets: secrets
+            )
+            thoughts = ThoughtsModel(
+                books: books,
+                reflections: reflections,
+                configurations: providerConfigurations,
+                secrets: secrets
+            )
+            await providerSettings?.load()
             await library?.reload()
         } catch {
             startupError = error.localizedDescription
