@@ -1,3 +1,5 @@
+import Foundation
+import LibraryCore
 import ReaderCore
 import Testing
 
@@ -109,4 +111,74 @@ private actor PositionHarness {
     #expect(!acceptedSecond)
     #expect(acceptedThird)
     #expect(!state.isLoading)
+}
+
+@Test func locatorIdentityIgnoresJSONKeyOrderButPreservesUnknownReadiumFields() throws {
+    let first = try BookLocator(
+        json: Data(#"{"href":"chapter.xhtml","locations":{"progression":0.2},"future":{"a":1}}"#.utf8),
+        href: "chapter.xhtml",
+        progression: 0.2
+    )
+    let reordered = try BookLocator(
+        json: Data(#"{"future":{"a":1},"locations":{"progression":0.2},"href":"chapter.xhtml"}"#.utf8),
+        href: "chapter.xhtml",
+        progression: 0.2
+    )
+    let different = try BookLocator(
+        json: Data(#"{"href":"chapter.xhtml","locations":{"progression":0.3},"future":{"a":1}}"#.utf8),
+        href: "chapter.xhtml",
+        progression: 0.3
+    )
+
+    #expect(first.identifiesSameAnchor(as: reordered))
+    #expect(!first.identifiesSameAnchor(as: different))
+}
+
+@Test func locatorHistoryIsBoundedDeduplicatedAndReturnsNewestFirst() throws {
+    func locator(_ progression: Double) throws -> BookLocator {
+        try BookLocator(
+            json: Data("{\"href\":\"chapter.xhtml\",\"locations\":{\"progression\":\(progression)}}".utf8),
+            href: "chapter.xhtml",
+            progression: progression
+        )
+    }
+
+    var history = LocatorHistory(capacity: 2)
+    let first = try locator(0.1)
+    let second = try locator(0.2)
+    let third = try locator(0.3)
+    history.record(first)
+    history.record(first)
+    history.record(second)
+    history.record(third)
+
+    #expect(history.entries.count == 2)
+    #expect(history.pop()?.identifiesSameAnchor(as: third) == true)
+    #expect(history.pop()?.identifiesSameAnchor(as: second) == true)
+    #expect(!history.canGoBack)
+}
+
+@Test func highlightAnchorIdentityPreventsDuplicateDecorationCreation() throws {
+    let bookID = BookID()
+    let locator = try BookLocator(
+        json: Data(#"{"href":"chapter.xhtml","locations":{"progression":0.2}}"#.utf8),
+        href: "chapter.xhtml",
+        progression: 0.2
+    )
+    let reordered = try BookLocator(
+        json: Data(#"{"locations":{"progression":0.2},"href":"chapter.xhtml"}"#.utf8),
+        href: "chapter.xhtml",
+        progression: 0.2
+    )
+
+    let highlights = [Highlight(bookID: bookID, locator: locator)]
+    #expect(highlights.containsHighlight(at: reordered))
+}
+
+@Test func readerDefaultsFavorComfortableLongFormTypography() {
+    let preferences = ReaderPreferences.default
+    #expect(preferences.fontSize == 1.05)
+    #expect(preferences.lineHeight == 1.2)
+    #expect(preferences.pageMargins == 1.1)
+    #expect(preferences.readingMode == .paginated)
 }

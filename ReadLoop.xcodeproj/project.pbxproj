@@ -63,6 +63,7 @@
 		DF1E21FF7C793E26B8B51C7E /* ElsepageComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9663C3CAFB779777C386F10 /* ElsepageComponents.swift */; };
 		E4D1C924B1823D21FCE52A46 /* ModelProviders in Frameworks */ = {isa = PBXBuildFile; productRef = 2E828F1FA7007F0BFAAF63AD /* ModelProviders */; };
 		E702281F1BC89A6D1FA32BD4 /* ReaderFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B89083F818E40F555FF2F92 /* ReaderFoundationTests.swift */; };
+		EF47114999B723220A4FD77B /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 32E84A47FBAE26EC3C3A385F /* GRDB */; };
 		F8BAA6C7A354A1BF0ACB82F6 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */; };
 /* End PBXBuildFile section */
 
@@ -146,6 +147,7 @@
 				A0A1A68C88AB24A1CF19E092 /* ReflectionCore in Frameworks */,
 				107EC613931D95B05335AF4B /* Persistence in Frameworks */,
 				3F4AC3062F18C7C41CE13F59 /* AppInfrastructure in Frameworks */,
+				EF47114999B723220A4FD77B /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -343,6 +345,7 @@
 				29E8EED0BAE60C0AEB0D9BB8 /* ReflectionCore */,
 				FAA496C0619186AE3DCCA5B8 /* Persistence */,
 				4B88E02C78BB96FC5CDDC13B /* AppInfrastructure */,
+				32E84A47FBAE26EC3C3A385F /* GRDB */,
 			);
 			productName = ReadLoopCoreTests;
 			productReference = 058175D072CFD86802F55599 /* ReadLoopCoreTests.xctest */;
@@ -436,6 +439,7 @@
 			mainGroup = 955EAD3C0C7E951EA21D90AD;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				7DBFA5700235F6E337667D13 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				4EB37B9FD7C8F70E35BFF395 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
 				50ED580E213DB0429EF80551 /* XCLocalSwiftPackageReference "." */,
 			);
@@ -662,7 +666,7 @@
 				);
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reader.app/Reader";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop";
 			};
 			name = Release;
 		};
@@ -678,7 +682,7 @@
 				);
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reader.app/Reader";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop";
 			};
 			name = Debug;
 		};
@@ -841,6 +845,14 @@
 				version = 3.3.0;
 			};
 		};
+		7DBFA5700235F6E337667D13 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 7.11.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -873,6 +885,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4EB37B9FD7C8F70E35BFF395 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = ReadiumStreamer;
+		};
+		32E84A47FBAE26EC3C3A385F /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7DBFA5700235F6E337667D13 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
 		};
 		3F3697D18135E781693A7918 /* Persistence */ = {
 			isa = XCSwiftPackageProductDependency;

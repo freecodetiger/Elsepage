@@ -54,3 +54,27 @@ public struct LatestRequestState: Sendable {
         return true
     }
 }
+
+/// Small in-memory return stack for explicit TOC, search, and annotation jumps.
+public struct LocatorHistory: Sendable {
+    private let capacity: Int
+    public private(set) var entries: [BookLocator] = []
+
+    public init(capacity: Int = 12) {
+        self.capacity = max(1, capacity)
+    }
+
+    public var canGoBack: Bool { !entries.isEmpty }
+
+    public mutating func record(_ locator: BookLocator) {
+        guard entries.last?.identifiesSameAnchor(as: locator) != true else { return }
+        entries.append(locator)
+        if entries.count > capacity {
+            entries.removeFirst(entries.count - capacity)
+        }
+    }
+
+    public mutating func pop() -> BookLocator? {
+        entries.popLast()
+    }
+}

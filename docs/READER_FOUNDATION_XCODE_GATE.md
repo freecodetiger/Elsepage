@@ -2,6 +2,44 @@
 
 Reader Foundation is not release-ready until this checklist passes with a full Xcode installation, installed iOS platform, and simulator runtime. Portable `swift test` results do not satisfy this gate.
 
+## Current implementation status (2026-08-25)
+
+The Reader Experience pass is code-complete and has passed portable Swift tests, an unsigned generic-device build, and the automated iOS simulator suites. It has **not** been manually exercised on a simulator or physical iPhone.
+
+Verified environment:
+
+- Xcode 17 / iOS 26.5 SDK;
+- `swift test`: 65 tests passed;
+- unsigned `generic/platform=iOS` build: succeeded;
+- `xcodebuild ... -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test`: 50 core tests and 2 Readium publication integration tests passed;
+- Xcode test host and direct GRDB test dependency are explicitly generated from `project.yml`.
+
+The hosted simulator integration target currently logs duplicate Objective-C class warnings for Swift package modules linked into both the host app and test bundle. Tests pass, and the warning is confined to the hosted test process, but the package/linkage layout should be revisited if it causes casting failures or test instability. It must not be mistaken for physical-device Reader verification.
+
+Implemented and covered where deterministic:
+
+- lossless Readium Locator persistence with stale-write prevention;
+- cancellation separated from user-visible open/persistence failures;
+- preferences submitted to the existing Navigator without Publication recreation;
+- paginated and vertical-scroll modes;
+- bounded, deduplicated return history for TOC/search/annotation jumps;
+- persisted highlight decoration restoration and duplicate-anchor prevention;
+- one-action selection highlighting;
+- native SwiftUI multi-line note editor, including adding a note to an existing highlight;
+- deletion semantics that preserve independent Note content;
+- debounced/cancellable search with stale-result rejection;
+- content-first chrome that hides after reading movement and ignores taps while text is selected.
+
+The following remain device verification gates rather than claims:
+
+- selection handles and custom editing actions in Chinese, English, mixed text, and near screen edges;
+- visual highlight tint and interaction in every theme;
+- exact position across background/foreground, rotation, force quit, and relaunch;
+- WKWebView behavior when switching scroll mode and typography during an open publication;
+- note sheet keyboard, backgrounding, and interactive-dismiss behavior;
+- TOC/search/highlight jumps and return history against representative books;
+- VoiceOver, Dynamic Type around Reader chrome, and landscape layout.
+
 ## Build prerequisites
 
 - Select the full Xcode developer directory with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.

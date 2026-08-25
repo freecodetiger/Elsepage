@@ -28,13 +28,18 @@ final class ReaderModel {
     var showsControls = true
     var jumpTargetJSON: Data?
     var selectedHighlightID: UUID?
+    var noteEditor: ReaderNoteEditorRequest?
     private(set) var currentLocator: BookLocator?
+    private(set) var canNavigateBack = false
     private(set) var activeSession: ReadingSession?
     private(set) var isPrepared = false
     @ObservationIgnored var searchHandler: (@MainActor (String) async throws -> [ReaderSearchResult])?
     @ObservationIgnored private var positionSaveTask: Task<Void, Never>?
     @ObservationIgnored private var positionState = LatestValueState<ReadingPosition>()
+    @ObservationIgnored private var preferenceSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var preferenceState = LatestValueState<ReaderPreferences>()
     @ObservationIgnored private var searchState = LatestRequestState()
+    @ObservationIgnored private var locatorHistory = LocatorHistory()
     @ObservationIgnored private var noteSaveTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
 
@@ -57,6 +62,7 @@ final class ReaderModel {
             let position = try await repository.position(for: book.id)
             try Task.checkCancellation()
             initialLocatorJSON = position?.locator.json
+            currentLocator = position?.locator
             progress = position?.locator.totalProgression ?? 0
             preferences = try await repository.preferences(for: book.id)
             try Task.checkCancellation()
@@ -91,6 +97,7 @@ final class ReaderModel {
         }
     }
     func saveHighlight(locator: BookLocator) {
+        guard !highlights.containsHighlight(at: locator) else { return }
         let highlight = Highlight(bookID: book.id, locator: locator)
         highlights.append(highlight)
         Task {
@@ -102,6 +109,10 @@ final class ReaderModel {
         }
     }
     func saveNote(locator: BookLocator, body: String) {
+        if let highlight = highlights.first(where: { $0.locator.identifiesSameAnchor(as: locator) }) {
+            saveNote(for: highlight, body: body)
+            return
+        }
         let highlight = Highlight(bookID: book.id, locator: locator)
         let note = Note(bookID: book.id, highlightID: highlight.id, locator: locator, body: body)
         highlights.append(highlight)
@@ -110,6 +121,18 @@ final class ReaderModel {
             do { try await repository.save(highlight: highlight, note: note) }
             catch {
                 highlights.removeAll { $0.id == highlight.id }
+                notes.removeAll { $0.id == note.id }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+    func saveNote(for highlight: Highlight, body: String) {
+        guard !notes.contains(where: { $0.highlightID == highlight.id }) else { return }
+        let note = Note(bookID: book.id, highlightID: highlight.id, locator: highlight.locator, body: body)
+        notes.append(note)
+        Task {
+            do { try await repository.save(note: note) }
+            catch {
                 notes.removeAll { $0.id == note.id }
                 errorMessage = error.localizedDescription
             }
@@ -159,7 +182,21 @@ final class ReaderModel {
             catch { await reloadAnnotations(after: error) }
         }
     }
-    func jump(to locator: BookLocator) { jumpTargetJSON = locator.json }
+    func jump(to locator: BookLocator) {
+        if let currentLocator, !currentLocator.identifiesSameAnchor(as: locator) {
+            locatorHistory.record(currentLocator)
+            canNavigateBack = locatorHistory.canGoBack
+        }
+        jumpTargetJSON = locator.json
+        showsControls = false
+    }
+
+    func navigateBack() {
+        guard let locator = locatorHistory.pop() else { return }
+        canNavigateBack = locatorHistory.canGoBack
+        jumpTargetJSON = locator.json
+        showsControls = false
+    }
     func search(_ query: String) async {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty, let searchHandler else {
@@ -202,17 +239,48 @@ final class ReaderModel {
         }
     }
     func savePreferences() {
-        let value = preferences
-        Task { await reportPersistenceError { try await self.repository.save(preferences: value, for: self.book.id) } }
+        preferenceState.submit(preferences)
+        preferenceSaveTask?.cancel()
+        preferenceSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await self?.flushPreferences()
+        }
+    }
+    func flushPreferences() async {
+        preferenceSaveTask?.cancel()
+        preferenceSaveTask = nil
+        while let target = preferenceState.beginWrite() {
+            do {
+                try await repository.save(preferences: target.value, for: book.id)
+                preferenceState.didWrite(target, succeeded: true)
+            } catch is CancellationError {
+                preferenceState.didWrite(target, succeeded: false)
+                return
+            } catch {
+                preferenceState.didWrite(target, succeeded: false)
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
     }
     func jump(to chapter: ReaderChapter) {
-        jumpTargetJSON = chapter.locatorJSON
+        if let locator = try? BookLocator(
+            json: chapter.locatorJSON,
+            href: chapter.href,
+            progression: chapter.progression
+        ) {
+            jump(to: locator)
+        } else {
+            jumpTargetJSON = chapter.locatorJSON
+        }
         currentChapterTitle = chapter.title
         currentChapterID = chapter.id
     }
     func toggleControls() {
         showsControls.toggle()
     }
+    func hideControls() { showsControls = false }
     func endReadingSession() async -> SessionEndingSummary? {
         guard let locator = currentLocator else { return nil }
         do {
@@ -250,11 +318,6 @@ final class ReaderModel {
             errorMessage = error.localizedDescription
         }
     }
-    private func reportPersistenceError(_ operation: @escaping @Sendable () async throws -> Void) async {
-        do { try await operation() }
-        catch is CancellationError { return }
-        catch { errorMessage = error.localizedDescription }
-    }
     private func reloadAnnotations(after error: Error) async {
         do {
             highlights = try await repository.highlights(for: book.id)
@@ -282,6 +345,13 @@ final class ReaderModel {
         }
         return candidates.first
     }
+}
+
+struct ReaderNoteEditorRequest: Identifiable {
+    let id = UUID()
+    let locator: BookLocator
+    let note: Note?
+    let highlight: Highlight?
 }
 
 struct ReaderChapter: Identifiable, Hashable {

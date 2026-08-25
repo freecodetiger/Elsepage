@@ -20,6 +20,9 @@ packages:
   Readium:
     url: https://github.com/readium/swift-toolkit.git
     exactVersion: 3.3.0
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    exactVersion: 7.11.1
 targets:
   ReadLoop:
     type: application
@@ -87,6 +90,8 @@ targets:
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure
+      - package: GRDB
+        product: GRDB
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -113,3 +118,5 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop"
+        BUNDLE_LOADER: "$(TEST_HOST)"

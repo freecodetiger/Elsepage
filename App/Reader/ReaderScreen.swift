@@ -4,10 +4,9 @@ import SwiftUI
 struct ReaderScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State var model: ReaderModel
     @State private var presentedSheet: ReaderSheet?
-    @State private var reflectionModel: SessionReflectionModel?
-    @State private var showsReflection = false
 
     var body: some View {
         ZStack {
@@ -37,10 +36,8 @@ struct ReaderScreen: View {
             case .appearance: ReaderAppearanceSheet(model: model)
             }
         }
-        .sheet(isPresented: $showsReflection) {
-            if let reflectionModel {
-                SessionReflectionSheet(model: reflectionModel) { _ in }
-            }
+        .sheet(item: $model.noteEditor) { request in
+            ReaderNoteEditorSheet(model: model, request: request)
         }
         .alert("无法完成操作", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -50,12 +47,32 @@ struct ReaderScreen: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active else { return }
+            model.savePreferences()
+            Task {
+                await model.flushPosition()
+                await model.flushPreferences()
+            }
+        }
+        .onDisappear {
+            model.savePreferences()
+            Task {
+                await model.flushPosition()
+                await model.flushPreferences()
+            }
+        }
     }
 
     private var readerChrome: some View {
         VStack(spacing: ElsepageTheme.Spacing.small) {
             HStack(spacing: ElsepageTheme.Spacing.medium) {
                 ElsepageIconButton(systemName: "chevron.left", accessibilityLabel: "返回书架") { dismiss() }
+                if model.canNavigateBack {
+                    ElsepageIconButton(systemName: "arrow.uturn.backward", accessibilityLabel: "返回跳转前位置") {
+                        model.navigateBack()
+                    }
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.book.title)
                         .font(.system(.subheadline, design: .serif, weight: .semibold))
@@ -74,54 +91,26 @@ struct ReaderScreen: View {
 
             Spacer()
 
-            VStack(spacing: ElsepageTheme.Spacing.small) {
-                HStack(spacing: ElsepageTheme.Spacing.medium) {
-                    Button { presentedSheet = .contents } label: {
-                        Label("目录", systemImage: "list.bullet.indent")
-                    }
-                    .buttonStyle(.plain)
-                    Button { presentedSheet = .annotations } label: {
-                        Label("标注", systemImage: "highlighter")
-                    }
-                    .buttonStyle(.plain)
-                    Button("结束阅读") {
-                        Task {
-                            guard let summary = await model.endReadingSession(),
-                                  let locator = model.currentLocator else { return }
-                            reflectionModel = SessionReflectionModel(
-                                book: model.book,
-                                summary: summary,
-                                locator: locator,
-                                reflectionRepository: model.reflectionRepository
-                            )
-                            showsReflection = true
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                    Text(model.progress, format: .percent.precision(.fractionLength(0)))
-                        .monospacedDigit().foregroundStyle(.secondary)
-                        .accessibilityLabel("阅读进度")
+            HStack(spacing: ElsepageTheme.Spacing.large) {
+                Button { presentedSheet = .contents } label: {
+                    Label("目录", systemImage: "list.bullet.indent").labelStyle(.iconOnly)
                 }
-                .font(.subheadline.weight(.medium))
+                Button { presentedSheet = .annotations } label: {
+                    Label("标注", systemImage: "highlighter").labelStyle(.iconOnly)
+                }
                 ProgressView(value: model.progress)
                     .tint(.elsepageAccent)
                     .accessibilityLabel("阅读进度")
                     .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
+                Text(model.progress, format: .percent.precision(.fractionLength(0)))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            .padding(ElsepageTheme.Spacing.medium)
-            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
-                    .stroke(.primary.opacity(0.06))
-            }
-            .shadow(
-                color: ElsepageTheme.Shadow.floatingColor,
-                radius: ElsepageTheme.Shadow.floatingRadius,
-                y: ElsepageTheme.Shadow.floatingY
-            )
-            .padding(.horizontal, ElsepageTheme.Spacing.medium)
-            .padding(.bottom, ElsepageTheme.Spacing.small)
+            .font(.body)
+            .buttonStyle(.plain)
+            .padding(.horizontal, ElsepageTheme.Spacing.large)
+            .padding(.vertical, ElsepageTheme.Spacing.medium)
+            .background(ElsepageTheme.MaterialToken.chrome)
         }
         .foregroundStyle(.primary)
     }
@@ -189,7 +178,11 @@ private struct ReaderSearchSheet: View {
             Group {
                 if model.isSearching { ProgressView("正在搜索…") }
                 else if model.searchResults.isEmpty {
-                    ContentUnavailableView("搜索正文", systemImage: "magnifyingglass", description: Text("输入关键词查找书中内容。"))
+                    ContentUnavailableView(
+                        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "搜索正文" : "没有找到结果",
+                        systemImage: "magnifyingglass",
+                        description: Text(query.isEmpty ? "输入关键词查找书中内容。" : "试试更短或不同的关键词。")
+                    )
                 } else {
                     List(model.searchResults) { result in
                         Button {
@@ -237,9 +230,12 @@ private struct ReaderAnnotationsSheet: View {
                                 }
                             }
                         }
-                        if !model.highlights.isEmpty {
+                        let standaloneHighlights = model.highlights.filter { highlight in
+                            !model.notes.contains { $0.highlightID == highlight.id }
+                        }
+                        if !standaloneHighlights.isEmpty {
                             Section("高亮") {
-                                ForEach(model.highlights) { highlight in
+                                ForEach(standaloneHighlights) { highlight in
                                     annotationButton(highlight.locator.textHighlight ?? "高亮位置", context: highlight.locator.textBefore, locator: highlight.locator)
                                 }
                             }
@@ -264,6 +260,61 @@ private struct ReaderAnnotationsSheet: View {
             }
         }
     }
+}
+
+private struct ReaderNoteEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let model: ReaderModel
+    let request: ReaderNoteEditorRequest
+    @State private var noteText: String
+
+    init(model: ReaderModel, request: ReaderNoteEditorRequest) {
+        self.model = model
+        self.request = request
+        _noteText = State(initialValue: request.note?.body ?? "")
+    }
+
+    var bodyView: some View {
+        NavigationStack {
+            Form {
+                if let quote = request.locator.textHighlight, !quote.isEmpty {
+                    Section("原文") {
+                        Text(quote)
+                            .font(.system(.body, design: .serif))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                Section("笔记") {
+                    TextEditor(text: $noteText)
+                        .frame(minHeight: 160)
+                        .accessibilityLabel("笔记内容")
+                }
+            }
+            .navigationTitle(request.note == nil ? "添加笔记" : "编辑笔记")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        let text = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let note = request.note {
+                            model.update(note: note, body: text)
+                        } else if let highlight = request.highlight {
+                            model.saveNote(for: highlight, body: text)
+                        } else {
+                            model.saveNote(locator: request.locator, body: text)
+                        }
+                        dismiss()
+                    }
+                    .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .interactiveDismissDisabled(!noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    var body: some View { bodyView }
 }
 
 private struct ReaderAppearanceSheet: View {

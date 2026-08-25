@@ -27,6 +27,18 @@ public struct BookLocator: Hashable, Codable, Sendable {
         self.textHighlight = textHighlight
         self.textAfter = textAfter
     }
+
+    /// Compares the complete Readium anchor without depending on JSON key order.
+    public func identifiesSameAnchor(as other: BookLocator) -> Bool {
+        guard let lhs = try? Self.canonicalJSON(json),
+              let rhs = try? Self.canonicalJSON(other.json) else { return false }
+        return lhs == rhs
+    }
+
+    private static func canonicalJSON(_ data: Data) throws -> Data {
+        let object = try JSONSerialization.jsonObject(with: data)
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
 }
 
 public enum BookLocatorError: Error { case invalidJSON }
@@ -52,6 +64,12 @@ public struct Highlight: Hashable, Codable, Sendable, Identifiable {
     public let createdAt: Date
     public init(id: UUID = UUID(), bookID: BookID, locator: BookLocator, color: HighlightColor = .yellow, createdAt: Date = Date()) {
         self.id = id; self.bookID = bookID; self.locator = locator; self.color = color; self.createdAt = createdAt
+    }
+}
+
+public extension Collection where Element == Highlight {
+    func containsHighlight(at locator: BookLocator) -> Bool {
+        contains { $0.locator.identifiesSameAnchor(as: locator) }
     }
 }
 
@@ -108,9 +126,9 @@ public struct ReaderPreferences: Hashable, Codable, Sendable {
 
     public init(
         theme: ReaderTheme = .system,
-        fontSize: Double = 1,
-        lineHeight: Double = 1,
-        pageMargins: Double = 1,
+        fontSize: Double = 1.05,
+        lineHeight: Double = 1.2,
+        pageMargins: Double = 1.1,
         readingMode: ReadingMode = .paginated
     ) {
         self.theme = theme

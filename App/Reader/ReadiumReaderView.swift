@@ -110,6 +110,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 let anchor = try Self.anchor(from: locator)
                 model.save(locator: anchor)
                 model.currentChapterTitle = locator.title ?? model.currentChapterTitle
+                model.hideControls()
             } catch {
                 model.errorMessage = error.localizedDescription
             }
@@ -120,6 +121,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         }
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
+            guard self.navigator?.currentSelection == nil else { return }
             model.toggleControls()
         }
 
@@ -156,8 +158,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 fontSize: preferences.fontSize,
                 lineHeight: preferences.lineHeight,
                 pageMargins: preferences.pageMargins,
+                paragraphSpacing: 0.65,
                 publisherStyles: false,
                 scroll: preferences.readingMode == .scroll,
+                textNormalization: true,
                 theme: theme
             )
         }
@@ -188,11 +192,15 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             )
             alert.addAction(UIAlertAction(title: "跳转到此处", style: .default) { [weak model] _ in model?.jump(to: highlight.locator) })
             if let linkedNote {
-                alert.addAction(UIAlertAction(title: "编辑批注", style: .default) { [weak host, weak model] _ in
-                    guard let host, let model else { return }
-                    Self.presentNoteEditor(linkedNote, from: host, model: model)
+                alert.addAction(UIAlertAction(title: "编辑批注", style: .default) { [weak model] _ in
+                    guard let model else { return }
+                    model.noteEditor = .init(locator: linkedNote.locator, note: linkedNote, highlight: highlight)
                 })
                 alert.addAction(UIAlertAction(title: "删除批注", style: .destructive) { [weak model] _ in model?.delete(note: linkedNote) })
+            } else {
+                alert.addAction(UIAlertAction(title: "添加笔记", style: .default) { [weak model] _ in
+                    model?.noteEditor = .init(locator: highlight.locator, note: nil, highlight: highlight)
+                })
             }
             alert.addAction(UIAlertAction(title: "删除高亮", style: .destructive) { [weak model] _ in model?.delete(highlight: highlight) })
             alert.addAction(UIAlertAction(title: "取消", style: .cancel))
@@ -200,17 +208,6 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 popover.sourceView = host.view
                 popover.sourceRect = CGRect(x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
             }
-            host.present(alert, animated: true)
-        }
-
-        private static func presentNoteEditor(_ note: Note, from host: UIViewController, model: ReaderModel) {
-            let alert = UIAlertController(title: "编辑批注", message: note.locator.textHighlight, preferredStyle: .alert)
-            alert.addTextField { $0.text = note.body }
-            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-            alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak alert, weak model] _ in
-                guard let body = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty else { return }
-                model?.update(note: note, body: body)
-            })
             host.present(alert, animated: true)
         }
 
@@ -239,7 +236,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
 
         private static func color(for color: HighlightColor) -> UIColor {
             switch color {
-            case .yellow: .systemYellow.withAlphaComponent(0.42)
+            case .yellow: UIColor(red: 0.94, green: 0.78, blue: 0.30, alpha: 0.28)
             case .green: .systemGreen.withAlphaComponent(0.35)
             case .blue: .systemBlue.withAlphaComponent(0.30)
             case .pink: .systemPink.withAlphaComponent(0.32)
@@ -321,14 +318,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
     @objc func noteSelection() {
         guard let navigator, let selection = navigator.currentSelection,
               let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        let alert = UIAlertController(title: "添加批注", message: selection.locator.text.highlight, preferredStyle: .alert)
-        alert.addTextField { $0.placeholder = "写下你的想法" }
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak self, weak alert, weak navigator] _ in
-            guard let body = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty else { return }
-            self?.model.saveNote(locator: anchor, body: body)
-            navigator?.clearSelection()
-        })
-        present(alert, animated: true)
+        model.noteEditor = .init(locator: anchor, note: nil, highlight: nil)
+        navigator.clearSelection()
     }
 }
