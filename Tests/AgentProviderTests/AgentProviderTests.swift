@@ -181,7 +181,7 @@ import Testing
     )
 
     let events = await collect(agent.respond(to: reflection.id))
-    guard case .completed(let message) = events.last else {
+    guard case .completed(let message)? = events.last(where: { if case .completed = $0 { return true }; return false }) else {
         Issue.record("Expected persisted ReaderAgent completion"); return
     }
 

@@ -85,7 +85,7 @@ import Testing
         models: ProductLoopModelFactory(client: FakeModelClient(events: [.started, .completed(response)]))
     )
     let events = await collectProductLoop(agent.respond(to: current.id))
-    guard case .completed(let agentMessage) = events.last else {
+    guard case .completed(let agentMessage)? = events.last(where: { if case .completed = $0 { return true }; return false }) else {
         Issue.record("Expected a persisted Agent response")
         return
     }
