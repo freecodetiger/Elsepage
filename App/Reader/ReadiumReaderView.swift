@@ -64,10 +64,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                                 colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light
                             ),
                             editingActions: actions,
-                            // Readium's scroll preference changes the navigator to a
-                            // vertical presentation. Disable the residual horizontal
-                            // page-turn gesture so the selected mode is unambiguous.
-                            disablePageTurnsWhileScrolling: true,
+                            // Readium scrolls vertically inside one spine resource.
+                            // Keep its outer page turn enabled so readers can cross
+                            // chapter/resource boundaries at the top and bottom.
+                            disablePageTurnsWhileScrolling: false,
                             contentInset: [
                                 .compact: (top: 8, bottom: 8),
                                 .regular: (top: 16, bottom: 16),

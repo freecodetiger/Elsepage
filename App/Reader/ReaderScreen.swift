@@ -408,7 +408,7 @@ private struct ReaderAppearanceSheet: View {
                         Text("滚动").tag(ReadingMode.scroll)
                     }
                     .pickerStyle(.segmented)
-                    Text("滚动模式使用上下滑动阅读。")
+                    Text("章节内上下滚动，章节之间左右滑动。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
