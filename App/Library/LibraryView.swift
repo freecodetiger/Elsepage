@@ -133,6 +133,10 @@ struct LibraryView: View {
                                 )
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
+                            .frame(
+                                width: columnWidth,
+                                height: columnWidth / LibraryGridLayout.coverAspectRatio
+                            )
                             .aspectRatio(LibraryGridLayout.coverAspectRatio, contentMode: .fit)
                             .task(id: book.id) { await model.loadCover(for: book) }
                             Text(book.title)
@@ -150,7 +154,7 @@ struct LibraryView: View {
                                     .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(width: columnWidth, alignment: .leading)
                         .clipped()
                     }
                     .buttonStyle(.plain)
@@ -163,6 +167,7 @@ struct LibraryView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .frame(width: columnWidth, alignment: .leading)
                 }
                 }
                 .padding(ElsepageTheme.Spacing.page)
