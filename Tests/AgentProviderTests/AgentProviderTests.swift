@@ -285,6 +285,10 @@ private actor ReflectionRepositoryFake: ReflectionRepository {
     func linkedHighlightIDs(for reflectionID: ReflectionID) -> [UUID] { [] }
     func messages(for reflectionID: ReflectionID) -> [ReflectionMessage] { messages }
     func appendMessage(_ message: ReflectionMessage) { messages.append(message) }
+    func appendAgentMessage(_ message: ReflectionMessage, evidence: [AgentResponseEvidence], citations: [AgentCitation]) {
+        messages.append(message)
+    }
+    func provenance(for messageID: UUID) -> AgentResponseProvenance { .init(evidence: [], citations: []) }
     func message(id: UUID) -> ReflectionMessage? { messages.first { $0.id == id } }
     func recentReflections(limit: Int) -> [Reflection] { stored.map { [$0] } ?? [] }
     func connections(for reflectionID: ReflectionID) -> [ReflectionConnection] { [] }

@@ -106,8 +106,21 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
 
     public func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage] {
         try await db.writer.read { db in
-            try ReflectionMessageRecord.filter(Column("reflectionID") == reflectionID.description)
-                .order(Column("createdAt"), Column("id")).fetchAll(db).map { try $0.domain() }
+            let records = try ReflectionMessageRecord.filter(Column("reflectionID") == reflectionID.description)
+                .order(Column("createdAt"), Column("id")).fetchAll(db)
+            var result: [ReflectionMessage] = []
+            result.reserveCapacity(records.count)
+            for record in records {
+                let message = try record.domain()
+                guard message.author == .agent else {
+                    result.append(message); continue
+                }
+                let citations = try AgentCitationRecord
+                    .filter(Column("messageID") == message.id.uuidString.lowercased())
+                    .order(Column("id")).fetchAll(db).map { try $0.domain() }
+                result.append(message.withCitations(citations))
+            }
+            return result
         }
     }
 
@@ -118,6 +131,45 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
                 return
             }
             try ReflectionMessageRecord(message).insert(db)
+        }
+    }
+
+    public func appendAgentMessage(
+        _ message: ReflectionMessage,
+        evidence: [AgentResponseEvidence],
+        citations: [AgentCitation]
+    ) async throws {
+        try await db.writer.write { db in
+            guard message.author == .agent, message.source == .agentGenerated,
+                  evidence.allSatisfy({ $0.messageID == message.id }),
+                  citations.allSatisfy({ $0.messageID == message.id }) else {
+                throw PersistenceError.inconsistentReflectionContext
+            }
+            let evidenceIDs = Set(evidence.map(\.id))
+            guard Set(citations.map(\.evidenceID)).isSubset(of: evidenceIDs),
+                  evidenceIDs.count == evidence.count else {
+                throw PersistenceError.inconsistentReflectionContext
+            }
+            if let existing = try ReflectionMessageRecord.fetchOne(db, key: message.id.uuidString.lowercased()) {
+                guard try existing.domain() == message else { throw PersistenceError.inconsistentReflectionContext }
+                return
+            }
+            try ReflectionMessageRecord(message).insert(db)
+            for item in evidence { try AgentResponseEvidenceRecord(item).insert(db) }
+            for citation in citations { try AgentCitationRecord(citation).insert(db) }
+        }
+    }
+
+    public func provenance(for messageID: UUID) async throws -> AgentResponseProvenance {
+        try await db.writer.read { db in
+            let key = messageID.uuidString.lowercased()
+            let evidence = try AgentResponseEvidenceRecord
+                .filter(Column("messageID") == key).order(Column("id"))
+                .fetchAll(db).map { try $0.domain() }
+            let citations = try AgentCitationRecord
+                .filter(Column("messageID") == key).order(Column("id"))
+                .fetchAll(db).map { try $0.domain() }
+            return .init(evidence: evidence, citations: citations)
         }
     }
 
@@ -192,6 +244,63 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
             db, sql: "SELECT bookID FROM \(table) WHERE id = ?", arguments: [sourceID.lowercased()]
         )
         guard sourceBookID == bookID.description else { throw PersistenceError.inconsistentReflectionContext }
+    }
+}
+
+private struct AgentResponseEvidenceRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "agentResponseEvidence"
+    var messageID, id, kind, sourceID, bookID: String
+    var title: String?
+    var excerpt: String
+    var locatorJSON: Data?
+    var href: String?
+    var progression, totalProgression: Double?
+    var textBefore, textHighlight, textAfter: String?
+
+    init(_ evidence: AgentResponseEvidence) {
+        messageID = evidence.messageID.uuidString.lowercased(); id = evidence.id
+        kind = evidence.kind.rawValue; sourceID = evidence.sourceID; bookID = evidence.bookID.description
+        title = evidence.title; excerpt = evidence.excerpt
+        locatorJSON = evidence.locator?.json; href = evidence.locator?.href
+        progression = evidence.locator?.progression; totalProgression = evidence.locator?.totalProgression
+        textBefore = evidence.locator?.textBefore; textHighlight = evidence.locator?.textHighlight
+        textAfter = evidence.locator?.textAfter
+    }
+
+    func domain() throws -> AgentResponseEvidence {
+        guard let messageUUID = UUID(uuidString: messageID), let bookUUID = UUID(uuidString: bookID),
+              let decodedKind = AgentEvidenceKind(rawValue: kind) else {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: "\(messageID):\(id)", field: "identity")
+        }
+        let locator: BookLocator?
+        if let locatorJSON, let href {
+            locator = try decodeLocator(
+                json: locatorJSON, href: href, progression: progression, totalProgression: totalProgression,
+                textBefore: textBefore, textHighlight: textHighlight, textAfter: textAfter,
+                table: Self.databaseTableName, recordID: "\(messageID):\(id)"
+            )
+        } else { locator = nil }
+        return .init(
+            id: id, messageID: messageUUID, kind: decodedKind, sourceID: sourceID,
+            bookID: .init(rawValue: bookUUID), title: title, excerpt: excerpt, locator: locator
+        )
+    }
+}
+
+private struct AgentCitationRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "agentCitations"
+    var id, messageID, evidenceID, marker: String
+
+    init(_ citation: AgentCitation) {
+        id = citation.id.uuidString.lowercased(); messageID = citation.messageID.uuidString.lowercased()
+        evidenceID = citation.evidenceID; marker = citation.marker
+    }
+
+    func domain() throws -> AgentCitation {
+        guard let id = UUID(uuidString: id), let messageID = UUID(uuidString: messageID) else {
+            throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: self.id, field: "identity")
+        }
+        return .init(id: id, messageID: messageID, evidenceID: evidenceID, marker: marker)
     }
 }
 

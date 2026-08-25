@@ -233,6 +233,30 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "dimensions > 0")
             }
         }
+        migrator.registerMigration("v8_pending_citations") { db in
+            try db.create(table: "agentResponseEvidence") { t in
+                t.column("messageID", .text).notNull().references("reflectionMessages", onDelete: .cascade)
+                t.column("id", .text).notNull()
+                t.column("kind", .text).notNull()
+                t.column("sourceID", .text).notNull()
+                t.column("bookID", .text).notNull().references("books", onDelete: .cascade)
+                t.column("title", .text)
+                t.column("excerpt", .text).notNull()
+                Self.addOptionalLocatorColumns(to: t, prefix: "")
+                t.primaryKey(["messageID", "id"])
+                t.check(sql: "kind IN ('nearbyPassage','bookPassage','pastReflection')")
+                t.check(sql: "length(trim(excerpt)) > 0")
+                t.check(sql: "(locatorJSON IS NULL AND href IS NULL) OR (locatorJSON IS NOT NULL AND href IS NOT NULL)")
+            }
+            try db.create(table: "agentCitations") { t in
+                t.column("id", .text).primaryKey()
+                t.column("messageID", .text).notNull().references("reflectionMessages", onDelete: .cascade)
+                t.column("evidenceID", .text).notNull()
+                t.column("marker", .text).notNull()
+                t.foreignKey(["messageID", "evidenceID"], references: "agentResponseEvidence", columns: ["messageID", "id"], onDelete: .cascade)
+                t.uniqueKey(["messageID", "evidenceID"])
+            }
+        }
         return migrator
     }
 

@@ -65,6 +65,16 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         }
     }
 
+    public func chunk(id: BookChunkID, bookID: BookID, version: Int) async throws -> BookChunk? {
+        try await database.writer.read { db in
+            guard let row = try Row.fetchOne(
+                db, sql: "SELECT * FROM bookChunks WHERE id=? AND bookID=? AND indexVersion=?",
+                arguments: [id.rawValue, bookID.description, version]
+            ) else { return nil }
+            return try Self.chunk(row)
+        }
+    }
+
     public func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope = .readSoFar) async throws -> [(BookChunk, Double)] {
         let terms = query.lowercased().split { !$0.isLetter && !$0.isNumber }
             .map(String.init).filter { $0.count >= 3 }

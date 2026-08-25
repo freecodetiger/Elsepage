@@ -48,15 +48,42 @@ public struct ModelMessage: Hashable, Codable, Sendable, Identifiable {
     }
 }
 
+public enum ModelResponseFormat: String, Codable, Sendable {
+    case jsonObject
+}
+
 public struct ModelRequest: Hashable, Codable, Sendable {
     public let messages: [ModelMessage]
     public let temperature: Double?
     public let maxOutputTokens: Int?
+    public let responseFormat: ModelResponseFormat?
 
-    public init(messages: [ModelMessage], temperature: Double? = nil, maxOutputTokens: Int? = nil) {
+    public init(
+        messages: [ModelMessage],
+        temperature: Double? = nil,
+        maxOutputTokens: Int? = nil,
+        responseFormat: ModelResponseFormat? = nil
+    ) {
         self.messages = messages
         self.temperature = temperature
         self.maxOutputTokens = maxOutputTokens
+        self.responseFormat = responseFormat
+    }
+}
+
+/// A structured citation block a model may emit at the end of its reply.
+/// Parsing happens in the ReaderAgent layer; `ModelResponse.content` stays plain text.
+/// `evidenceID` carries the same identifier as `AgentResponseEvidence.sourceID`
+/// (the `BookChunkID.rawValue` for book passages, the reflection UUID for past thoughts).
+public struct AgentStructuredCitation: Hashable, Codable, Sendable {
+    public let evidenceID: String
+    public let kind: String
+    public let connectionID: UUID?
+
+    public init(evidenceID: String, kind: String, connectionID: UUID? = nil) {
+        self.evidenceID = evidenceID
+        self.kind = kind
+        self.connectionID = connectionID
     }
 }
 

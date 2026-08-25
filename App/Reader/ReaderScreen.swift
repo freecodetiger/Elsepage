@@ -60,12 +60,16 @@ struct ReaderScreen: View {
             ReaderNoteEditorSheet(model: model, request: request)
         }
         .sheet(item: $model.contextReflection) { reflection in
-            SessionReflectionSheet(model: reflection) { _ in }
+            SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
+                if let locator = evidence.locator { model.jump(to: locator) }
+            }
         }
         .sheet(item: $reflectionPrompt, onDismiss: {
             if dismissAfterReflection { dismiss() }
         }) { reflection in
-            SessionReflectionSheet(model: reflection) { _ in onReflectionSaved() }
+            SessionReflectionSheet(model: reflection, onSaved: { _ in onReflectionSaved() }) { evidence in
+                if let locator = evidence.locator { model.jump(to: locator) }
+            }
         }
         .alert("无法完成操作", isPresented: Binding(
             get: { model.errorMessage != nil },

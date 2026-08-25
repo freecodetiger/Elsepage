@@ -49,7 +49,7 @@ final class ThoughtsModel {
                 await reload()
             case .failed(let failure):
                 errorMessage = Self.message(for: failure)
-            case .started, .contextPrepared, .textDelta, .cancelled:
+            case .started, .contextPrepared, .textDelta, .citationsValidated, .cancelled:
                 break
             }
         }

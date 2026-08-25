@@ -41,6 +41,7 @@ final class SessionReflectionModel: Identifiable {
     private(set) var state: SubmissionState = .editing
     private(set) var reflection: Reflection?
     private(set) var messages: [ReflectionMessage] = []
+    private(set) var responseProvenance: [UUID: AgentResponseProvenance] = [:]
     private(set) var streamingResponse = ""
     private(set) var connectedReflection: Reflection?
     private(set) var isResponding = false
@@ -129,7 +130,11 @@ final class SessionReflectionModel: Identifiable {
                     connectedReflection = try? await reflectionRepository.reflection(id: connection.sourceReflectionID)
                 }
             case .textDelta(let text):
-                streamingResponse += text
+                streamingResponse = Self.withoutCitationBlock(streamingResponse + text)
+            case .citationsValidated(let provenance):
+                if let messageID = provenance.evidence.first?.messageID {
+                    responseProvenance[messageID] = provenance
+                }
             case .completed:
                 await reloadMessages()
                 streamingResponse = ""
@@ -146,6 +151,16 @@ final class SessionReflectionModel: Identifiable {
     private func reloadMessages() async {
         guard let reflection else { return }
         messages = (try? await reflectionRepository.messages(for: reflection.id)) ?? messages
+        for message in messages where message.author == .agent {
+            if let provenance = try? await reflectionRepository.provenance(for: message.id) {
+                responseProvenance[message.id] = provenance
+            }
+        }
+    }
+
+    private static func withoutCitationBlock(_ content: String) -> String {
+        guard let range = content.range(of: "---CITATIONS---") else { return content }
+        return String(content[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func message(for failure: ReaderAgentFailure) -> String {
@@ -167,6 +182,7 @@ struct SessionReflectionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: SessionReflectionModel
     let onSaved: @MainActor (Reflection) -> Void
+    var openCitation: ((AgentResponseEvidence) -> Void)?
 
     var body: some View {
         NavigationStack {
@@ -245,9 +261,33 @@ struct SessionReflectionSheet: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if message.author == .agent {
-                        AgentMarkdownText(content: message.content)
+                        AgentMarkdownText(
+                            content: message.content,
+                            provenance: model.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
+                            openCitation: openCitation
+                        )
                     } else {
                         Text(message.content).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let provenance = model.responseProvenance[message.id] {
+                    let citedIDs = Set(provenance.citations.map(\.evidenceID))
+                    let cited = provenance.evidence.filter { citedIDs.contains($0.id) }
+                    let shown = cited.isEmpty ? provenance.evidence : cited
+                    if !shown.isEmpty {
+                        DisclosureGroup("本次使用了 \(shown.count) 处阅读数据") {
+                            ForEach(shown) { evidence in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(evidence.title ?? evidence.kind.title).font(.caption.weight(.semibold))
+                                    Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                                    if evidence.locator != nil {
+                                        Button("回到原文") { openCitation?(evidence) }.font(.caption)
+                                    }
+                                }
+                                .padding(.vertical, 3)
+                            }
+                        }
+                        .font(.footnote)
                     }
                 }
             }
