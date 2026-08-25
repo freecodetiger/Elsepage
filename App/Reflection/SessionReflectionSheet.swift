@@ -45,6 +45,7 @@ final class SessionReflectionModel: Identifiable {
     private(set) var streamingResponse = ""
     private(set) var connectedReflection: Reflection?
     private(set) var isResponding = false
+    private(set) var contextDisclosure: ContextDisclosure?
     var followUpText = ""
     var agentNotice: String?
     var errorMessage: String?
@@ -120,6 +121,7 @@ final class SessionReflectionModel: Identifiable {
         isResponding = true
         streamingResponse = ""
         agentNotice = nil
+        contextDisclosure = nil
         defer { isResponding = false }
         for await event in stream {
             switch event {
@@ -138,6 +140,8 @@ final class SessionReflectionModel: Identifiable {
             case .completed:
                 await reloadMessages()
                 streamingResponse = ""
+            case .contextDisclosed(let disclosure):
+                contextDisclosure = disclosure
             case .cancelled:
                 agentNotice = nil
             case .failed(.providerNotConfigured):
@@ -308,6 +312,12 @@ struct SessionReflectionSheet: View {
             if let notice = model.agentNotice {
                 Text(notice).font(.footnote).foregroundStyle(.secondary)
             }
+            if let disclosure = model.contextDisclosure {
+                Label(disclosureLine(disclosure), systemImage: "doc.text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+            }
             if model.messages.contains(where: { $0.author == .agent }) {
                 Divider()
                 TextField("继续聊聊…", text: $model.followUpText, axis: .vertical)
@@ -362,5 +372,27 @@ struct SessionReflectionSheet: View {
         case (_, let n) where n > 0: return "留下了 \(n) 条批注。"
         default: return ""
         }
+    }
+
+    private func disclosureLine(_ disclosure: ContextDisclosure) -> String {
+        var parts: [String] = []
+        if disclosure.retrievedBookEvidenceCount > 0 {
+            parts.append("参考了已读部分 \(disclosure.retrievedBookEvidenceCount) 处书内内容")
+        } else if disclosure.includedNearbyPassage {
+            parts.append("参考了你正在读的这段原文")
+        } else {
+            parts.append("回应仅基于你的想法与对话")
+        }
+        if disclosure.connectedReflectionID != nil {
+            parts.append("连接过去的一则想法")
+        }
+        parts.append("准备用时 \(Self.durationText(disclosure.routingDuration + disclosure.retrievalDuration))")
+        return parts.joined(separator: "，")
+    }
+
+    private static func durationText(_ duration: Duration) -> String {
+        let components = duration.components
+        let seconds = Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+        return String(format: "%.1f 秒", seconds)
     }
 }

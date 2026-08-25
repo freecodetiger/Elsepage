@@ -1,4 +1,5 @@
 import AgentRuntime
+import ContextRouting
 import Foundation
 import ModelProviders
 import Observation
@@ -9,6 +10,7 @@ final class ProviderSettingsModel {
 
     private let configurations: any ProviderConfigurationRepository
     private let secrets: any SecretStore
+    private let traceRepository: (any RoutingTraceRepository)?
 
     var selectedPreset: ModelProviderPreset = .openAI
     var baseURL = "https://api.openai.com/v1"
@@ -18,11 +20,17 @@ final class ProviderSettingsModel {
     private(set) var hasSavedKey = false
     private(set) var isWorking = false
     private(set) var statusMessage: String?
+    private(set) var routingDiagnostics: RoutingTraceDiagnostics?
     var errorMessage: String?
 
-    init(configurations: any ProviderConfigurationRepository, secrets: any SecretStore) {
+    init(
+        configurations: any ProviderConfigurationRepository,
+        secrets: any SecretStore,
+        traceRepository: (any RoutingTraceRepository)? = nil
+    ) {
         self.configurations = configurations
         self.secrets = secrets
+        self.traceRepository = traceRepository
     }
 
     func load() async {
@@ -34,6 +42,12 @@ final class ProviderSettingsModel {
             streamingEnabled = configuration.streamingEnabled
             hasSavedKey = try await secrets.secret(for: configuration.secretReference) != nil
         } catch { errorMessage = Self.message(for: error) }
+        await loadDiagnostics()
+    }
+
+    func loadDiagnostics() async {
+        guard let traceRepository else { return }
+        routingDiagnostics = try? await traceRepository.diagnostics()
     }
 
     func selectPreset(_ preset: ModelProviderPreset) {

@@ -29,6 +29,7 @@ final class AppModel {
             let bookIndex = GRDBBookIndexRepository(database: database)
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
+            let routingTraces = GRDBRoutingTraceRepository(database: database)
             let readerAgent = ReaderAgent(
                 reflections: reflections,
                 models: ConfiguredModelClientFactory(
@@ -43,7 +44,8 @@ final class AppModel {
                     sessions: sessions,
                     reading: reading,
                     reflections: reflections
-                )
+                ),
+                traceRepository: routingTraces
             )
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
@@ -61,12 +63,14 @@ final class AppModel {
             )
             providerSettings = ProviderSettingsModel(
                 configurations: providerConfigurations,
-                secrets: secrets
+                secrets: secrets,
+                traceRepository: routingTraces
             )
             thoughts = ThoughtsModel(
                 books: books,
                 reflections: reflections,
-                readerAgent: readerAgent
+                readerAgent: readerAgent,
+                traceRepository: routingTraces
             )
             await providerSettings?.load()
             await library?.reload()
