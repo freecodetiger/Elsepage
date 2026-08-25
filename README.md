@@ -97,7 +97,7 @@ A real product loop, not a demo: read → reflect → save → grounded reply �
 |------|-------|
 | Reader foundation | ~85% |
 | Reflection loop | ~80% |
-| Book context / Agent | ~75% (citations grounded; cross-book + memory retrieval) |
+| Book context / Agent | ~85% (citations grounded; cross-book + memory + semantic RAG) |
 | Voice reflection | shipped: hold/tap, MP3, AI polish |
 | Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall |
 | Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
@@ -150,7 +150,7 @@ EPUB
 | EPUB / reading | `ReaderCore` + Readium |
 | Session lifecycle | `ReadingSessionCore` |
 | Reflection & evidence | `ReflectionCore` + `Persistence` |
-| Local book retrieval | `RetrievalCore` (lexical FTS + ranker, all local) |
+| Local book retrieval | `RetrievalCore` (lexical FTS + optional BYOK semantic embeddings, hybrid ranker, all local) |
 | Context routing | `ContextRouting` (proposed vs validated, fallback) |
 | Agent runtime | `AgentRuntime` / `ReaderAgent` |
 | Voice | `SpeechCore` (system Speech, MP3/AAC) |
