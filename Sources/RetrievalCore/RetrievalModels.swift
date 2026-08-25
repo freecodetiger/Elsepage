@@ -113,6 +113,19 @@ public struct BookEvidence: Hashable, Sendable, Identifiable {
     public let score: Double
 }
 
+/// A lightweight chapter reference resolved from the persisted book index.
+public struct BookChapterRef: Hashable, Sendable {
+    public let id: String
+    public let title: String?
+    public let resourceOrdinal: Int
+
+    public init(id: String, title: String?, resourceOrdinal: Int) {
+        self.id = id
+        self.title = title
+        self.resourceOrdinal = resourceOrdinal
+    }
+}
+
 public struct RetrievalQuery: Hashable, Sendable {
     public let bookID: BookID
     public let text: String
@@ -139,6 +152,9 @@ public protocol BookIndexRepository: Sendable {
     func chunks(for bookID: BookID, version: Int) async throws -> [BookChunk]
     func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope) async throws -> [(BookChunk, Double)]
     func readingBoundary(bookID: BookID, locator: BookLocator) async throws -> ReadingBoundary?
+    /// Resolve the chapters a reading span covers (reusing bookChunks for
+    /// locator→resourceOrdinal and bookChapters for ordinal→chapter).
+    func chapters(for bookID: BookID, from startLocator: BookLocator, to endLocator: BookLocator?) async throws -> [BookChapterRef]
     func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws
     func embeddings(bookID: BookID, model: String) async throws -> [BookChunkID: [Float]]
 }

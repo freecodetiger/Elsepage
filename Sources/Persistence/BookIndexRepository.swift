@@ -109,6 +109,32 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         }
     }
 
+    public func chapters(for bookID: BookID, from startLocator: BookLocator, to endLocator: BookLocator?) async throws -> [BookChapterRef] {
+        try await database.writer.read { db in
+            guard let lower = try Self.resourceOrdinal(bookID: bookID, href: startLocator.href, in: db) else { return [] }
+            var upper = lower
+            if let endLocator, let resolved = try Self.resourceOrdinal(bookID: bookID, href: endLocator.href, in: db) {
+                upper = resolved
+            }
+            let start = min(lower, upper), end = max(lower, upper)
+            return try Row.fetchAll(db, sql: """
+                SELECT DISTINCT id, title, ordinal FROM bookChapters
+                WHERE bookID=? AND indexVersion=? AND ordinal BETWEEN ? AND ?
+                ORDER BY ordinal
+                """, arguments: [bookID.description, BookIndexPipeline.currentVersion, start, end]).map { row in
+                    BookChapterRef(id: row["id"], title: row["title"], resourceOrdinal: row["ordinal"])
+                }
+        }
+    }
+
+    private static func resourceOrdinal(bookID: BookID, href: String, in db: Database) throws -> Int? {
+        let exact = try Int.fetchOne(db, sql: "SELECT resourceOrdinal FROM bookChunks WHERE bookID=? AND resourceHref=? ORDER BY resourceOrdinal LIMIT 1", arguments: [bookID.description, href])
+        if let exact { return exact }
+        let stripped = href.split(separator: "#", maxSplits: 1).first.map(String.init) ?? href
+        guard stripped != href else { return nil }
+        return try Int.fetchOne(db, sql: "SELECT resourceOrdinal FROM bookChunks WHERE bookID=? AND resourceHref=? ORDER BY resourceOrdinal LIMIT 1", arguments: [bookID.description, stripped])
+    }
+
     public func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws {
         try await database.writer.write { db in
             for (id, vector) in embeddings {
