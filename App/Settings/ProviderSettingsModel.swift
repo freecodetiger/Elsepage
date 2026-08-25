@@ -1,8 +1,11 @@
 import AgentRuntime
+import AppInfrastructure
 import ContextRouting
 import Foundation
+import LibraryCore
 import ModelProviders
 import Observation
+import ReflectionCore
 
 @MainActor @Observable
 final class ProviderSettingsModel {
@@ -11,6 +14,15 @@ final class ProviderSettingsModel {
     private let configurations: any ProviderConfigurationRepository
     private let secrets: any SecretStore
     private let traceRepository: (any RoutingTraceRepository)?
+    private let books: any BookRepository
+    private let files: BookFileStore
+    private let exporter: PersonalDataExporter
+    private let indexCoordinator: BookIndexCoordinator?
+    private let onDataDeleted: (@MainActor () async -> Void)?
+
+    /// Set after a successful export, drives the ShareLink in the 数据 section.
+    var exportedDataURL: URL?
+    private(set) var isDeletingAllBooks = false
 
     var selectedPreset: ModelProviderPreset = .openAI
     var baseURL = "https://api.openai.com/v1"
@@ -26,11 +38,21 @@ final class ProviderSettingsModel {
     init(
         configurations: any ProviderConfigurationRepository,
         secrets: any SecretStore,
-        traceRepository: (any RoutingTraceRepository)? = nil
+        traceRepository: (any RoutingTraceRepository)? = nil,
+        books: any BookRepository,
+        files: BookFileStore,
+        exporter: PersonalDataExporter,
+        indexCoordinator: BookIndexCoordinator? = nil,
+        onDataDeleted: (@MainActor () async -> Void)? = nil
     ) {
         self.configurations = configurations
         self.secrets = secrets
         self.traceRepository = traceRepository
+        self.books = books
+        self.files = files
+        self.exporter = exporter
+        self.indexCoordinator = indexCoordinator
+        self.onDataDeleted = onDataDeleted
     }
 
     func load() async {
@@ -147,6 +169,49 @@ final class ProviderSettingsModel {
         if !typed.isEmpty { return typed }
         if let saved = try await secrets.secret(for: Self.secretReference), !saved.isEmpty { return saved }
         throw ModelFailure.invalidConfiguration
+    }
+
+    // MARK: - 数据控制
+
+    /// Runs the exporter and writes the pretty JSON to a temp file the view can
+    /// hand to a ShareLink. Provider configuration and Keychain are never read.
+    func exportMyData() async {
+        do {
+            let data = try await exporter.export()
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("elsepage-my-data.json")
+            try data.write(to: url, options: .atomic)
+            exportedDataURL = url
+        } catch {
+            errorMessage = Self.message(for: error)
+        }
+    }
+
+    /// Deletes every book's DB record (FK cascade removes positions, highlights,
+    /// notes, preferences, sessions, reflections, journal and index rows) plus
+    /// its sandbox EPUB file, mirroring LibraryModel's two-phase trash flow per
+    /// book. Provider configuration and Keychain stay untouched.
+    func deleteAllBooks() async {
+        guard !isDeletingAllBooks else { return }
+        isDeletingAllBooks = true
+        defer { isDeletingAllBooks = false }
+        indexCoordinator?.cancelAll()
+        do {
+            let allBooks = try await books.allBooks()
+            for book in allBooks {
+                let trashed = try files.stageDeletion(bookID: book.id)
+                do {
+                    try await books.delete(book.id)
+                    files.commitDeletion(trashed)
+                } catch {
+                    if let trashed { try? files.restore(trashed, for: book.id) }
+                    throw error
+                }
+            }
+            exportedDataURL = nil
+            await onDataDeleted?()
+        } catch {
+            errorMessage = Self.message(for: error)
+        }
     }
 
     func clearTransientSecret() { apiKey = "" }

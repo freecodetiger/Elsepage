@@ -75,7 +75,21 @@ final class AppModel {
             providerSettings = ProviderSettingsModel(
                 configurations: providerConfigurations,
                 secrets: secrets,
-                traceRepository: routingTraces
+                traceRepository: routingTraces,
+                books: books,
+                files: files,
+                exporter: PersonalDataExporter(
+                    books: books,
+                    reading: reading,
+                    sessions: sessions,
+                    reflections: reflections,
+                    journal: journal
+                ),
+                indexCoordinator: indexCoordinator,
+                onDataDeleted: { [weak self] in
+                    await self?.library?.reload()
+                    await self?.thoughts?.reload()
+                }
             )
             thoughts = ThoughtsModel(
                 books: books,

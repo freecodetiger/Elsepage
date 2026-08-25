@@ -4,6 +4,7 @@ import SwiftUI
 struct ProviderSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: ProviderSettingsModel
+    @State private var showsDeleteAllConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -69,6 +70,25 @@ struct ProviderSettingsView: View {
                         Text("记录每次 Agent 回应使用的上下文与耗时，仅存本机摘要，不保存原文。")
                     }
                 }
+
+                Section {
+                    Button("导出我的数据") {
+                        Task { await model.exportMyData() }
+                    }
+                    if let url = model.exportedDataURL {
+                        ShareLink(item: url) {
+                            Label("分享导出的 JSON", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    Button("删除书籍与索引", role: .destructive) {
+                        showsDeleteAllConfirmation = true
+                    }
+                    .disabled(model.isDeletingAllBooks)
+                } header: {
+                    Text("数据")
+                } footer: {
+                    Text("导出包含你的书籍、阅读位置、高亮、笔记、反思与记录，不含 Provider 配置或 API Key。删除书籍会一并移除数据库记录与沙盒文件（含索引），且不可撤销；Provider 配置和 Keychain 不受影响。")
+                }
             }
             .navigationTitle("AI Provider")
             .navigationBarTitleDisplayMode(.inline)
@@ -79,6 +99,14 @@ struct ProviderSettingsView: View {
                 get: { model.errorMessage != nil },
                 set: { if !$0 { model.errorMessage = nil } }
             )) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
+            .alert("删除全部书籍与索引？", isPresented: $showsDeleteAllConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("全部删除", role: .destructive) {
+                    Task { await model.deleteAllBooks() }
+                }
+            } message: {
+                Text("将删除书库中全部书籍的数据库记录与沙盒文件（含阅读位置、高亮、笔记、反思、会话与索引）。此操作不可撤销。Provider 配置和 API Key 不受影响。")
+            }
         }
     }
 
