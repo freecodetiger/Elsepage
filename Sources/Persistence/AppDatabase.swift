@@ -233,7 +233,7 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "dimensions > 0")
             }
         }
-        migrator.registerMigration("v8_agent_citations") { db in
+        migrator.registerMigration("v8_pending_citations") { db in
             try db.create(table: "agentResponseEvidence") { t in
                 t.column("messageID", .text).notNull().references("reflectionMessages", onDelete: .cascade)
                 t.column("id", .text).notNull()

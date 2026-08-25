@@ -49,7 +49,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentProviderTests",
-            dependencies: ["AgentRuntime", "ReaderAgent", "ModelProviders", "ReflectionCore", "LibraryCore", "ContextRouting"]
+            dependencies: ["AgentRuntime", "ReaderAgent", "ModelProviders", "ReflectionCore", "LibraryCore", "ContextRouting", "RetrievalCore"]
         ),
         .testTarget(
             name: "AgentRuntimeTests",

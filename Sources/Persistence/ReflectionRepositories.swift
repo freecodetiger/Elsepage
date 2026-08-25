@@ -106,8 +106,21 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
 
     public func messages(for reflectionID: ReflectionID) async throws -> [ReflectionMessage] {
         try await db.writer.read { db in
-            try ReflectionMessageRecord.filter(Column("reflectionID") == reflectionID.description)
-                .order(Column("createdAt"), Column("id")).fetchAll(db).map { try $0.domain() }
+            let records = try ReflectionMessageRecord.filter(Column("reflectionID") == reflectionID.description)
+                .order(Column("createdAt"), Column("id")).fetchAll(db)
+            var result: [ReflectionMessage] = []
+            result.reserveCapacity(records.count)
+            for record in records {
+                let message = try record.domain()
+                guard message.author == .agent else {
+                    result.append(message); continue
+                }
+                let citations = try AgentCitationRecord
+                    .filter(Column("messageID") == message.id.uuidString.lowercased())
+                    .order(Column("id")).fetchAll(db).map { try $0.domain() }
+                result.append(message.withCitations(citations))
+            }
+            return result
         }
     }
 

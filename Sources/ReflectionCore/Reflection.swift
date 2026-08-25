@@ -43,24 +43,36 @@ public enum ReflectionMessageSource: String, Codable, Sendable { case userInput,
 
 /// Conversation content with explicit authorship and provenance.
 /// `.userInput` is user-owned source data; `.agentGenerated` is replaceable derived data.
+/// `citations` is a loaded convenience (nil unless the repository attached it); the
+/// persisted source of truth remains the `agentCitations` table.
 public struct ReflectionMessage: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
     public let reflectionID: ReflectionID
     public let author: ReflectionMessageAuthor
     public let source: ReflectionMessageSource
     public let content: String
+    public let citations: [AgentCitation]?
     public let createdAt: Date
 
     public init(
         id: UUID = UUID(), reflectionID: ReflectionID,
         author: ReflectionMessageAuthor, source: ReflectionMessageSource,
-        content: String, createdAt: Date = Date()
+        content: String, citations: [AgentCitation]? = nil, createdAt: Date = Date()
     ) throws {
         guard (author == .user && source == .userInput) || (author == .agent && source == .agentGenerated) else {
             throw ReflectionValidationError.inconsistentMessageProvenance
         }
         self.id = id; self.reflectionID = reflectionID; self.author = author
-        self.source = source; self.content = content; self.createdAt = createdAt
+        self.source = source; self.content = content; self.citations = citations
+        self.createdAt = createdAt
+    }
+
+    /// Copy with citations attached (used by the repository when loading messages).
+    public func withCitations(_ attached: [AgentCitation]) -> ReflectionMessage {
+        (try? ReflectionMessage(
+            id: id, reflectionID: reflectionID, author: author, source: source,
+            content: content, citations: attached.isEmpty ? nil : attached, createdAt: createdAt
+        )) ?? self
     }
 
     public var isUserSourceOfTruth: Bool { source == .userInput }
