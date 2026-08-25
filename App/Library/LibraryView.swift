@@ -100,16 +100,23 @@ struct LibraryView: View {
     }
 
     private func bookList(_ model: LibraryModel) -> some View {
-        ScrollView {
-            // Use two equal, compressible columns. An adaptive column can use a
-            // wide cover image's ideal width and make neighboring cards overlap.
-            LazyVGrid(
-                columns: Array(
-                    repeating: GridItem(.flexible(minimum: 0), spacing: ElsepageTheme.Spacing.medium),
-                    count: LibraryGridLayout.columnCount
-                ),
-                spacing: ElsepageTheme.Spacing.xLarge
-            ) {
+        GeometryReader { geometry in
+            let columnWidth = LibraryGridLayout.columnWidth(
+                containerWidth: geometry.size.width,
+                horizontalPadding: ElsepageTheme.Spacing.page,
+                columnSpacing: ElsepageTheme.Spacing.medium
+            )
+
+            ScrollView {
+                // Fixed columns prevent SwiftUI from using a cover's ideal width
+                // during grid measurement. Every cell gets the same finite width.
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
+                        count: LibraryGridLayout.columnCount
+                    ),
+                    spacing: ElsepageTheme.Spacing.xLarge
+                ) {
                 ForEach(model.visibleBooks) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
@@ -157,8 +164,9 @@ struct LibraryView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                }
+                .padding(ElsepageTheme.Spacing.page)
             }
-            .padding(ElsepageTheme.Spacing.page)
         }
     }
 
