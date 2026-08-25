@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "ReaderCore", targets: ["ReaderCore"]),
         .library(name: "ReadingSessionCore", targets: ["ReadingSessionCore"]),
         .library(name: "ReflectionCore", targets: ["ReflectionCore"]),
+        .library(name: "SpeechCore", targets: ["SpeechCore"]),
         .library(name: "RetrievalCore", targets: ["RetrievalCore"]),
         .library(name: "ContextRouting", targets: ["ContextRouting"]),
         .library(name: "AgentRuntime", targets: ["AgentRuntime"]),
@@ -25,6 +26,7 @@ let package = Package(
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore"]),
+        .target(name: "SpeechCore"),
         .target(name: "AgentRuntime"),
         .target(name: "ContextRouting", dependencies: ["AgentRuntime", "LibraryCore"]),
         .target(name: "RetrievalCore", dependencies: ["LibraryCore", "ReaderCore"]),
@@ -41,7 +43,7 @@ let package = Package(
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "RetrievalCore", "ContextRouting",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "SpeechCore", "RetrievalCore", "ContextRouting",
                 "AgentRuntime", "ReaderAgent", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],

@@ -6,7 +6,7 @@ import ReadingSessionCore
 import ReflectionCore
 import SwiftUI
 
-/// Feature-scoped state for the text-only, local-first reflection prompt.
+/// Feature-scoped state for the local-first reflection prompt.
 /// Construction happens after the caller has ended a `ReadingSession`.
 @MainActor @Observable
 final class SessionReflectionModel: Identifiable {
@@ -21,11 +21,23 @@ final class SessionReflectionModel: Identifiable {
     let summary: SessionEndingSummary
     let locator: BookLocator
     private let submission: TextReflectionSubmissionService
+    private let voiceSubmission: VoiceReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
     private let readerAgent: ReaderAgent
     private let draftID = ReflectionID()
 
-    var text = ""
+    var text = "" {
+        didSet {
+            // A cleared editor is no longer a voice reflection: fall back to plain text so
+            // "record voice, delete it all, type text" saves as `.text`.
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                inputKind = .text
+            }
+        }
+    }
+    /// Raw audio file name (inside Documents/Reflections) when the user opted to save it.
+    var audioFileName: String?
+    private(set) var inputKind: ReflectionInputKind = .text
     private(set) var state: SubmissionState = .editing
     private(set) var reflection: Reflection?
     private(set) var messages: [ReflectionMessage] = []
@@ -50,6 +62,7 @@ final class SessionReflectionModel: Identifiable {
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
+        voiceSubmission = VoiceReflectionSubmissionService(repository: reflectionRepository)
     }
 
     var canSubmit: Bool {
@@ -60,13 +73,12 @@ final class SessionReflectionModel: Identifiable {
         guard canSubmit else { return nil }
         state = .saving
         do {
-            let reflection = try await submission.submit(.init(
-                id: draftID,
-                bookID: book.id,
-                sessionID: summary.session.id,
-                locator: locator,
-                originalText: text
-            ))
+            let reflection: Reflection
+            if inputKind == .voiceTranscript {
+                reflection = try await voiceSubmission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, editedTranscript: text, audioFileName: audioFileName))
+            } else {
+                reflection = try await submission.submit(.init(id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator, originalText: text))
+            }
             self.reflection = reflection
             state = .saved
             return reflection
@@ -78,6 +90,12 @@ final class SessionReflectionModel: Identifiable {
             errorMessage = error.localizedDescription
             return nil
         }
+    }
+
+    func markVoiceTranscript() {
+        guard state == .editing else { return }
+        // No voice content left (e.g. an empty transcription) is not a voice reflection.
+        inputKind = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .text : .voiceTranscript
     }
 
     func requestAgentReply() async {
@@ -191,6 +209,17 @@ struct SessionReflectionSheet: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            VoiceReflectionControls(
+                editableText: Binding(
+                    get: { model.text },
+                    set: { model.text = $0 }
+                ),
+                audioFileName: Binding(
+                    get: { model.audioFileName },
+                    set: { model.audioFileName = $0 }
+                ),
+                onVoiceTranscript: { model.markVoiceTranscript() }
+            )
             TextField("写下一点此刻真正留下来的东西…", text: $model.text, axis: .vertical)
                 .lineLimit(5...12)
                 .padding(ElsepageTheme.Spacing.medium)
