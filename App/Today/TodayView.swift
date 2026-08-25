@@ -9,6 +9,8 @@ import SwiftUI
 final class TodayModel {
     let library: LibraryModel
     private(set) var state: TodayProductState = .noCurrentBook
+    private(set) var readingStreak = ReadingStreak(days: 0)
+    private(set) var thinkingStreak = ThinkingStreak(days: 0)
     private(set) var isLoading = false
 
     init(library: LibraryModel) { self.library = library }
@@ -30,10 +32,35 @@ final class TodayModel {
                 sessions: sessions,
                 reflections: reflections
             )
+            await refreshStreaks()
         } catch is CancellationError {
             return
         } catch {
             state = .continueReading(book)
+        }
+    }
+
+    /// Streaks are GLOBAL: derived from every book's sessions/reflections.
+    private func refreshStreaks() async {
+        do {
+            let reflections = try await library.reflectionRepository.allReflections()
+            let sessions = try await library.sessionRepository.allSessions()
+            let now = Date()
+            let calendar = Calendar.current
+            readingStreak = StreakCalculator.readingStreak(
+                sessionStartDates: sessions.map(\.startedAt),
+                now: now,
+                calendar: calendar
+            )
+            thinkingStreak = StreakCalculator.thinkingStreak(
+                reflectionDates: reflections.map(\.createdAt),
+                now: now,
+                calendar: calendar
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            // Streaks are derived presentation data; keep previous values on failure.
         }
     }
 }
@@ -100,10 +127,34 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
             Text(book.title).font(.system(.title3, design: .serif, weight: .semibold))
             Text(title).font(.title2).fixedSize(horizontal: false, vertical: true)
+            Divider()
+            streaksView
             Button(action, action: onTap).buttonStyle(.borderedProminent).tint(.elsepageAccent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ElsepageTheme.Spacing.xLarge)
         .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
+    }
+
+    private var streaksView: some View {
+        HStack(spacing: ElsepageTheme.Spacing.medium) {
+            streakBadge(label: "连续阅读", days: model.readingStreak.days, emphasized: false)
+            streakBadge(label: "连续思考", days: model.thinkingStreak.days, emphasized: true)
+        }
+    }
+
+    private func streakBadge(label: String, days: Int, emphasized: Bool) -> some View {
+        HStack(spacing: ElsepageTheme.Spacing.xSmall) {
+            Image(systemName: emphasized ? "brain.head.profile" : "book")
+            Text("\(label) \(days) 天")
+                .font(emphasized ? .subheadline.weight(.semibold) : .footnote)
+        }
+        .foregroundStyle(emphasized ? Color.elsepageAccent : Color.secondary)
+        .padding(.horizontal, emphasized ? ElsepageTheme.Spacing.medium : ElsepageTheme.Spacing.small)
+        .padding(.vertical, ElsepageTheme.Spacing.xSmall)
+        .background(
+            emphasized ? Color.elsepageAccent.opacity(0.12) : Color.secondary.opacity(0.08),
+            in: Capsule()
+        )
     }
 }
