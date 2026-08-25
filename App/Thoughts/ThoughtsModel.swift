@@ -2,16 +2,22 @@ import Foundation
 import LibraryCore
 import Observation
 import ReaderAgent
+import ReaderCore
+import ReadingSessionCore
 import ReflectionCore
+import RetrievalCore
 
-/// Presentation state for the local Reflection archive and explicit ReaderAgent replies.
-/// It does not know provider HTTP, credentials, Memory, or retrieval details.
+/// Presentation state for the local Reflection archive, the structured Journal,
+/// and explicit ReaderAgent replies. It does not know provider HTTP, credentials,
+/// Memory, or retrieval details.
 @MainActor @Observable
 final class ThoughtsModel {
     private let archive: ReflectionArchiveService
+    private let journalService: JournalEntryService
     private let readerAgent: ReaderAgent
 
     private(set) var entries: [ReflectionArchiveEntry] = []
+    private(set) var journalEntries: [JournalEntry] = []
     private(set) var isLoading = false
     private(set) var replyingTo: ReflectionID?
     var errorMessage: String?
@@ -19,9 +25,17 @@ final class ThoughtsModel {
     init(
         books: any BookRepository,
         reflections: any ReflectionRepository,
+        sessions: any ReadingSessionRepository,
+        reading: any ReadingRepository,
+        index: any BookIndexRepository,
+        journal: any JournalRepository,
         readerAgent: ReaderAgent
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
+        journalService = JournalEntryService(
+            books: books, reflections: reflections,
+            sessions: sessions, index: index, reading: reading, journal: journal
+        )
         self.readerAgent = readerAgent
     }
 
@@ -31,6 +45,7 @@ final class ThoughtsModel {
         defer { isLoading = false }
         do {
             entries = try await archive.recentEntries()
+            journalEntries = try await journalService.recentEntries()
             errorMessage = nil
         } catch is CancellationError {
             return

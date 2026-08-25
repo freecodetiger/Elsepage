@@ -17,6 +17,16 @@ struct ThoughtsView: View {
         ThoughtsArchiveProjection.entries(model.entries, matching: searchText, filter: filter)
     }
 
+    private var visibleJournalEntries: [JournalEntry] {
+        let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return model.journalEntries }
+        return model.journalEntries.filter { entry in
+            entry.book.title.localizedCaseInsensitiveContains(term)
+                || entry.reflection.originalText.localizedCaseInsensitiveContains(term)
+                || entry.whatIThink.contains { $0.thought.localizedCaseInsensitiveContains(term) }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -70,7 +80,15 @@ struct ThoughtsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
                 controls
-                if visibleEntries.isEmpty {
+                if viewMode == .journal {
+                    if visibleJournalEntries.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, ElsepageTheme.Spacing.xLarge)
+                    } else {
+                        journalSections
+                    }
+                } else if visibleEntries.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                         .frame(maxWidth: .infinity)
                         .padding(.top, ElsepageTheme.Spacing.xLarge)
@@ -129,6 +147,19 @@ struct ThoughtsView: View {
         }
     }
 
+    // MARK: - Journal
+
+    /// New structured Journal path. The archive projection above is untouched so
+    /// the concurrent Citation/Router tasks can keep editing it; the final
+    /// "which view is default" toggle is left for the coordinator to decide.
+    private var journalSections: some View {
+        LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+            ForEach(visibleJournalEntries) { entry in
+                JournalEntryCard(entry: entry, openSource: openSource)
+            }
+        }
+    }
+
     private func archiveSection<Content: View>(
         title: String,
         subtitle: String,
@@ -173,10 +204,23 @@ struct ThoughtsView: View {
 private enum ThoughtsViewMode: String, CaseIterable, Identifiable {
     case timeline
     case books
+    case journal
 
     var id: String { rawValue }
-    var title: String { self == .timeline ? "时间" : "书籍" }
-    var systemImage: String { self == .timeline ? "calendar" : "books.vertical" }
+    var title: String {
+        switch self {
+        case .timeline: "时间"
+        case .books: "书籍"
+        case .journal: "日志"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .timeline: "calendar"
+        case .books: "books.vertical"
+        case .journal: "book.closed"
+        }
+    }
 }
 
 private extension ThoughtsArchiveFilter {

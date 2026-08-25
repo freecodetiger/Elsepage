@@ -20,6 +20,7 @@ final class SessionReflectionModel: Identifiable {
     let book: Book
     let summary: SessionEndingSummary
     let locator: BookLocator
+    let linkedHighlightIDs: [UUID]
     private let submission: TextReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
     private let readerAgent: ReaderAgent
@@ -41,12 +42,14 @@ final class SessionReflectionModel: Identifiable {
         book: Book,
         summary: SessionEndingSummary,
         locator: BookLocator,
+        linkedHighlightIDs: [UUID] = [],
         reflectionRepository: any ReflectionRepository,
         readerAgent: ReaderAgent
     ) {
         self.book = book
         self.summary = summary
         self.locator = locator
+        self.linkedHighlightIDs = linkedHighlightIDs
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
@@ -65,7 +68,8 @@ final class SessionReflectionModel: Identifiable {
                 bookID: book.id,
                 sessionID: summary.session.id,
                 locator: locator,
-                originalText: text
+                originalText: text,
+                linkedHighlightIDs: linkedHighlightIDs
             ))
             self.reflection = reflection
             state = .saved

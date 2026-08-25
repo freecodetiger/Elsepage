@@ -283,6 +283,12 @@ final class ReaderModel {
             }
         }
     }
+    /// Highlights created within a session's window. Used for the session
+    /// highlight count and for linking highlight IDs into the Reflection/Journal.
+    func highlights(in session: ReadingSession) -> [Highlight] {
+        highlights.filter { $0.createdAt >= session.startedAt }
+    }
+
     func jump(to chapter: ReaderChapter) {
         if let locator = try? BookLocator(
             json: chapter.locatorJSON,
@@ -314,7 +320,7 @@ final class ReaderModel {
             let completed = try await sessions.end(
                 id: session.id,
                 at: locator,
-                highlightCount: highlights.filter { $0.createdAt >= session.startedAt }.count,
+                highlightCount: highlights(in: session).count,
                 noteCount: notes.filter { $0.createdAt >= session.startedAt }.count
             )
             activeSession = completed
@@ -340,6 +346,7 @@ final class ReaderModel {
                 book: book,
                 summary: SessionEndingSummary(session: session),
                 locator: locator,
+                linkedHighlightIDs: highlights(in: session).map(\.id),
                 reflectionRepository: reflectionRepository,
                 readerAgent: readerAgent
             )
