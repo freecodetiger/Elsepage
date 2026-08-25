@@ -40,6 +40,25 @@ import Testing
     #expect(await store.secret(for: reference) == nil)
 }
 
+@Test func mainstreamProviderPresetsUseKnownOpenAICompatibleBaseURLs() {
+    #expect(ModelProviderPreset.openAI.baseURL?.absoluteString == "https://api.openai.com/v1")
+    #expect(ModelProviderPreset.deepSeek.baseURL?.absoluteString == "https://api.deepseek.com/v1")
+    #expect(ModelProviderPreset.anthropic.baseURL?.absoluteString == "https://api.anthropic.com/v1")
+    #expect(ModelProviderPreset.gemini.baseURL?.absoluteString == "https://generativelanguage.googleapis.com/v1beta/openai")
+    #expect(ModelProviderPreset.openRouter.baseURL?.absoluteString == "https://openrouter.ai/api/v1")
+    #expect(ModelProviderPreset.groq.baseURL?.absoluteString == "https://api.groq.com/openai/v1")
+    #expect(ModelProviderPreset.siliconFlow.baseURL?.absoluteString == "https://api.siliconflow.cn/v1")
+    #expect(ModelProviderPreset.alibabaBailian.baseURL?.absoluteString == "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    #expect(ModelProviderPreset.custom.baseURL == nil)
+    #expect(ModelProviderPreset.deepSeek.providerKind == .openAICompatible)
+}
+
+@Test func providerPresetCanBeRecoveredFromPersistedBaseURL() {
+    #expect(ModelProviderPreset.matching(baseURL: ModelProviderPreset.deepSeek.baseURL!) == .deepSeek)
+    #expect(ModelProviderPreset.matching(baseURL: URL(string: "https://api.deepseek.com/v1/")!) == .deepSeek)
+    #expect(ModelProviderPreset.matching(baseURL: URL(string: "https://private.example/v1")!) == .custom)
+}
+
 @Test func compatibleClientMapsRequestAndResponseWithoutExposingKey() async throws {
     let transport = RecordedTransport(data: Data("""
     {"id":"chatcmpl-1","choices":[{"message":{"content":"A concise response."},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}}

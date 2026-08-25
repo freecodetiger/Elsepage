@@ -9,9 +9,9 @@ final class ProviderSettingsModel {
     private let configurations: any ProviderConfigurationRepository
     private let secrets: any SecretStore
 
-    var provider: ModelProviderKind = .openAI
+    var selectedPreset: ModelProviderPreset = .openAI
     var baseURL = "https://api.openai.com/v1"
-    var modelID = "gpt-4.1-mini"
+    var modelID = ""
     var apiKey = ""
     var streamingEnabled = false
     private(set) var hasSavedKey = false
@@ -27,7 +27,7 @@ final class ProviderSettingsModel {
     func load() async {
         do {
             guard let configuration = try await configurations.currentConfiguration() else { return }
-            provider = configuration.provider
+            selectedPreset = .matching(baseURL: configuration.baseURL)
             baseURL = configuration.baseURL.absoluteString
             modelID = configuration.modelID
             streamingEnabled = configuration.streamingEnabled
@@ -35,11 +35,12 @@ final class ProviderSettingsModel {
         } catch { errorMessage = Self.message(for: error) }
     }
 
-    func selectProvider(_ provider: ModelProviderKind) {
-        self.provider = provider
-        if provider == .openAI, baseURL.isEmpty || baseURL.contains("example") {
-            baseURL = "https://api.openai.com/v1"
-        }
+    func selectPreset(_ preset: ModelProviderPreset) {
+        guard selectedPreset != preset else { return }
+        selectedPreset = preset
+        if let url = preset.baseURL { baseURL = url.absoluteString }
+        else { baseURL = "" }
+        modelID = ""
     }
 
     func save() async -> Bool {
@@ -118,7 +119,7 @@ final class ProviderSettingsModel {
             return nil
         }
         return ProviderConfiguration(
-            provider: provider,
+            provider: selectedPreset.providerKind,
             baseURL: url,
             modelID: model,
             secretReference: Self.secretReference,

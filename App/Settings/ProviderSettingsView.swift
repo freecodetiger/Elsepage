@@ -10,16 +10,23 @@ struct ProviderSettingsView: View {
             Form {
                 Section("Provider") {
                     Picker("服务商", selection: Binding(
-                        get: { model.provider },
-                        set: { model.selectProvider($0) }
+                        get: { model.selectedPreset },
+                        set: { model.selectPreset($0) }
                     )) {
-                        Text("OpenAI").tag(ModelProviderKind.openAI)
-                        Text("OpenAI-compatible").tag(ModelProviderKind.openAICompatible)
+                        ForEach(ModelProviderPreset.allCases) { preset in
+                            Text(preset.displayName).tag(preset)
+                        }
                     }
-                    TextField("Base URL", text: $model.baseURL)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
+                    if model.selectedPreset == .custom {
+                        TextField("Base URL", text: $model.baseURL)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+                            .autocorrectionDisabled()
+                    } else {
+                        LabeledContent("Base URL", value: model.baseURL)
+                            .font(.footnote)
+                            .textSelection(.enabled)
+                    }
                     TextField("模型", text: $model.modelID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -38,7 +45,7 @@ struct ProviderSettingsView: View {
                         }
                     }
                 } footer: {
-                    Text("API Key 只保存在本机 Keychain。测试连接会向所选 Provider 发送一条最小测试消息。")
+                    Text("预设会自动使用服务商的 OpenAI-compatible 地址。API Key 只保存在本机 Keychain；模型名请按服务商控制台填写。")
                 }
                 .disabled(model.isWorking)
 
