@@ -54,7 +54,7 @@ import Testing
     #expect(migrations == [
         "v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop",
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
-        "v7_local_book_retrieval", "v8_agent_citations"
+        "v7_local_book_retrieval", "v8_pending_citations"
     ])
 }
 
