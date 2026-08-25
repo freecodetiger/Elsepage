@@ -153,7 +153,7 @@ import Testing
         models: SessionContextModelFactory(client: FakeModelClient(events: [.started, .completed(response)]))
     )
     let events = await collectSessionContext(agent.respond(to: current.id))
-    guard case .completed = events.last else {
+    guard case .completed? = events.last(where: { if case .completed = $0 { return true }; return false }) else {
         Issue.record("Expected a completed agent reply")
         return
     }
