@@ -26,7 +26,10 @@ final class SessionReflectionModel: Identifiable {
     private let voiceSubmission: VoiceReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
     private let readerAgent: ReaderAgent
-    private let polishService: TranscriptPolishService?
+    private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
+    /// Built lazily by `refreshPolish()` whenever the sheet appears, so a provider
+    /// configured after launch is picked up on the next reflection sheet.
+    private(set) var polishService: TranscriptPolishService?
     private let draftID = ReflectionID()
 
     var text = "" {
@@ -64,7 +67,7 @@ final class SessionReflectionModel: Identifiable {
         linkedHighlightIDs: [UUID] = [],
         reflectionRepository: any ReflectionRepository,
         readerAgent: ReaderAgent,
-        polishService: TranscriptPolishService? = nil
+        makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil
     ) {
         self.book = book
         self.summary = summary
@@ -72,9 +75,16 @@ final class SessionReflectionModel: Identifiable {
         self.linkedHighlightIDs = linkedHighlightIDs
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
-        self.polishService = polishService
+        self.makePolishService = makePolishService
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
         voiceSubmission = VoiceReflectionSubmissionService(repository: reflectionRepository)
+    }
+
+    /// Re-evaluates provider availability so the polish button appears as soon as a
+    /// key is configured, not only when the app was launched with one.
+    func refreshPolish() async {
+        guard let makePolishService else { return }
+        polishService = await makePolishService()
     }
 
     /// A polish button is offered once a provider is configured and there is text.
@@ -283,6 +293,7 @@ struct SessionReflectionSheet: View {
                     .disabled(!model.canSubmit)
                 } }
             }
+            .task { await model.refreshPolish() }
         }
         .alert("暂时无法保存", isPresented: Binding(
             get: { model.errorMessage != nil },

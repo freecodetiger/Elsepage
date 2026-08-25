@@ -88,7 +88,7 @@ struct TodayView: View {
                     locator: locator,
                     reflectionRepository: model.library.reflectionRepository,
                     readerAgent: model.library.readerAgent,
-                    polishService: model.library.polishService
+                    makePolishService: model.library.makePolishService
                 )
             }
         case .reflectionComplete(let book):

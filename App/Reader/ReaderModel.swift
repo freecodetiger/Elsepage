@@ -15,7 +15,7 @@ final class ReaderModel {
     private let books: any BookRepository
     let reflectionRepository: any ReflectionRepository
     let readerAgent: ReaderAgent
-    let polishService: TranscriptPolishService?
+    let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     private let sessions: ReadingSessionService
     let readium: ReadiumServices
     var initialLocatorJSON: Data?
@@ -56,14 +56,14 @@ final class ReaderModel {
         sessions: ReadingSessionService,
         reflections: any ReflectionRepository,
         readerAgent: ReaderAgent,
-        polishService: TranscriptPolishService? = nil,
+        makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         requestedLocator: BookLocator? = nil,
         readium: ReadiumServices
     ) {
         self.book = book; self.fileURL = fileURL; self.repository = repository; self.books = books
         self.sessions = sessions; reflectionRepository = reflections
         self.readerAgent = readerAgent
-        self.polishService = polishService
+        self.makePolishService = makePolishService
         self.readium = readium
         if let requestedLocator {
             initialLocatorJSON = requestedLocator.json
@@ -353,7 +353,7 @@ final class ReaderModel {
                 linkedHighlightIDs: highlights(in: session).map(\.id),
                 reflectionRepository: reflectionRepository,
                 readerAgent: readerAgent,
-                polishService: polishService
+                makePolishService: makePolishService
             )
         } catch is CancellationError {
             return

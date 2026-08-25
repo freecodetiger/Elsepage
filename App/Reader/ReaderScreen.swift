@@ -222,7 +222,7 @@ struct ReaderScreen: View {
                 linkedHighlightIDs: model.highlights(in: summary.session).map(\.id),
                 reflectionRepository: model.reflectionRepository,
                 readerAgent: model.readerAgent,
-                polishService: model.polishService
+                makePolishService: model.makePolishService
             )
         }
     }

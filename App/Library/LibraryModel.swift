@@ -22,7 +22,7 @@ final class LibraryModel {
     private let readium: ReadiumServices
     private let indexCoordinator: BookIndexCoordinator
     let readerAgent: ReaderAgent
-    let polishService: TranscriptPolishService?
+    let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
 
     private(set) var books: [Book] = []
     private(set) var readingProgress: [BookID: Double] = [:]
@@ -40,7 +40,7 @@ final class LibraryModel {
         sessions: any ReadingSessionRepository,
         reflections: any ReflectionRepository,
         readerAgent: ReaderAgent,
-        polishService: TranscriptPolishService? = nil,
+        makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         files: BookFileStore,
         metadataReader: ReadiumMetadataReader,
         readium: ReadiumServices,
@@ -51,7 +51,7 @@ final class LibraryModel {
         sessionRepository = sessions
         sessionService = ReadingSessionService(repository: sessions)
         self.readerAgent = readerAgent
-        self.polishService = polishService
+        self.makePolishService = makePolishService
         importer = BookImporter(repository: books, files: files)
         self.metadataReader = metadataReader
         self.readium = readium
@@ -98,7 +98,7 @@ final class LibraryModel {
             sessions: sessionService,
             reflections: reflectionRepository,
             readerAgent: readerAgent,
-            polishService: polishService,
+            makePolishService: makePolishService,
             requestedLocator: locator,
             readium: readium
         )

@@ -51,12 +51,11 @@ final class AppModel {
                 traceRepository: routingTraces
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
-            // Only offered once a provider is configured, so the polish button stays hidden otherwise.
-            let polishService: TranscriptPolishService?
-            if (try? await providerConfigurations.currentConfiguration()) != nil {
-                polishService = TranscriptPolishService(clientFactory: modelClientFactory)
-            } else {
-                polishService = nil
+            // Re-checked every time a reflection sheet opens, so the polish button appears as soon
+            // as a provider is configured even if the key is added after launch.
+            let makePolishService: @MainActor () async -> TranscriptPolishService? = { [providerConfigurations, modelClientFactory] in
+                guard (try? await providerConfigurations.currentConfiguration()) != nil else { return nil }
+                return TranscriptPolishService(clientFactory: modelClientFactory)
             }
             let files = try BookFileStore(directory: support.appendingPathComponent("Books", isDirectory: true))
             let readium = ReadiumServices()
@@ -67,7 +66,7 @@ final class AppModel {
                 sessions: sessions,
                 reflections: reflections,
                 readerAgent: readerAgent,
-                polishService: polishService,
+                makePolishService: makePolishService,
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),
                 readium: readium,
