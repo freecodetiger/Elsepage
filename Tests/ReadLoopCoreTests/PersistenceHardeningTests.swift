@@ -4,6 +4,7 @@ import LibraryCore
 import ModelProviders
 import Persistence
 import ReaderCore
+import ReflectionCore
 import Testing
 
 @Test func providerConfigurationPersistsOnlyNonSecretFieldsAndCanBeDeleted() async throws {
@@ -54,7 +55,8 @@ import Testing
     #expect(migrations == [
         "v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop",
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
-        "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal", "v11_polished_text"
+        "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
+        "v11_polished_text", "v12_memory"
     ])
 }
 
@@ -151,4 +153,47 @@ import Testing
     #expect(identifiers.contains("v9_routing_trace"))
     #expect(identifiers.contains("v10_journal"))
     #expect(identifiers.contains("v11_polished_text"))
+}
+
+@Test func v11DatabaseUpgradesToV12MemoryWithoutDeletion() async throws {
+    // A database created before v12 (e.g. an installed v1–v11 build) must upgrade
+    // to the memories table additively, preserving existing books/reflections and
+    // the already-derived journalMemoryChanges rows.
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v11_polished_text")
+
+    let book = TestFixtures.book(fingerprint: "v11-upgrade")
+    let reflectionID = UUID().uuidString.lowercased()
+    try await queue.write { db in
+        try db.execute(
+            sql: "INSERT INTO books (id, fingerprint, title, fileName, fileSize, importedAt) VALUES (?, ?, ?, ?, ?, ?)",
+            arguments: [book.id.description, book.fingerprint.rawValue, book.title, book.fileName, book.fileSize, book.importedAt]
+        )
+        try db.execute(
+            sql: "INSERT INTO reflections (id, bookID, originalText, inputKind, createdAt) VALUES (?, ?, ?, 'text', ?)",
+            arguments: [reflectionID, book.id.description, "升级前的旧想法", Date()]
+        )
+        try db.execute(
+            sql: "INSERT INTO journalMemoryChanges (id, journalID, changeType, summary, createdAt) VALUES (?, ?, 'store', ?, ?)",
+            arguments: [UUID().uuidString.lowercased(), reflectionID, "用户重视自由", Date()]
+        )
+    }
+
+    // Upgrade to head (v12_memory).
+    try AppDatabase.migrator.migrate(queue)
+    let database = try AppDatabase(writer: queue)
+
+    // v12 memories table exists (and starts empty — nothing has consumed proposals yet).
+    let tables = try await database.writer.read { db in
+        try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'")
+    }
+    #expect(tables == ["memories"])
+    #expect(try await GRDBMemoryRepository(database: database).memories().isEmpty)
+
+    // Pre-existing data is intact.
+    #expect(try await GRDBBookRepository(database: database).book(id: book.id) != nil)
+    let reflections = try await GRDBReflectionRepository(database: database).reflections(for: book.id)
+    #expect(reflections.count == 1)
+    #expect(try await GRDBJournalRepository(database: database).memoryChanges(for: reflections[0].id).count == 1)
 }
