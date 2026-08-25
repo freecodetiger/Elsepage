@@ -7,6 +7,10 @@ import UIKit
 
 struct ReadiumReaderView: UIViewControllerRepresentable {
     let model: ReaderModel
+    /// Value snapshots make Observation changes visible to the SwiftUI/UIKit bridge.
+    let preferences: ReaderPreferences
+    let highlights: [Highlight]
+    let jumpTargetJSON: Data?
     let colorScheme: ColorScheme
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
@@ -46,9 +50,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     }
                     model.chapters = Self.chapters(from: publication.manifest.tableOfContents)
                     let initial = try model.initialLocatorJSON.flatMap(Self.readiumLocator(from:))
-                    let actions = EditingAction.defaultActions + [
+                    let actions = [
                         EditingAction(title: "高亮", action: #selector(ReaderHostViewController.highlightSelection)),
-                        EditingAction(title: "批注", action: #selector(ReaderHostViewController.noteSelection)),
+                        EditingAction(title: "笔记", action: #selector(ReaderHostViewController.noteSelection)),
+                        .copy,
+                        .lookup,
+                        .translate,
+                        .share,
                     ]
                     let navigator = try EPUBNavigatorViewController(
                         publication: publication,
@@ -88,7 +96,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         self?.presentHighlight(id: id, from: host)
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
-                    applyHighlights()
+                    applyHighlights(model.highlights)
                 } catch is CancellationError {
                     return
                 } catch {
@@ -125,11 +133,16 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             model.toggleControls()
         }
 
-        func update(preferences: ReaderPreferences, colorScheme: ColorScheme, jumpTarget: Data?) {
+        func update(
+            preferences: ReaderPreferences,
+            highlights: [Highlight],
+            colorScheme: ColorScheme,
+            jumpTarget: Data?
+        ) {
             if preferences != lastPreferences || colorScheme != lastColorScheme {
                 apply(preferences: preferences, colorScheme: colorScheme)
             }
-            applyHighlights()
+            applyHighlights(highlights)
             guard let jumpTarget, jumpTarget != lastJumpTarget else { return }
             lastJumpTarget = jumpTarget
             Task {
@@ -166,11 +179,11 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             )
         }
 
-        private func applyHighlights() {
+        private func applyHighlights(_ highlights: [Highlight]) {
             guard let navigator else { return }
-            guard model.highlights != lastHighlights else { return }
-            lastHighlights = model.highlights
-            let decorations = model.highlights.compactMap { highlight -> Decoration? in
+            guard highlights != lastHighlights else { return }
+            lastHighlights = highlights
+            let decorations = highlights.compactMap { highlight -> Decoration? in
                 guard let locator = try? Self.readiumLocator(from: highlight.locator.json) else { return nil }
                 return Decoration(
                     id: highlight.id.uuidString.lowercased(),
@@ -282,9 +295,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
         context.coordinator.update(
-            preferences: model.preferences,
+            preferences: preferences,
+            highlights: highlights,
             colorScheme: colorScheme,
-            jumpTarget: model.jumpTargetJSON
+            jumpTarget: jumpTargetJSON
         )
     }
 }

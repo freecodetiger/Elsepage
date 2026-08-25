@@ -13,7 +13,13 @@ struct ReaderScreen: View {
             themeBackground.ignoresSafeArea()
 
             if model.isPrepared {
-                ReadiumReaderView(model: model, colorScheme: colorScheme)
+                ReadiumReaderView(
+                    model: model,
+                    preferences: model.preferences,
+                    highlights: model.highlights,
+                    jumpTargetJSON: model.jumpTargetJSON,
+                    colorScheme: colorScheme
+                )
                     .ignoresSafeArea()
             } else {
                 ProgressView("正在打开…").controlSize(.large)
