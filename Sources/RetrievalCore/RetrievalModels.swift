@@ -137,6 +137,7 @@ public protocol BookIndexRepository: Sendable {
     func replace(chunks: [BookChunk], inResource href: String, for bookID: BookID, version: Int) async throws
     func replace(blocks: [BookTextBlock], inResource href: String, for bookID: BookID, version: Int) async throws
     func chunks(for bookID: BookID, version: Int) async throws -> [BookChunk]
+    func chunk(id: BookChunkID, bookID: BookID, version: Int) async throws -> BookChunk?
     func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope) async throws -> [(BookChunk, Double)]
     func readingBoundary(bookID: BookID, locator: BookLocator) async throws -> ReadingBoundary?
     func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws
@@ -154,7 +155,7 @@ public struct ReaderAgentBookContext: Hashable, Sendable {
 
 public struct ReaderAgentContextBuilder: Sendable {
     private let retriever: any BookRetriever
-    private let repository: any BookIndexRepository
+    public let repository: any BookIndexRepository
     private let characterBudget: Int
     public init(retriever: any BookRetriever, repository: any BookIndexRepository, characterBudget: Int = 4_000) {
         self.retriever = retriever; self.repository = repository; self.characterBudget = max(0, characterBudget)
@@ -162,6 +163,11 @@ public struct ReaderAgentContextBuilder: Sendable {
     public func isAvailable(for bookID: BookID) async -> Bool {
         guard let job = try? await repository.job(for: bookID, version: BookIndexPipeline.currentVersion) else { return false }
         return job.state == .lexicalReady || job.state == .embedding || job.state == .ready
+    }
+
+    /// Resolves the read-so-far boundary for a locator, for local citation validation.
+    public func readingBoundary(for bookID: BookID, locator: BookLocator) async -> ReadingBoundary? {
+        try? await repository.readingBoundary(bookID: bookID, locator: locator)
     }
 
     public func build(bookID: BookID, reflection: String, currentLocator: BookLocator?,

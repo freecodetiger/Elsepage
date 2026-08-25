@@ -10,6 +10,9 @@ public enum ReaderAgentEvent: Equatable, Sendable {
     case started
     case contextPrepared(ReflectionConnection?)
     case textDelta(String)
+    /// The evidence actually sent for this reply, plus the citations the model used.
+    /// Carried to the UI so it can render provenance without a separate query.
+    case citationsValidated(AgentResponseProvenance)
     case completed(ReflectionMessage)
     case cancelled
     case failed(ReaderAgentFailure)
@@ -173,6 +176,12 @@ public struct ReaderAgent: Sendable {
                         nearbyCharacterBudget: plan.budget.nearbyCharacters,
                         pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters
                     )
+                    let citationBoundary: ReadingBoundary?
+                    if let currentLocator, let contextBuilder {
+                        citationBoundary = await contextBuilder.readingBoundary(for: reflection.bookID, locator: currentLocator)
+                    } else {
+                        citationBoundary = nil
+                    }
                     for await event in AgentExecutor(client: client, budget: budget).run(
                         input: policy.input(
                             for: reflection,
@@ -191,10 +200,12 @@ public struct ReaderAgent: Sendable {
                         switch event {
                         case .textDelta(let text): continuation.yield(.textDelta(text))
                         case .completed(let result):
-                            let validated = AgentCitationValidator().validate(
+                            let validated = await AgentCitationValidator().validate(
                                 content: result.response.content,
                                 messageID: messageID,
-                                evidence: responseEvidence
+                                evidence: responseEvidence,
+                                bookIndex: contextBuilder?.repository,
+                                readingBoundary: citationBoundary
                             )
                             let content = validated.content
                             guard !content.isEmpty else {
@@ -209,6 +220,10 @@ public struct ReaderAgent: Sendable {
                                 source: .agentGenerated,
                                 content: content
                             )
+                            continuation.yield(.citationsValidated(.init(
+                                evidence: responseEvidence,
+                                citations: validated.citations
+                            )))
                             do {
                                 try await reflections.appendAgentMessage(
                                     message,
