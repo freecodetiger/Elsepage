@@ -159,4 +159,48 @@ Voice → Citation → Session Context → Router 可观测性 → Journal
 - 记录每颗 worktree 分支/commit、合并顺序、migration 编号、测试/构建结果、未决集成问题、手工设备项。
 - 若实现实质改变 README/gate 文档，同步更新。
 
-_本轮记录待 Phase 3 后填充。_
+## 11. 执行记录（Phase 2 + Phase 3，2026-08-25）
+
+### Phase 2 — 5 个并发 subagent 交付
+
+| 任务 | 分支 | 提交数 | worktree 测试 |
+|---|---|---|---|
+| P0-1 Citation | `codex/vnext-citations` | 6 | 93/93 |
+| P0-2 Session Context | `codex/vnext-session-context` | 4 | 87/87 |
+| P0-3 Router 可观测性 | `codex/vnext-router-observability` | 5 | 91/91 |
+| P0-4 Voice | `codex/vnext-voice-reflection` | 4 | 91/91 |
+| P0-5 Journal | `codex/vnext-journal` | 4 | 89/89 |
+
+### Phase 3 — 顺序合回 main
+
+合并顺序 V→C→S→R→J，每次合并后全量 `swift test`：
+
+| 顺序 | 合并提交 | 合入后测试 |
+|---|---|---|
+| 1 Voice | `48b352e` | 91/91 |
+| 2 Citation | `3f002f9` | 101/101 |
+| 3 Session Context | `8a3c996` | 105/105 |
+| 4 Router | `5471bbc`（6 文件冲突已解） | 113/113 |
+| 5 Journal | `9ddd9cf`（6 文件冲突已解） | 119/119 |
+
+合并中修复（coordinator）：
+- `SessionContextBuilderTests.readerAgentConnectsOnlySameBookPastReflections`：`.completed` 后新增 `.contextDisclosed` 事件，改为 `last(where:)` 定位最后的 `.completed`。
+- `RoutingTracePersistenceTests.routingTraceSavesRoundTripsAndLatestTraceWins`：两个 trace 的 `createdAt` 落在 GRDB julian-day Double 同一精度格点 → flaky；改为显式不同 createdAt。
+- AppDatabase 双右花括号残留（Journal 合并时 conflict 区尾部）已修。
+
+### Migration 重排（coordinator）
+
+`v8_pending_citations` → `v8_agent_citations`；`v8_pending_router_trace` → `v9_routing_trace`；`v8_pending_journal` → `v10_journal`。提交 `bd41c49`。
+
+### 合并后的已知债务 / 未决项
+
+- **citation 双表重叠**：P0-1 建 `agentResponseEvidence`+`agentCitations`（live provenance，按 messageID）；P0-5 建 `reflectionCitations`（journal 快照，按 reflectionID）。功能不冲突但数据冗余，后续应让 Journal 读取 agentCitations 并废弃 reflectionCitations。
+- **`contextRecipeVersion`** 仍为 `reflection-book-hybrid-read-so-far-v1`（Session Context 已实质改配方），语义上升 v2 需同步改 AgentProviderTests 断言，未做。
+- **Voice 长按/录音/权限** 为设备级行为，需真机 Xcode gate。
+- **linkedHighlightIDs** 在 SessionReflectionSheet 提交处已由 coordinator 统一接上（voice/text 两分支都传）；capture 端（ReaderModel.endReadingSession）已由 Journal 任务打通。
+- **App 层编译**：swift test 不编译 App target，由 Phase 4 xcodegen + xcodebuild gate 验证。
+
+### Phase 4 门禁（构建中）
+
+- `xcodegen generate` ✅（ReadLoop.xcodeproj 已更新，含 SpeechCore/ContextRouting 新 product）。
+- unsigned iOS Simulator `xcodebuild` 后台构建中。
