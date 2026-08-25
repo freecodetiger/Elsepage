@@ -54,7 +54,15 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         publication: publication,
                         initialLocation: initial,
                         config: .init(
+                            preferences: Self.readiumPreferences(
+                                from: model.preferences,
+                                colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+                            ),
                             editingActions: actions,
+                            // Readium's scroll preference changes the navigator to a
+                            // vertical presentation. Disable the residual horizontal
+                            // page-turn gesture so the selected mode is unambiguous.
+                            disablePageTurnsWhileScrolling: true,
                             contentInset: [
                                 .compact: (top: 8, bottom: 8),
                                 .regular: (top: 16, bottom: 16),
@@ -132,21 +140,26 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             guard let navigator else { return }
             lastPreferences = preferences
             lastColorScheme = colorScheme
+            let readiumPreferences = Self.readiumPreferences(from: preferences, colorScheme: colorScheme)
+            navigator.submitPreferences(readiumPreferences)
+            navigator.parent?.view.backgroundColor = readiumPreferences.theme?.backgroundColor.uiColor
+        }
+
+        private static func readiumPreferences(from preferences: ReaderPreferences, colorScheme: ColorScheme) -> EPUBPreferences {
             let theme: Theme = switch preferences.theme {
             case .system: colorScheme == .dark ? .dark : .light
             case .light: .light
             case .dark: .dark
             case .sepia: .sepia
             }
-            navigator.submitPreferences(.init(
+            return .init(
                 fontSize: preferences.fontSize,
                 lineHeight: preferences.lineHeight,
                 pageMargins: preferences.pageMargins,
                 publisherStyles: false,
                 scroll: preferences.readingMode == .scroll,
                 theme: theme
-            ))
-            navigator.parent?.view.backgroundColor = theme.backgroundColor.uiColor
+            )
         }
 
         private func applyHighlights() {

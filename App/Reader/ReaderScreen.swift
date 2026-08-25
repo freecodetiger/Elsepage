@@ -294,6 +294,9 @@ private struct ReaderAppearanceSheet: View {
                         Text("滚动").tag(ReadingMode.scroll)
                     }
                     .pickerStyle(.segmented)
+                    Text("滚动模式使用上下滑动阅读。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("阅读设置")
