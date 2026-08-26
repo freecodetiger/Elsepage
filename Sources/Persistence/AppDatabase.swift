@@ -372,6 +372,18 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "rerankerModelID", .text)
             }
         }
+
+        // Per-role RAG endpoints/keys. Each of embedding/reranker may carry its
+        // own base URL + keychain reference (e.g. SiliconFlow Qwen models while
+        // chat runs elsewhere). Nil = fall back to the chat provider's values.
+        migrator.registerMigration("v15_rag_role_endpoints") { db in
+            try db.alter(table: "providerConfigurations") { t in
+                t.add(column: "embeddingBaseURL", .text)
+                t.add(column: "embeddingSecretReference", .text)
+                t.add(column: "rerankerBaseURL", .text)
+                t.add(column: "rerankerSecretReference", .text)
+            }
+        }
         return migrator
     }
 

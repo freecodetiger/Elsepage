@@ -21,14 +21,15 @@ public final class OpenAICompatibleEmbeddingProvider: EmbeddingProvider, @unchec
         apiKey: String,
         transport: any HTTPDataTransport = URLSessionDataTransport()
     ) throws {
+        let endpoint = configuration.effectiveEmbeddingBaseURL
         guard configuration.provider == .openAI || configuration.provider == .openAICompatible,
               let model = configuration.embeddingModelID, !model.isEmpty,
               !apiKey.isEmpty,
-              configuration.baseURL.scheme == "https" || configuration.baseURL.scheme == "http" else {
+              endpoint.scheme == "https" || endpoint.scheme == "http" else {
             throw ModelFailure.invalidConfiguration
         }
         self.modelIdentifier = model
-        self.baseURL = configuration.baseURL
+        self.baseURL = endpoint
         self.apiKey = apiKey
         self.transport = transport
     }

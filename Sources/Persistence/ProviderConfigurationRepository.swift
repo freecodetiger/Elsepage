@@ -32,7 +32,11 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
     let id, provider, baseURL, modelID, secretReference: String
     let streamingEnabled: Bool
     let embeddingModelID: String?
+    let embeddingBaseURL: String?
+    let embeddingSecretReference: String?
     let rerankerModelID: String?
+    let rerankerBaseURL: String?
+    let rerankerSecretReference: String?
 
     init(_ configuration: ProviderConfiguration) {
         id = configuration.id.uuidString.lowercased()
@@ -42,7 +46,11 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
         secretReference = configuration.secretReference.rawValue
         streamingEnabled = configuration.streamingEnabled
         embeddingModelID = configuration.embeddingModelID
+        embeddingBaseURL = configuration.embeddingBaseURL?.absoluteString
+        embeddingSecretReference = configuration.embeddingSecretReference?.rawValue
         rerankerModelID = configuration.rerankerModelID
+        rerankerBaseURL = configuration.rerankerBaseURL?.absoluteString
+        rerankerSecretReference = configuration.rerankerSecretReference?.rawValue
     }
 
     func domain() throws -> ProviderConfiguration {
@@ -61,7 +69,11 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
             secretReference: .init(rawValue: secretReference),
             streamingEnabled: streamingEnabled,
             embeddingModelID: embeddingModelID,
-            rerankerModelID: rerankerModelID
+            embeddingBaseURL: embeddingBaseURL.flatMap { URL(string: $0) },
+            embeddingSecretReference: embeddingSecretReference.map { .init(rawValue: $0) },
+            rerankerModelID: rerankerModelID,
+            rerankerBaseURL: rerankerBaseURL.flatMap { URL(string: $0) },
+            rerankerSecretReference: rerankerSecretReference.map { .init(rawValue: $0) }
         )
     }
 }

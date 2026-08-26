@@ -82,6 +82,16 @@ struct ProviderSettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .disabled(model.embeddingEnabled)
+                    TextField("Embedding Base URL", text: $model.embeddingBaseURL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .disabled(model.embeddingEnabled)
+                    SecureField(model.embeddingHasSavedKey ? "Embedding API Key（已保存）" : "Embedding API Key", text: $model.embeddingApiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .privacySensitive()
+                        .disabled(model.embeddingEnabled)
                     if model.embeddingEnabled {
                         Label("语义检索已启用（\(model.embeddingModelID)）", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
@@ -106,6 +116,16 @@ struct ProviderSettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .disabled(model.rerankerEnabled)
+                    TextField("Reranker Base URL", text: $model.rerankerBaseURL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .disabled(model.rerankerEnabled)
+                    SecureField(model.rerankerHasSavedKey ? "Reranker API Key（已保存）" : "Reranker API Key", text: $model.rerankerApiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .privacySensitive()
+                        .disabled(model.rerankerEnabled)
                     if model.rerankerEnabled {
                         Label("Reranker 已启用（\(model.rerankerModelID)）", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
@@ -128,7 +148,7 @@ struct ProviderSettingsView: View {
                 } header: {
                     Text("语义检索 (RAG)")
                 } footer: {
-                    Text("Embedding：为每本书建立向量索引（语义召回）。Reranker：对召回候选做精排门禁，低相关的不再作为证据发给 Agent。两者复用上方 Provider 区的 Base URL 与自填的 API Key，独立配置、需联网；未配置或失败时自动降级（词法 / 融合结果）。")
+                    Text("Embedding：为每本书建立向量索引（语义召回）。Reranker：对召回候选做精排门禁，低相关的不再作为证据发给 Agent。两者各自独立的 Base URL 与 API Key（与聊天 Provider 无关），选硅基流动预设会自动填地址，需联网；未配置或失败时自动降级（词法 / 融合结果）。")
                 }
                 .disabled(model.isEmbeddingWorking || model.isRerankerWorking)
 

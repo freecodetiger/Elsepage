@@ -10,6 +10,8 @@ import ReflectionCore
 @MainActor @Observable
 final class ProviderSettingsModel {
     private static let secretReference = SecretReference(rawValue: "primary-model-provider")
+    private static let embeddingSecretReference = SecretReference(rawValue: "embedding-model-provider")
+    private static let rerankerSecretReference = SecretReference(rawValue: "reranker-model-provider")
 
     /// SiliconFlow embedding model presets (selectable; custom stays editable).
     static let siliconFlowEmbeddingModels: [(name: String, model: String)] = [
@@ -46,13 +48,21 @@ final class ProviderSettingsModel {
     var modelID = ""
     var apiKey = ""
     var streamingEnabled = false
-    /// Separate embedding model for semantic retrieval (independent of the chat model).
+    /// Semantic retrieval (embedding) role: its own model, endpoint and key —
+    /// independent of the chat provider. Fields default to SiliconFlow so the
+    /// Qwen/BGE presets work out of the box.
     var embeddingModelID = ""
+    var embeddingBaseURL = "https://api.siliconflow.cn/v1"
+    var embeddingApiKey = ""
+    private(set) var embeddingHasSavedKey = false
     private(set) var embeddingEnabled = false
     private(set) var isEmbeddingWorking = false
     private(set) var embeddingStatusMessage: String?
-    /// Separate cross-encoder rerank model (RAG precision gate).
+    /// Rerank precision-gate role: same independent model/endpoint/key shape.
     var rerankerModelID = ""
+    var rerankerBaseURL = "https://api.siliconflow.cn/v1"
+    var rerankerApiKey = ""
+    private(set) var rerankerHasSavedKey = false
     private(set) var rerankerEnabled = false
     private(set) var isRerankerWorking = false
     private(set) var rerankerStatusMessage: String?
@@ -92,8 +102,12 @@ final class ProviderSettingsModel {
             modelID = configuration.modelID
             streamingEnabled = configuration.streamingEnabled
             embeddingModelID = configuration.embeddingModelID ?? ""
+            embeddingBaseURL = configuration.embeddingBaseURL?.absoluteString ?? configuration.baseURL.absoluteString
+            embeddingHasSavedKey = try await secrets.secret(for: configuration.effectiveEmbeddingSecretReference) != nil
             embeddingEnabled = configuration.embeddingModelID != nil
             rerankerModelID = configuration.rerankerModelID ?? ""
+            rerankerBaseURL = configuration.rerankerBaseURL?.absoluteString ?? configuration.baseURL.absoluteString
+            rerankerHasSavedKey = try await secrets.secret(for: configuration.effectiveRerankerSecretReference) != nil
             rerankerEnabled = configuration.rerankerModelID != nil
             hasSavedKey = try await secrets.secret(for: configuration.secretReference) != nil
         } catch { errorMessage = Self.message(for: error) }
@@ -160,24 +174,28 @@ final class ProviderSettingsModel {
         embeddingStatusMessage = nil
         defer { isEmbeddingWorking = false }
         do {
-            let key = try await resolvedKey()
+            let key = try await embeddingResolvedKey()
             try await ProviderEmbeddingTester().test(configuration: configuration, apiKey: key)
             embeddingStatusMessage = "Embedding 连接成功"
         } catch { errorMessage = Self.message(for: error) }
     }
 
-    /// Persists the embedding model, then re-enqueues existing books so the
-    /// index pipeline picks them up for semantic indexing (`.lexicalReady` books
-    /// get an embed-only pass; model switches get a re-embed).
+    /// Persists the embedding role (model + its own endpoint/key), then
+    /// re-enqueues existing books so the index pipeline picks them up for
+    /// semantic indexing (`.lexicalReady` books get an embed-only pass; model
+    /// switches get a re-embed).
     func enableEmbedding() async {
         guard let configuration = embeddingConfiguration() else { return }
         isEmbeddingWorking = true
         embeddingStatusMessage = nil
         defer { isEmbeddingWorking = false }
         do {
-            let key = try await resolvedKey()
+            let key = try await embeddingResolvedKey()
             try await ProviderEmbeddingTester().test(configuration: configuration, apiKey: key)
             try await configurations.save(configuration)
+            try await secrets.save(key, for: Self.embeddingSecretReference)
+            embeddingApiKey = ""
+            embeddingHasSavedKey = true
             embeddingEnabled = true
             embeddingStatusMessage = "语义检索已启用，正在为已有书籍建立索引"
             let allBooks = try await books.allBooks()
@@ -187,13 +205,7 @@ final class ProviderSettingsModel {
 
     func disableEmbedding() async {
         guard let base = configuration() else { return }
-        let config = ProviderConfiguration(
-            id: base.id, provider: base.provider, baseURL: base.baseURL,
-            modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: nil,
-            rerankerModelID: base.rerankerModelID
-        )
-        try? await configurations.save(config)
+        try? await configurations.save(embeddingCleared(base))
         embeddingModelID = ""
         embeddingEnabled = false
         embeddingStatusMessage = "语义检索已停用"
@@ -207,13 +219,13 @@ final class ProviderSettingsModel {
         rerankerStatusMessage = nil
         defer { isRerankerWorking = false }
         do {
-            let key = try await resolvedKey()
+            let key = try await rerankerResolvedKey()
             try await ProviderRerankerTester().test(configuration: configuration, apiKey: key)
             rerankerStatusMessage = "Reranker 连接成功"
         } catch { errorMessage = Self.message(for: error) }
     }
 
-    /// Persists the reranker model. No re-embedding needed — reranking happens
+    /// Persists the reranker role. No re-embedding needed — reranking happens
     /// at query time on existing fused candidates.
     func enableReranker() async {
         guard let configuration = rerankerConfiguration() else { return }
@@ -221,9 +233,12 @@ final class ProviderSettingsModel {
         rerankerStatusMessage = nil
         defer { isRerankerWorking = false }
         do {
-            let key = try await resolvedKey()
+            let key = try await rerankerResolvedKey()
             try await ProviderRerankerTester().test(configuration: configuration, apiKey: key)
             try await configurations.save(configuration)
+            try await secrets.save(key, for: Self.rerankerSecretReference)
+            rerankerApiKey = ""
+            rerankerHasSavedKey = true
             rerankerEnabled = true
             rerankerStatusMessage = "Reranker 已启用（检索精排门禁）"
         } catch { errorMessage = Self.message(for: error) }
@@ -231,13 +246,7 @@ final class ProviderSettingsModel {
 
     func disableReranker() async {
         guard let base = configuration() else { return }
-        let config = ProviderConfiguration(
-            id: base.id, provider: base.provider, baseURL: base.baseURL,
-            modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
-            rerankerModelID: nil
-        )
-        try? await configurations.save(config)
+        try? await configurations.save(rerankerCleared(base))
         rerankerModelID = ""
         rerankerEnabled = false
         rerankerStatusMessage = "Reranker 已停用"
@@ -255,8 +264,14 @@ final class ProviderSettingsModel {
                 if let previousKey { try await secrets.save(previousKey, for: Self.secretReference) }
                 throw error
             }
+            try? await secrets.removeSecret(for: Self.embeddingSecretReference)
+            try? await secrets.removeSecret(for: Self.rerankerSecretReference)
             apiKey = ""
+            embeddingApiKey = ""
+            rerankerApiKey = ""
             hasSavedKey = false
+            embeddingHasSavedKey = false
+            rerankerHasSavedKey = false
             statusMessage = "配置和 API Key 已删除"
         } catch { errorMessage = Self.message(for: error) }
     }
@@ -279,19 +294,34 @@ final class ProviderSettingsModel {
             secretReference: Self.secretReference,
             streamingEnabled: streamingEnabled,
             embeddingModelID: embedding.isEmpty ? nil : embedding,
-            rerankerModelID: reranker.isEmpty ? nil : reranker
+            embeddingBaseURL: parsedEndpoint(embeddingBaseURL),
+            embeddingSecretReference: Self.embeddingSecretReference,
+            rerankerModelID: reranker.isEmpty ? nil : reranker,
+            rerankerBaseURL: parsedEndpoint(rerankerBaseURL),
+            rerankerSecretReference: Self.rerankerSecretReference
         )
     }
 
     /// Picker selection: the matching preset model, or "" for custom/free text.
+    /// Selecting a preset also points the role's Base URL at SiliconFlow.
     var embeddingPresetSelection: String {
         get { Self.siliconFlowEmbeddingModels.first(where: { $0.model == embeddingModelID })?.model ?? "" }
-        set { embeddingModelID = newValue }
+        set {
+            embeddingModelID = newValue
+            if !newValue.isEmpty {
+                embeddingBaseURL = ModelProviderPreset.siliconFlow.baseURL?.absoluteString ?? embeddingBaseURL
+            }
+        }
     }
 
     var rerankerPresetSelection: String {
         get { Self.siliconFlowRerankerModels.first(where: { $0.model == rerankerModelID })?.model ?? "" }
-        set { rerankerModelID = newValue }
+        set {
+            rerankerModelID = newValue
+            if !newValue.isEmpty {
+                rerankerBaseURL = ModelProviderPreset.siliconFlow.baseURL?.absoluteString ?? rerankerBaseURL
+            }
+        }
     }
 
     private func embeddingConfiguration() -> ProviderConfiguration? {
@@ -301,11 +331,17 @@ final class ProviderSettingsModel {
             errorMessage = "请填写 Embedding 模型名称。"
             return nil
         }
+        guard let url = parsedEndpoint(embeddingBaseURL) else {
+            errorMessage = "请填写有效的 Embedding Base URL。"
+            return nil
+        }
         return ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
             streamingEnabled: base.streamingEnabled, embeddingModelID: embedding,
-            rerankerModelID: base.rerankerModelID
+            embeddingBaseURL: url, embeddingSecretReference: Self.embeddingSecretReference,
+            rerankerModelID: base.rerankerModelID, rerankerBaseURL: base.rerankerBaseURL,
+            rerankerSecretReference: base.rerankerSecretReference
         )
     }
 
@@ -316,12 +352,61 @@ final class ProviderSettingsModel {
             errorMessage = "请填写 Reranker 模型名称。"
             return nil
         }
+        guard let url = parsedEndpoint(rerankerBaseURL) else {
+            errorMessage = "请填写有效的 Reranker Base URL。"
+            return nil
+        }
         return ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
             streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
-            rerankerModelID: reranker
+            embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
+            rerankerModelID: reranker,
+            rerankerBaseURL: url, rerankerSecretReference: Self.rerankerSecretReference
         )
+    }
+
+    private func embeddingCleared(_ base: ProviderConfiguration) -> ProviderConfiguration {
+        ProviderConfiguration(
+            id: base.id, provider: base.provider, baseURL: base.baseURL,
+            modelID: base.modelID, secretReference: base.secretReference,
+            streamingEnabled: base.streamingEnabled, embeddingModelID: nil,
+            embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
+            rerankerModelID: base.rerankerModelID, rerankerBaseURL: base.rerankerBaseURL,
+            rerankerSecretReference: base.rerankerSecretReference
+        )
+    }
+
+    private func rerankerCleared(_ base: ProviderConfiguration) -> ProviderConfiguration {
+        ProviderConfiguration(
+            id: base.id, provider: base.provider, baseURL: base.baseURL,
+            modelID: base.modelID, secretReference: base.secretReference,
+            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
+            embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
+            rerankerModelID: nil,
+            rerankerBaseURL: base.rerankerBaseURL, rerankerSecretReference: base.rerankerSecretReference
+        )
+    }
+
+    private func embeddingResolvedKey() async throws -> String {
+        let typed = embeddingApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        if let saved = try await secrets.secret(for: Self.embeddingSecretReference), !saved.isEmpty { return saved }
+        throw ModelFailure.invalidConfiguration
+    }
+
+    private func rerankerResolvedKey() async throws -> String {
+        let typed = rerankerApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        if let saved = try await secrets.secret(for: Self.rerankerSecretReference), !saved.isEmpty { return saved }
+        throw ModelFailure.invalidConfiguration
+    }
+
+    private func parsedEndpoint(_ raw: String) -> URL? {
+        guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              url.host != nil else { return nil }
+        return url
     }
 
     private func keyForSave() -> String? {
@@ -383,7 +468,11 @@ final class ProviderSettingsModel {
         }
     }
 
-    func clearTransientSecret() { apiKey = "" }
+    func clearTransientSecret() {
+        apiKey = ""
+        embeddingApiKey = ""
+        rerankerApiKey = ""
+    }
 
     static func message(for error: Error) -> String {
         if let provider = error as? ModelFailure {

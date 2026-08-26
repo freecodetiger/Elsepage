@@ -91,18 +91,34 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
     public let secretReference: SecretReference
     public let streamingEnabled: Bool
     /// Separate embedding model for the semantic retrieval layer. Nil means the
-    /// RAG stays lexical-only. Non-nil enables the `/embeddings` path against
-    /// the same `baseURL` and key as the chat model.
+    /// RAG stays lexical-only. Non-nil enables the `/embeddings` path.
     public let embeddingModelID: String?
+    /// Optional dedicated endpoint + key for the embedding role. When nil, the
+    /// chat provider's `baseURL`/`secretReference` are used (shared-key setups).
+    public let embeddingBaseURL: URL?
+    public let embeddingSecretReference: SecretReference?
     /// Separate cross-encoder rerank model (the RAG precision gate). Nil means
     /// candidates are used as-fused; non-nil re-scores them via `/rerank`.
     public let rerankerModelID: String?
+    /// Optional dedicated endpoint + key for the reranker role. Same fallback
+    /// semantics as the embedding role.
+    public let rerankerBaseURL: URL?
+    public let rerankerSecretReference: SecretReference?
+
+    /// Effective endpoint/key for each RAG role — the role-specific value when
+    /// configured, else the chat provider's (preserves legacy shared-key setups).
+    public var effectiveEmbeddingBaseURL: URL { embeddingBaseURL ?? baseURL }
+    public var effectiveEmbeddingSecretReference: SecretReference { embeddingSecretReference ?? secretReference }
+    public var effectiveRerankerBaseURL: URL { rerankerBaseURL ?? baseURL }
+    public var effectiveRerankerSecretReference: SecretReference { rerankerSecretReference ?? secretReference }
 
     public init(
         id: UUID = UUID(), provider: ModelProviderKind, baseURL: URL,
         modelID: String, secretReference: SecretReference,
         streamingEnabled: Bool = true, embeddingModelID: String? = nil,
-        rerankerModelID: String? = nil
+        embeddingBaseURL: URL? = nil, embeddingSecretReference: SecretReference? = nil,
+        rerankerModelID: String? = nil,
+        rerankerBaseURL: URL? = nil, rerankerSecretReference: SecretReference? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -111,7 +127,11 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
         self.secretReference = secretReference
         self.streamingEnabled = streamingEnabled
         self.embeddingModelID = embeddingModelID
+        self.embeddingBaseURL = embeddingBaseURL
+        self.embeddingSecretReference = embeddingSecretReference
         self.rerankerModelID = rerankerModelID
+        self.rerankerBaseURL = rerankerBaseURL
+        self.rerankerSecretReference = rerankerSecretReference
     }
 }
 

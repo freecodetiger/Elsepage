@@ -18,14 +18,15 @@ public final class SiliconFlowReranker: Reranker, @unchecked Sendable {
         apiKey: String,
         transport: any HTTPDataTransport = URLSessionDataTransport()
     ) throws {
+        let endpoint = configuration.effectiveRerankerBaseURL
         guard configuration.provider == .openAI || configuration.provider == .openAICompatible,
               let model = configuration.rerankerModelID, !model.isEmpty,
               !apiKey.isEmpty,
-              configuration.baseURL.scheme == "https" || configuration.baseURL.scheme == "http" else {
+              endpoint.scheme == "https" || endpoint.scheme == "http" else {
             throw ModelFailure.invalidConfiguration
         }
         self.modelIdentifier = model
-        self.baseURL = configuration.baseURL
+        self.baseURL = endpoint
         self.apiKey = apiKey
         self.transport = transport
     }

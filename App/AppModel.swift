@@ -44,7 +44,7 @@ final class AppModel {
             let makeEmbeddingProvider: @Sendable () async -> (any EmbeddingProvider)? = { [providerConfigurations, secrets] in
                 guard let configuration = try? await providerConfigurations.currentConfiguration(),
                       let model = configuration.embeddingModelID, !model.isEmpty,
-                      let key = try? await secrets.secret(for: configuration.secretReference), !key.isEmpty else { return nil }
+                      let key = try? await secrets.secret(for: configuration.effectiveEmbeddingSecretReference), !key.isEmpty else { return nil }
                 return try? OpenAICompatibleEmbeddingProvider(configuration: configuration, apiKey: key)
             }
             // Optional cross-encoder rerank gate (RAG precision). Resolved at
@@ -52,7 +52,7 @@ final class AppModel {
             let makeReranker: @Sendable () async -> (any Reranker)? = { [providerConfigurations, secrets] in
                 guard let configuration = try? await providerConfigurations.currentConfiguration(),
                       let model = configuration.rerankerModelID, !model.isEmpty,
-                      let key = try? await secrets.secret(for: configuration.secretReference), !key.isEmpty else { return nil }
+                      let key = try? await secrets.secret(for: configuration.effectiveRerankerSecretReference), !key.isEmpty else { return nil }
                 return try? SiliconFlowReranker(configuration: configuration, apiKey: key)
             }
             let readerAgent = ReaderAgent(

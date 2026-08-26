@@ -27,7 +27,9 @@ import Testing
             .map { row in String.fromDatabaseValue(row["name"])! }
     }
     #expect(columns.sorted() == [
-        "baseURL", "embeddingModelID", "id", "modelID", "provider", "rerankerModelID", "secretReference", "streamingEnabled"
+        "baseURL", "embeddingBaseURL", "embeddingModelID", "embeddingSecretReference",
+        "id", "modelID", "provider", "rerankerBaseURL", "rerankerModelID",
+        "rerankerSecretReference", "secretReference", "streamingEnabled"
     ])
     #expect(!columns.contains("apiKey"))
 
@@ -56,8 +58,42 @@ import Testing
         "v1_reader_foundation", "v2_reader_preferences", "v3_reflection_loop",
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
-        "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config"
+        "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
+        "v15_rag_role_endpoints"
     ])
+}
+
+@Test func ragRoleEndpointsAndKeysPersistAndFallBackToChat() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBProviderConfigurationRepository(database: database)
+    let chatRef = SecretReference(rawValue: "chat-key")
+    let embeddingRef = SecretReference(rawValue: "embed-key")
+    let rerankerRef = SecretReference(rawValue: "rerank-key")
+    let chatURL = URL(string: "https://api.openai.com/v1")!
+    let siliconFlow = URL(string: "https://api.siliconflow.cn/v1")!
+
+    // Role-specific endpoints + key references round-trip intact.
+    let configured = ProviderConfiguration(
+        provider: .openAI, baseURL: chatURL, modelID: "gpt", secretReference: chatRef,
+        embeddingModelID: "Qwen/Qwen3-VL-Embedding-8B",
+        embeddingBaseURL: siliconFlow, embeddingSecretReference: embeddingRef,
+        rerankerModelID: "Qwen/Qwen3-VL-Reranker-8B",
+        rerankerBaseURL: siliconFlow, rerankerSecretReference: rerankerRef
+    )
+    try await repository.save(configured)
+    #expect(try await repository.currentConfiguration() == configured)
+    #expect(try await repository.currentConfiguration()?.effectiveEmbeddingBaseURL == siliconFlow)
+    #expect(try await repository.currentConfiguration()?.effectiveRerankerSecretReference == rerankerRef)
+
+    // Legacy shared-key config (no role fields) falls back to the chat values.
+    let legacy = ProviderConfiguration(
+        provider: .openAICompatible, baseURL: chatURL, modelID: "m", secretReference: chatRef,
+        embeddingModelID: "BAAI/bge-m3"
+    )
+    try await repository.save(legacy)
+    let saved = try await repository.currentConfiguration()
+    #expect(saved?.effectiveEmbeddingBaseURL == chatURL)
+    #expect(saved?.effectiveEmbeddingSecretReference == chatRef)
 }
 
 @Test func migratesV12DatabaseToV13WithoutLosingData() async throws {
