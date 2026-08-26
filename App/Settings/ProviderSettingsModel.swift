@@ -13,6 +13,7 @@ final class ProviderSettingsModel {
 
     /// SiliconFlow embedding model presets (selectable; custom stays editable).
     static let siliconFlowEmbeddingModels: [(name: String, model: String)] = [
+        ("Qwen3-VL Embedding 8B（多模态）", "Qwen/Qwen3-VL-Embedding-8B"),
         ("BGE-M3（多语言，推荐）", "BAAI/bge-m3"),
         ("BGE Large ZH（中文）", "BAAI/bge-large-zh-v1.5"),
         ("BGE Small ZH（中文轻量）", "BAAI/bge-small-zh-v1.5"),
@@ -21,6 +22,7 @@ final class ProviderSettingsModel {
     ]
     /// SiliconFlow cross-encoder rerank presets (RAG precision gate).
     static let siliconFlowRerankerModels: [(name: String, model: String)] = [
+        ("Qwen3-VL Reranker 8B（多模态）", "Qwen/Qwen3-VL-Reranker-8B"),
         ("BGE Reranker V2 M3（推荐）", "BAAI/bge-reranker-v2-m3"),
         ("Jina Reranker V2（多语言）", "jina-reranker-v2-base-multilingual"),
     ]

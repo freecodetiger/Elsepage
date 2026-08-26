@@ -128,7 +128,7 @@ struct ProviderSettingsView: View {
                 } header: {
                     Text("语义检索 (RAG)")
                 } footer: {
-                    Text("Embedding：为每本书建立向量索引（语义召回）。Reranker：对召回候选做精排门禁，低相关的不再作为证据发给 Agent。两者独立配置、需联网；未配置或失败时自动降级（词法 / 融合结果）。")
+                    Text("Embedding：为每本书建立向量索引（语义召回）。Reranker：对召回候选做精排门禁，低相关的不再作为证据发给 Agent。两者复用上方 Provider 区的 Base URL 与自填的 API Key，独立配置、需联网；未配置或失败时自动降级（词法 / 融合结果）。")
                 }
                 .disabled(model.isEmbeddingWorking || model.isRerankerWorking)
 
