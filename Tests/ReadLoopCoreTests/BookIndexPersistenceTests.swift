@@ -16,9 +16,9 @@ import Testing
         try chunk(book: book.id, id: "read", resource: 0, progression: 0.2, text: "制度结构会影响每个人的局部选择"),
         try chunk(book: book.id, id: "future", resource: 2, progression: 0.8, text: "制度结构的未来结局尚未读到"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    #expect(try await index.chunks(for: book.id, version: 1).count == 2)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 2)
     let found = try await index.lexicalSearch(bookID: book.id, query: "制度结构", boundary: .init(resourceOrdinal: 0, progression: 0.5), limit: 10)
     #expect(found.map { $0.0.id.rawValue } == ["read"])
     let currentResource = try await index.lexicalSearch(bookID: book.id, query: "制度结构",
@@ -27,7 +27,7 @@ import Testing
     try await index.saveEmbeddings([.init(rawValue: "read"): [1, 0]], model: "fake", dimensions: 2)
     #expect(try await index.embeddings(bookID: book.id, model: "fake").count == 1)
     try await books.delete(book.id)
-    #expect(try await index.chunks(for: book.id, version: 1).isEmpty)
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).isEmpty)
     let counts = try await db.writer.read { db in
         (try Int.fetchOne(db, sql: "SELECT count(*) FROM bookChunksFTS")!,
          try Int.fetchOne(db, sql: "SELECT count(*) FROM bookChunkEmbeddings")!)
@@ -61,9 +61,10 @@ import Testing
     await extractor.setShouldFail(false)
     try await pipeline.index(bookID: book.id)
     #expect(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion)?.state == .lexicalReady)
-    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 1)
+    // Small-to-big: one parent chunk + its single retrieval child.
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 2)
     try await pipeline.index(bookID: book.id)
-    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 1)
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 2)
 }
 
 @Test func contextBuilderNeverSearchesBeyondCurrentLocatorAndHonorsBudget() async throws {
@@ -74,7 +75,7 @@ import Testing
         try chunk(book: book.id, id: "past", resource: 0, progression: 0.2, text: "个人选择与制度结构之间的张力"),
         try chunk(book: book.id, id: "future", resource: 2, progression: 0.2, text: "制度结构在结尾发生反转"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
     let builder = ReaderAgentContextBuilder(retriever: LocalBookRetriever(repository: index), repository: index, characterBudget: 8)
     let context = try await builder.build(bookID: book.id, reflection: "制度结构", currentLocator: chunks[0].startLocator)
     #expect(context.evidence.map(\.id.rawValue) == ["past"])
@@ -84,9 +85,11 @@ import Testing
 private func chunk(book: BookID, id: String, resource: Int, progression: Double, text: String) throws -> BookChunk {
     let json = try JSONSerialization.data(withJSONObject: ["href": "\(resource).xhtml", "locations": ["progression": progression], "unknownFutureField": ["kept": true]])
     let locator = try BookLocator(json: json, href: "\(resource).xhtml", progression: progression)
+    // Retrieval targets children; fixtures insert retrieval units as .child.
     return BookChunk(id: .init(rawValue: id), bookID: book, resourceHref: locator.href,
         resourceOrdinal: resource, ordinal: resource, text: text, normalizedText: text,
-        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "block-\(id)")])
+        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "block-\(id)")],
+        role: .child)
 }
 
 private func locator(href: String, progression: Double) throws -> BookLocator {

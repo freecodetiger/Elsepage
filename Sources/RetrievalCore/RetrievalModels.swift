@@ -39,6 +39,13 @@ public struct BookTextBlock: Hashable, Sendable {
     }
 }
 
+/// Retrieval-role of a persisted chunk row. Parents are the larger structural
+/// context unit (900–1400 chars, the evidence/expansion unit); children are the
+/// smaller retrieval unit (≈350 chars) that owns FTS + embeddings.
+public enum BookChunkRole: String, Hashable, Codable, Sendable {
+    case parent, child
+}
+
 public struct BookChunk: Hashable, Sendable, Identifiable {
     public let id: BookChunkID
     public let bookID: BookID
@@ -54,19 +61,26 @@ public struct BookChunk: Hashable, Sendable, Identifiable {
     public let startLocator: BookLocator
     public let endLocator: BookLocator
     public let sourceBlockIDs: [BookTextBlockID]
+    /// `.parent` for the large structural chunks, `.child` for retrieval children.
+    /// Defaults keep pre-evolution construction sites (and test fixtures) producing parents.
+    public let role: BookChunkRole
+    /// Set on children only: the parent chunk this retrieval child belongs to.
+    public let parentID: BookChunkID?
 
     public init(id: BookChunkID, bookID: BookID, resourceHref: String,
                 chapterID: String? = nil, chapterTitle: String? = nil,
                 sectionID: String? = nil, sectionTitle: String? = nil,
                 resourceOrdinal: Int, ordinal: Int, text: String, normalizedText: String,
                 startLocator: BookLocator, endLocator: BookLocator,
-                sourceBlockIDs: [BookTextBlockID]) {
+                sourceBlockIDs: [BookTextBlockID],
+                role: BookChunkRole = .parent, parentID: BookChunkID? = nil) {
         self.id = id; self.bookID = bookID; self.resourceHref = resourceHref
         self.chapterID = chapterID; self.chapterTitle = chapterTitle
         self.sectionID = sectionID; self.sectionTitle = sectionTitle
         self.resourceOrdinal = resourceOrdinal; self.ordinal = ordinal; self.text = text
         self.normalizedText = normalizedText; self.startLocator = startLocator
         self.endLocator = endLocator; self.sourceBlockIDs = sourceBlockIDs
+        self.role = role; self.parentID = parentID
     }
 }
 
@@ -157,6 +171,8 @@ public protocol BookIndexRepository: Sendable {
     func replace(blocks: [BookTextBlock], inResource href: String, for bookID: BookID, version: Int) async throws
     func chunks(for bookID: BookID, version: Int) async throws -> [BookChunk]
     func chunk(id: BookChunkID, bookID: BookID, version: Int) async throws -> BookChunk?
+    /// Retrieval children under a parent chunk (for small-to-big expansion).
+    func children(of parentID: BookChunkID, bookID: BookID, version: Int) async throws -> [BookChunk]
     func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope) async throws -> [(BookChunk, Double)]
     func readingBoundary(bookID: BookID, locator: BookLocator) async throws -> ReadingBoundary?
     /// Resolve the chapters a reading span covers (reusing bookChunks for

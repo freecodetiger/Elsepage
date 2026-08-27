@@ -59,7 +59,7 @@ import Testing
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
-        "v15_rag_role_endpoints"
+        "v15_rag_role_endpoints", "v16_parent_child_retrieval"
     ])
 }
 
@@ -131,6 +131,32 @@ import Testing
     }
     #expect(jobRow.flatMap { String.fromDatabaseValue($0["state"]) } == "lexicalReady")
     #expect(jobRow.flatMap { String.fromDatabaseValue($0["embeddingModel"]) } == nil)
+}
+
+@Test func migratesV15DatabaseToV16AddingRoleAndParentID() async throws {
+    // A v15 index has no role/parentID columns. v16 must add them and classify the
+    // existing chunks as parents so stale rows stay identifiable (and the version
+    // predicate in lexicalSearch never returns them).
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v15_rag_role_endpoints")
+
+    let locatorJSON = try JSONSerialization.data(withJSONObject: ["href": "0.xhtml", "locations": ["progression": 0.5]])
+    try await queue.write { db in
+        try db.execute(sql: "INSERT INTO books (id, fingerprint, title, fileName, fileSize, importedAt) VALUES (?,?,?,?,?,?)",
+            arguments: ["00000000-0000-0000-0000-000000000002", "v15-book", "Legacy", "legacy.epub", 100, Date()])
+        try db.execute(sql: """
+            INSERT INTO bookChunks (id,bookID,indexVersion,resourceHref,resourceOrdinal,ordinal,text,normalizedText,startLocatorJSON,endLocatorJSON,startHref,endHref,sourceBlockIDsJSON)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, arguments: ["legacy-chunk", "00000000-0000-0000-0000-000000000002", 2, "0.xhtml", 0, 0, "旧索引文本", "旧索引文本", locatorJSON, locatorJSON, "0.xhtml", "0.xhtml", Data("[]".utf8)])
+    }
+
+    try AppDatabase.migrator.migrate(queue)
+    let row = try await queue.read { db in
+        try Row.fetchOne(db, sql: "SELECT role, parentID FROM bookChunks WHERE id=?", arguments: ["legacy-chunk"])
+    }
+    #expect(row.flatMap { String.fromDatabaseValue($0["role"]) } == "parent")
+    #expect(row.flatMap { String.fromDatabaseValue($0["parentID"]) } == nil)
 }
 
 @Test func bookDeletionCascadesPositionHighlightsNotesAndPreferences() async throws {

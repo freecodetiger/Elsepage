@@ -384,6 +384,20 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "rerankerSecretReference", .text)
             }
         }
+
+        // Small-to-big retrieval. `bookChunks` becomes the single chunk table with
+        // a role: parents (the existing large structural chunks, 900–1400 chars)
+        // remain the context/evidence unit; children (≈350 chars, `parentID` set)
+        // become the FTS + embedding retrieval unit. Additive — old rows default
+        // to 'parent' and stay valid. The indexVersion bump (BookIndexPipeline v3)
+        // triggers a re-index that repopulates children.
+        migrator.registerMigration("v16_parent_child_retrieval") { db in
+            try db.alter(table: "bookChunks") { t in
+                t.add(column: "role", .text).notNull().defaults(to: "parent")
+                t.add(column: "parentID", .text).references("bookChunks", onDelete: .cascade)
+            }
+            try db.create(index: "bookChunks_onParentID", on: "bookChunks", columns: ["parentID"])
+        }
         return migrator
     }
 

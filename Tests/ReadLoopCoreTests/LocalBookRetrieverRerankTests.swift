@@ -15,7 +15,7 @@ import Testing
         try chunk(book: book.id, id: "c1", text: "自由市场"),
         try chunk(book: book.id, id: "c2", text: "完全无关的内容"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     let reranker = FakeReranker { query, candidates in
         candidates.map { c in
@@ -38,7 +38,7 @@ import Testing
         try chunk(book: book.id, id: "a", text: "制度结构"),
         try chunk(book: book.id, id: "b", text: "制度与市场"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     // Throwing reranker must not break retrieval — results fall back to lexical order.
     let retriever = LocalBookRetriever(repository: index, reranker: { ThrowingReranker() })
@@ -55,7 +55,7 @@ import Testing
         try chunk(book: book.id, id: "hit", text: "制度结构会影响选择"),
         try chunk(book: book.id, id: "miss", text: "完全无关的内容"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     let retriever = LocalBookRetriever(repository: index) // no reranker
     let results = try await retriever.retrieve(.init(bookID: book.id, text: "制度结构", boundary: nil, limit: 2))
@@ -70,7 +70,7 @@ import Testing
         try chunk(book: book.id, id: "hit", text: "自由与制度"),
         try chunk(book: book.id, id: "noise", text: "自由市场"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     let reranker = FakeReranker { _, candidates in
         candidates.map { RerankedPassage(id: $0.id, score: $0.id == "hit" ? 0.9 : 0.1) }
@@ -105,5 +105,6 @@ private func chunk(book: BookID, id: String, text: String) throws -> BookChunk {
     let locator = try BookLocator(json: JSONSerialization.data(withJSONObject: ["href": "0.xhtml", "locations": ["progression": 0.5]]), href: "0.xhtml", progression: 0.5)
     return BookChunk(id: .init(rawValue: id), bookID: book, resourceHref: locator.href,
         resourceOrdinal: 0, ordinal: id.hashValue & 0x7fff, text: text, normalizedText: text,
-        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "b-\(id)")])
+        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "b-\(id)")],
+        role: .child)
 }

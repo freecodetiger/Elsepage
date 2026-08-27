@@ -15,7 +15,7 @@ import Testing
         try chunk(book: book.id, id: "subset", resource: 0, ordinal: 1, text: "作者在这里提到时间"),
         try chunk(book: book.id, id: "unrelated", resource: 0, ordinal: 2, text: "完全无关的另一种内容"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     // Under the old giant-phrase query this only matched "full"; the trigram-OR
     // form also recalls "subset" (shares contiguous 3-grams with the query).
@@ -34,7 +34,7 @@ import Testing
         try chunk(book: book.id, id: "hasTime", resource: 0, ordinal: 0, text: "这里讨论了时间管理"),
         try chunk(book: book.id, id: "other", resource: 0, ordinal: 1, text: "这里没有相关内容"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     let found = try await index.lexicalSearch(bookID: book.id, query: "时间", boundary: nil, limit: 10)
     #expect(found.map { $0.0.id.rawValue } == ["hasTime"])
@@ -48,7 +48,7 @@ import Testing
         try chunk(book: book.id, id: "a", resource: 0, ordinal: 0, text: "作者在这里提出了观点"),
         try chunk(book: book.id, id: "b", resource: 0, ordinal: 1, text: "另一处不相关"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     let found = try await index.lexicalSearch(bookID: book.id, query: "作者,在这里", boundary: nil, limit: 10)
     #expect(found.map { $0.0.id.rawValue } == ["a"])
@@ -62,7 +62,7 @@ import Testing
         try chunk(book: book.id, id: "mixed", resource: 0, ordinal: 0, text: "自由 freedom 与制度结构"),
         try chunk(book: book.id, id: "plain", resource: 0, ordinal: 1, text: "自由与制度"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
 
     let found = try await index.lexicalSearch(bookID: book.id, query: "自由 freedom", boundary: nil, limit: 10)
     #expect(found.map { $0.0.id.rawValue } == ["mixed"])
@@ -72,5 +72,6 @@ private func chunk(book: BookID, id: String, resource: Int, ordinal: Int, text: 
     let locator = try BookLocator(json: JSONSerialization.data(withJSONObject: ["href": "\(resource).xhtml", "locations": ["progression": 0.5]]), href: "\(resource).xhtml", progression: 0.5)
     return BookChunk(id: .init(rawValue: id), bookID: book, resourceHref: locator.href,
         resourceOrdinal: resource, ordinal: ordinal, text: text, normalizedText: text,
-        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "b-\(id)")])
+        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "b-\(id)")],
+        role: .child)
 }

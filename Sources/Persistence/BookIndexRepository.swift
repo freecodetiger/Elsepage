@@ -76,6 +76,15 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         }
     }
 
+    public func children(of parentID: BookChunkID, bookID: BookID, version: Int) async throws -> [BookChunk] {
+        try await database.writer.read { db in
+            try Row.fetchAll(
+                db, sql: "SELECT * FROM bookChunks WHERE parentID=? AND bookID=? AND indexVersion=? ORDER BY resourceOrdinal,ordinal",
+                arguments: [parentID.rawValue, bookID.description, version]
+            ).map(Self.chunk)
+        }
+    }
+
     public func lexicalSearch(bookID: BookID, query: String, boundary: ReadingBoundary?, limit: Int, scope: BookRetrievalScope = .readSoFar) async throws -> [(BookChunk, Double)] {
         // CJK-aware term building: a long Chinese sentence becomes a run of
         // overlapping trigrams OR'd (recall) instead of one giant quoted phrase
@@ -87,8 +96,10 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
                 let needle = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !needle.isEmpty else { return [] }
-                var sql = "SELECT c.* FROM bookChunks c WHERE c.bookID=? AND instr(c.normalizedText, ?) > 0"
-                var arguments: StatementArguments = [bookID.description, needle]
+                // Retrieval targets children only, and always the current index
+                // version (stale versions must never leak into results).
+                var sql = "SELECT c.* FROM bookChunks c WHERE c.bookID=? AND c.indexVersion=? AND c.role='child' AND instr(c.normalizedText, ?) > 0"
+                var arguments: StatementArguments = [bookID.description, BookIndexPipeline.currentVersion, needle]
                 if let boundary, scope == .currentResource {
                     sql += " AND c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?"
                     arguments += [boundary.resourceOrdinal, boundary.progression ?? 1]
@@ -99,8 +110,8 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
                 sql += " ORDER BY c.resourceOrdinal,c.ordinal LIMIT ?"; arguments += [max(0, limit)]
                 return try Row.fetchAll(db, sql: sql, arguments: arguments).map { (try Self.chunk($0), 0.5) }
             }
-            var sql = "SELECT c.*, bm25(bookChunksFTS) AS rank FROM bookChunksFTS f JOIN bookChunks c ON c.id=f.chunkID WHERE f.bookChunksFTS MATCH ? AND c.bookID=?"
-            var arguments: StatementArguments = [terms.joined(separator: " OR "), bookID.description]
+            var sql = "SELECT c.*, bm25(bookChunksFTS) AS rank FROM bookChunksFTS f JOIN bookChunks c ON c.id=f.chunkID WHERE f.bookChunksFTS MATCH ? AND c.bookID=? AND c.indexVersion=? AND c.role='child'"
+            var arguments: StatementArguments = [terms.joined(separator: " OR "), bookID.description, BookIndexPipeline.currentVersion]
             if let boundary, scope == .currentResource {
                 sql += " AND c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?"
                 arguments += [boundary.resourceOrdinal, boundary.progression ?? 1]
@@ -181,10 +192,15 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
     private static func insert(_ chunk: BookChunk, version: Int, db: Database) throws {
         let ids = try JSONEncoder().encode(chunk.sourceBlockIDs.map(\.rawValue))
         try db.execute(sql: """
-            INSERT INTO bookChunks(id,bookID,indexVersion,resourceHref,chapterID,chapterTitle,sectionID,sectionTitle,resourceOrdinal,ordinal,text,normalizedText,startLocatorJSON,endLocatorJSON,startHref,endHref,startProgression,endProgression,startTotalProgression,endTotalProgression,sourceBlockIDsJSON)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, arguments: [chunk.id.rawValue,chunk.bookID.description,version,chunk.resourceHref,chunk.chapterID,chunk.chapterTitle,chunk.sectionID,chunk.sectionTitle,chunk.resourceOrdinal,chunk.ordinal,chunk.text,chunk.normalizedText,chunk.startLocator.json,chunk.endLocator.json,chunk.startLocator.href,chunk.endLocator.href,chunk.startLocator.progression,chunk.endLocator.progression,chunk.startLocator.totalProgression,chunk.endLocator.totalProgression,ids])
-        try db.execute(sql: "INSERT INTO bookChunksFTS(chunkID,bookID,normalizedText) VALUES(?,?,?)", arguments: [chunk.id.rawValue,chunk.bookID.description,chunk.normalizedText])
+            INSERT INTO bookChunks(id,bookID,indexVersion,resourceHref,chapterID,chapterTitle,sectionID,sectionTitle,resourceOrdinal,ordinal,text,normalizedText,startLocatorJSON,endLocatorJSON,startHref,endHref,startProgression,endProgression,startTotalProgression,endTotalProgression,sourceBlockIDsJSON,role,parentID)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, arguments: [chunk.id.rawValue,chunk.bookID.description,version,chunk.resourceHref,chunk.chapterID,chunk.chapterTitle,chunk.sectionID,chunk.sectionTitle,chunk.resourceOrdinal,chunk.ordinal,chunk.text,chunk.normalizedText,chunk.startLocator.json,chunk.endLocator.json,chunk.startLocator.href,chunk.endLocator.href,chunk.startLocator.progression,chunk.endLocator.progression,chunk.startLocator.totalProgression,chunk.endLocator.totalProgression,ids,chunk.role.rawValue,chunk.parentID?.rawValue])
+        // Only retrieval children enter the FTS index: parents are the expansion/
+        // evidence unit, not a search target, and keeping them out of FTS avoids
+        // diluting bm25 IDF statistics over a 2x corpus.
+        if chunk.role == .child {
+            try db.execute(sql: "INSERT INTO bookChunksFTS(chunkID,bookID,normalizedText) VALUES(?,?,?)", arguments: [chunk.id.rawValue,chunk.bookID.description,chunk.normalizedText])
+        }
     }
 
     private static func chunk(_ row: Row) throws -> BookChunk {
@@ -196,7 +212,9 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         return BookChunk(id: .init(rawValue: row["id"]), bookID: BookID(rawValue: uuid), resourceHref: row["resourceHref"],
             chapterID: row["chapterID"], chapterTitle: row["chapterTitle"], sectionID: row["sectionID"], sectionTitle: row["sectionTitle"],
             resourceOrdinal: row["resourceOrdinal"], ordinal: row["ordinal"], text: row["text"], normalizedText: row["normalizedText"],
-            startLocator: start, endLocator: end, sourceBlockIDs: try JSONDecoder().decode([String].self, from: idsData).map(BookTextBlockID.init(rawValue:)))
+            startLocator: start, endLocator: end, sourceBlockIDs: try JSONDecoder().decode([String].self, from: idsData).map(BookTextBlockID.init(rawValue:)),
+            role: BookChunkRole(rawValue: row["role"]) ?? .parent,
+            parentID: (row["parentID"] as String?).map(BookChunkID.init(rawValue:)))
     }
 
     private static func encode(_ vector: [Float]) -> Data {

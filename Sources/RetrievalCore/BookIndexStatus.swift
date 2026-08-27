@@ -51,16 +51,20 @@ public struct BookIndexStatusService: Sendable {
         statuses.reserveCapacity(allBooks.count)
         for book in allBooks {
             let job = try? await repository.job(for: book.id, version: BookIndexPipeline.currentVersion)
-            let chunks = (try? await repository.chunks(for: book.id, version: BookIndexPipeline.currentVersion)) ?? []
-            let totalChunks = chunks.count
+            // Progress counts the retrieval units (children): parents are the
+            // context/evidence unit and are never embedded, so counting them too
+            // would make semanticFraction impossible to reach 1.0.
+            let children = (try? await repository.chunks(for: book.id, version: BookIndexPipeline.currentVersion))?
+                .filter { $0.role == .child } ?? []
+            let totalChunks = children.count
             let embeddedCount: Int
-            if let embeddingModel, !chunks.isEmpty {
+            if let embeddingModel, !children.isEmpty {
                 let stored = (try? await repository.embeddings(bookID: book.id, model: embeddingModel)) ?? [:]
                 embeddedCount = stored.count
             } else {
                 embeddedCount = 0
             }
-            let totalResources = Set(chunks.map(\.resourceOrdinal)).count
+            let totalResources = Set(children.map(\.resourceOrdinal)).count
             statuses.append(BookIndexStatus(
                 bookID: book.id,
                 title: book.title,

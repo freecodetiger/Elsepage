@@ -37,7 +37,8 @@ private func chunk(book: BookID, id: String, resource: Int, ordinal: Int, text: 
     let locator = try BookLocator(json: JSONSerialization.data(withJSONObject: ["href": "\(resource).xhtml", "locations": ["progression": 0.5]]), href: "\(resource).xhtml", progression: 0.5)
     return BookChunk(id: .init(rawValue: id), bookID: book, resourceHref: locator.href,
         resourceOrdinal: resource, ordinal: ordinal, text: text, normalizedText: text,
-        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "b-\(id)")])
+        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "b-\(id)")],
+        role: .child)
 }
 
 private func block(book: BookID, href: String, resource: Int, ordinal: Int, text: String) throws -> BookTextBlock {
@@ -160,6 +161,9 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     let job = try #require(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion))
     #expect(job.state == .ready)
     #expect(job.embeddingModel == "full-model")
+    // Embedding counts retrieval children only, not parents (small-to-big).
     let embedded = try await index.embeddings(bookID: book.id, model: "full-model")
-    #expect(embedded.count == (try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion)).count)
+    let childrenCount = try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).filter { $0.role == .child }.count
+    #expect(embedded.count == childrenCount)
+    #expect(childrenCount > 0)
 }

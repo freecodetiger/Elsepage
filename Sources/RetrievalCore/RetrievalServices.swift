@@ -67,6 +67,7 @@ public struct LocalBookRetriever: BookRetriever {
             let stored = try await repository.embeddings(bookID: query.bookID, model: provider.modelIdentifier)
             let allChunks = try await repository.chunks(for: query.bookID, version: BookIndexPipeline.currentVersion)
                 .filter { chunk in
+                    guard chunk.role == .child else { return false }
                     guard query.boundary?.contains(chunk) ?? true else { return false }
                     return query.scope == .readSoFar || chunk.resourceOrdinal == query.boundary?.resourceOrdinal
                 }
@@ -101,9 +102,10 @@ public struct LocalBookRetriever: BookRetriever {
 }
 
 public struct BookIndexPipeline: Sendable {
-    // v2: chunker gained overlapCharacters, so oversized-block splits produce
-    // different chunks than v1 — existing v1 indexes must be re-chunked.
-    public static let currentVersion = 2
+    // v3: small-to-big. Chunks are now role-tagged (parent/child); children own
+    // FTS + embeddings. v1/v2 indexes must be re-chunked (deleteIndex clears by
+    // version, so a v3 run rebuilds from scratch).
+    public static let currentVersion = 3
     /// Batches per `/embeddings` request. Keeps payloads small and lets the
     /// `bookChunkEmbeddings` table count double as live progress.
     public static let embeddingBatchSize = 100
@@ -139,10 +141,10 @@ public struct BookIndexPipeline: Sendable {
                 try await persist(resourceBlocks, href: currentResource, bookID: bookID)
                 job.nextResourceOrdinal = (resourceBlocks.last?.resourceOrdinal ?? job.nextResourceOrdinal) + 1
             }
-            let chunks = try await repository.chunks(for: bookID, version: Self.currentVersion)
+            let children = try await repository.chunks(for: bookID, version: Self.currentVersion).filter { $0.role == .child }
             job.state = .lexicalReady; job.updatedAt = .init(); try await repository.save(job: job)
-            if let embeddings, !chunks.isEmpty, let provider = await embeddings() {
-                try await embed(chunks: chunks, provider: provider, job: &job)
+            if let embeddings, !children.isEmpty, let provider = await embeddings() {
+                try await embed(chunks: children, provider: provider, job: &job)
             }
         } catch is CancellationError { throw CancellationError() }
         catch {
@@ -158,14 +160,16 @@ public struct BookIndexPipeline: Sendable {
         var job = try await repository.job(for: bookID, version: Self.currentVersion)
             ?? BookIndexJob(bookID: bookID, indexVersion: Self.currentVersion)
         guard job.state == .lexicalReady || job.state == .ready else { return }
-        let chunks = try await repository.chunks(for: bookID, version: Self.currentVersion)
-        guard !chunks.isEmpty, let embeddings, let provider = await embeddings() else { return }
+        // Embedding is keyed to retrieval children (the small end of small-to-big);
+        // parents are never embedded.
+        let children = try await repository.chunks(for: bookID, version: Self.currentVersion).filter { $0.role == .child }
+        guard !children.isEmpty, let embeddings, let provider = await embeddings() else { return }
         if !force, job.state == .ready, job.embeddingModel == provider.modelIdentifier {
             let existing = try await repository.embeddings(bookID: bookID, model: provider.modelIdentifier)
-            guard existing.count < chunks.count else { return } // already fully embedded with this model
+            guard existing.count < children.count else { return } // already fully embedded with this model
         }
         do {
-            try await embed(chunks: chunks, provider: provider, job: &job)
+            try await embed(chunks: children, provider: provider, job: &job)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -197,8 +201,10 @@ public struct BookIndexPipeline: Sendable {
 
     private func persist(_ blocks: [BookTextBlock], href: String, bookID: BookID) async throws {
         try await repository.replace(blocks: blocks, inResource: href, for: bookID, version: Self.currentVersion)
-        let chunks = chunker.chunks(from: blocks, indexVersion: Self.currentVersion)
-        try await repository.replace(chunks: chunks, inResource: href, for: bookID, version: Self.currentVersion)
+        // Small-to-big: chunks(from:) emits parents AND their retrieval children
+        // (≈350 chars) that own FTS + embeddings. Parents remain the context/
+        // evidence unit.
+        try await repository.replace(chunks: chunker.chunks(from: blocks, indexVersion: Self.currentVersion), inResource: href, for: bookID, version: Self.currentVersion)
     }
 }
 
