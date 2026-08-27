@@ -6,8 +6,8 @@ import SwiftUI
 
 struct ThoughtsView: View {
     @Bindable var model: ThoughtsModel
-    @Bindable var providerSettings: ProviderSettingsModel
-    @State private var showsProviderSettings = false
+    @Bindable var settings: SettingsRootModel
+    @State private var showsSettings = false
     @State private var searchText = ""
     @State private var viewMode: ThoughtsViewMode = .timeline
     @State private var filter: ThoughtsArchiveFilter = .all
@@ -46,15 +46,15 @@ struct ThoughtsView: View {
             .searchable(text: $searchText, prompt: "搜索想法、书名或回应")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showsProviderSettings = true } label: {
+                    Button { showsSettings = true } label: {
                         Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("设置")
                 }
             }
             .task { await model.reload() }
-            .sheet(isPresented: $showsProviderSettings) {
-                ProviderSettingsView(model: providerSettings)
+            .sheet(isPresented: $showsSettings) {
+                SettingsView(model: settings)
             }
             .alert("暂时无法完成操作", isPresented: Binding(
                 get: { model.errorMessage != nil },
@@ -192,10 +192,10 @@ struct ThoughtsView: View {
                     }
                 },
                 requestReply: {
-                    if providerSettings.hasSavedKey {
+                    if settings.hasSavedKey {
                         Task { await model.requestAgentReply(for: entry.reflection) }
                     } else {
-                        showsProviderSettings = true
+                        showsSettings = true
                     }
                 },
                 openSource: openSource

@@ -12,8 +12,8 @@ struct ReadLoopApp: App {
                 } else if let library = appModel.library,
                           let thoughts = appModel.thoughts,
                           let myMind = appModel.myMind,
-                          let providerSettings = appModel.providerSettings {
-                    AppShell(library: library, thoughts: thoughts, myMind: myMind, providerSettings: providerSettings)
+                          let settings = appModel.settings {
+                    AppShell(library: library, thoughts: thoughts, myMind: myMind, settings: settings)
                 } else {
                     ProgressView("正在打开书库…")
                 }

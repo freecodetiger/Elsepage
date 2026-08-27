@@ -9,7 +9,7 @@ import SwiftUI
 /// 从阅读与讨论中形成的理解" — never a psychological-diagnosis vibe.
 struct MyMindView: View {
     @Bindable var model: MyMindModel
-    @Bindable var providerSettings: ProviderSettingsModel
+    @Bindable var settings: SettingsRootModel
     let openSource: (Book, BookLocator) -> Void
 
     @State private var expandedMemoryID: UUID?
@@ -19,9 +19,9 @@ struct MyMindView: View {
     @State private var showsSettings = false
     @State private var evidenceByMemory: [UUID: MemoryEvidence] = [:]
 
-    init(model: MyMindModel, providerSettings: ProviderSettingsModel, openSource: @escaping (Book, BookLocator) -> Void) {
+    init(model: MyMindModel, settings: SettingsRootModel, openSource: @escaping (Book, BookLocator) -> Void) {
         self.model = model
-        self.providerSettings = providerSettings
+        self.settings = settings
         self.openSource = openSource
     }
 
@@ -57,7 +57,7 @@ struct MyMindView: View {
                 }
             }
             .sheet(isPresented: $showsSettings) {
-                ProviderSettingsView(model: providerSettings)
+                SettingsView(model: settings)
             }
             .alert("暂时无法完成操作", isPresented: errorBinding) {
                 Button("好") {}

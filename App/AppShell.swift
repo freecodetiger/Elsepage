@@ -6,7 +6,7 @@ struct AppShell: View {
     @Bindable var library: LibraryModel
     @Bindable var thoughts: ThoughtsModel
     @Bindable var myMind: MyMindModel
-    @Bindable var providerSettings: ProviderSettingsModel
+    @Bindable var settings: SettingsRootModel
     @State private var selection: AppTab = .today
     @State private var readerDestination: ReaderDestination?
 
@@ -20,17 +20,17 @@ struct AppShell: View {
             .tabItem { Label("今天", systemImage: "sun.max") }
             .tag(AppTab.today)
 
-            LibraryView(model: library, providerSettings: providerSettings) { selection = .today }
+            LibraryView(model: library, settings: settings) { selection = .today }
                 .tabItem { Label("书架", systemImage: "books.vertical") }
                 .tag(AppTab.library)
 
-            ThoughtsView(model: thoughts, providerSettings: providerSettings) { book, locator in
+            ThoughtsView(model: thoughts, settings: settings) { book, locator in
                 readerDestination = .init(book: book, locator: locator)
             }
             .tabItem { Label("思想", systemImage: "brain.head.profile") }
             .tag(AppTab.mind)
 
-            MyMindView(model: myMind, providerSettings: providerSettings) { book, locator in
+            MyMindView(model: myMind, settings: settings) { book, locator in
                 readerDestination = .init(book: book, locator: locator)
             }
             .tabItem { Label("我的头脑", systemImage: "person.crop.rectangle") }

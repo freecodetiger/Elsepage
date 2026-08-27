@@ -4,16 +4,16 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Bindable var model: LibraryModel
-    @Bindable var providerSettings: ProviderSettingsModel
+    @Bindable var settings: SettingsRootModel
     let onReflectionSaved: () -> Void
     @State private var importing = false
     @State private var showsSettings = false
     @State private var selectedBook: Book?
     @State private var deletingBook: Book?
 
-    init(model: LibraryModel, providerSettings: ProviderSettingsModel, onReflectionSaved: @escaping () -> Void = {}) {
+    init(model: LibraryModel, settings: SettingsRootModel, onReflectionSaved: @escaping () -> Void = {}) {
         self.model = model
-        self.providerSettings = providerSettings
+        self.settings = settings
         self.onReflectionSaved = onReflectionSaved
     }
 
@@ -58,7 +58,7 @@ struct LibraryView: View {
                 if case .success(let urls) = result, let url = urls.first { Task { await model.importBook(url) } }
             }
             .sheet(isPresented: $showsSettings) {
-                ProviderSettingsView(model: providerSettings)
+                SettingsView(model: settings)
             }
             .navigationDestination(item: $selectedBook) { book in
                 ReaderScreen(model: model.readerModel(for: book), onReflectionSaved: onReflectionSaved)

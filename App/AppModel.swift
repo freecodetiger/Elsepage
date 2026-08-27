@@ -15,7 +15,7 @@ final class AppModel {
     private(set) var library: LibraryModel?
     private(set) var thoughts: ThoughtsModel?
     private(set) var myMind: MyMindModel?
-    private(set) var providerSettings: ProviderSettingsModel?
+    private(set) var settings: SettingsRootModel?
     private(set) var startupError: String?
 
     func start() async {
@@ -109,10 +109,10 @@ final class AppModel {
                 readium: readium,
                 indexCoordinator: indexCoordinator
             )
-            providerSettings = ProviderSettingsModel(
-                configurations: providerConfigurations,
-                secrets: secrets,
-                traceRepository: routingTraces,
+            let chatSettings = ProviderSettingsModel(configurations: providerConfigurations, secrets: secrets)
+            let ragSettings = RAGSettingsModel(chat: chatSettings, books: books, indexCoordinator: indexCoordinator)
+            let diagnosticsSettings = DiagnosticsModel(traceRepository: routingTraces)
+            let dataSettings = DataSettingsModel(
                 books: books,
                 files: files,
                 exporter: PersonalDataExporter(
@@ -123,11 +123,17 @@ final class AppModel {
                     journal: journal
                 ),
                 indexCoordinator: indexCoordinator,
-                ragManagement: ragManagement,
                 onDataDeleted: { [weak self] in
                     await self?.library?.reload()
                     await self?.thoughts?.reload()
                 }
+            )
+            settings = SettingsRootModel(
+                chat: chatSettings,
+                rag: ragSettings,
+                diagnostics: diagnosticsSettings,
+                data: dataSettings,
+                ragManagement: ragManagement
             )
             thoughts = ThoughtsModel(
                 books: books,
@@ -145,7 +151,7 @@ final class AppModel {
                 reflections: reflections,
                 books: books
             )
-            await providerSettings?.load()
+            await settings?.loadAll()
             await library?.reload()
             await library?.resumeBookIndexing()
         } catch {

@@ -1,17 +1,17 @@
 import AgentRuntime
-import AppInfrastructure
-import ContextRouting
 import Foundation
-import LibraryCore
 import ModelProviders
 import Observation
-import ReflectionCore
 
+/// Chat provider configuration (BYOK). Owns the shared provider row: its
+/// `configuration()` builder carries the embedding/reranker role fields from the
+/// persisted row so other role models can read/write them without duplicating
+/// state. Diagnostics, RAG roles and data actions live in their own models.
 @MainActor @Observable
 final class ProviderSettingsModel {
-    private static let secretReference = SecretReference(rawValue: "primary-model-provider")
-    private static let embeddingSecretReference = SecretReference(rawValue: "embedding-model-provider")
-    private static let rerankerSecretReference = SecretReference(rawValue: "reranker-model-provider")
+    static let secretReference = SecretReference(rawValue: "primary-model-provider")
+    static let embeddingSecretReference = SecretReference(rawValue: "embedding-model-provider")
+    static let rerankerSecretReference = SecretReference(rawValue: "reranker-model-provider")
 
     /// SiliconFlow embedding model presets (selectable; custom stays editable).
     static let siliconFlowEmbeddingModels: [(name: String, model: String)] = [
@@ -30,93 +30,37 @@ final class ProviderSettingsModel {
     ]
 
     private let configurations: any ProviderConfigurationRepository
-    private let secrets: any SecretStore
-    private let traceRepository: (any RoutingTraceRepository)?
-    private let books: any BookRepository
-    private let files: BookFileStore
-    private let exporter: PersonalDataExporter
-    private let indexCoordinator: BookIndexCoordinator?
-    let ragManagement: RAGManagementModel?
-    private let onDataDeleted: (@MainActor () async -> Void)?
-
-    /// Set after a successful export, drives the ShareLink in the 数据 section.
-    var exportedDataURL: URL?
-    private(set) var isDeletingAllBooks = false
+    let secrets: any SecretStore
+    /// The persisted provider row (embedding/reranker role fields included), so
+    /// the chat builder can carry the other roles' values through without owning
+    /// their state.
+    private var loadedConfiguration: ProviderConfiguration?
 
     var selectedPreset: ModelProviderPreset = .openAI
     var baseURL = "https://api.openai.com/v1"
     var modelID = ""
     var apiKey = ""
     var streamingEnabled = false
-    /// Semantic retrieval (embedding) role: its own model, endpoint and key —
-    /// independent of the chat provider. Fields default to SiliconFlow so the
-    /// Qwen/BGE presets work out of the box.
-    var embeddingModelID = ""
-    var embeddingBaseURL = "https://api.siliconflow.cn/v1"
-    var embeddingApiKey = ""
-    private(set) var embeddingHasSavedKey = false
-    private(set) var embeddingEnabled = false
-    private(set) var isEmbeddingWorking = false
-    private(set) var embeddingStatusMessage: String?
-    /// Rerank precision-gate role: same independent model/endpoint/key shape.
-    var rerankerModelID = ""
-    var rerankerBaseURL = "https://api.siliconflow.cn/v1"
-    var rerankerApiKey = ""
-    private(set) var rerankerHasSavedKey = false
-    private(set) var rerankerEnabled = false
-    private(set) var isRerankerWorking = false
-    private(set) var rerankerStatusMessage: String?
     private(set) var hasSavedKey = false
     private(set) var isWorking = false
     private(set) var statusMessage: String?
-    private(set) var routingDiagnostics: RoutingTraceDiagnostics?
     var errorMessage: String?
 
-    init(
-        configurations: any ProviderConfigurationRepository,
-        secrets: any SecretStore,
-        traceRepository: (any RoutingTraceRepository)? = nil,
-        books: any BookRepository,
-        files: BookFileStore,
-        exporter: PersonalDataExporter,
-        indexCoordinator: BookIndexCoordinator? = nil,
-        ragManagement: RAGManagementModel? = nil,
-        onDataDeleted: (@MainActor () async -> Void)? = nil
-    ) {
+    init(configurations: any ProviderConfigurationRepository, secrets: any SecretStore) {
         self.configurations = configurations
         self.secrets = secrets
-        self.traceRepository = traceRepository
-        self.books = books
-        self.files = files
-        self.exporter = exporter
-        self.indexCoordinator = indexCoordinator
-        self.ragManagement = ragManagement
-        self.onDataDeleted = onDataDeleted
     }
 
     func load() async {
         do {
             guard let configuration = try await configurations.currentConfiguration() else { return }
+            loadedConfiguration = configuration
             selectedPreset = .matching(baseURL: configuration.baseURL)
             baseURL = configuration.baseURL.absoluteString
             modelID = configuration.modelID
             streamingEnabled = configuration.streamingEnabled
-            embeddingModelID = configuration.embeddingModelID ?? ""
-            embeddingBaseURL = configuration.embeddingBaseURL?.absoluteString ?? configuration.baseURL.absoluteString
-            embeddingHasSavedKey = try await secrets.secret(for: configuration.effectiveEmbeddingSecretReference) != nil
-            embeddingEnabled = configuration.embeddingModelID != nil
-            rerankerModelID = configuration.rerankerModelID ?? ""
-            rerankerBaseURL = configuration.rerankerBaseURL?.absoluteString ?? configuration.baseURL.absoluteString
-            rerankerHasSavedKey = try await secrets.secret(for: configuration.effectiveRerankerSecretReference) != nil
-            rerankerEnabled = configuration.rerankerModelID != nil
-            hasSavedKey = try await secrets.secret(for: configuration.secretReference) != nil
+            hasSavedKey = try await secrets.secret(for: Self.secretReference) != nil
         } catch { errorMessage = Self.message(for: error) }
-        await loadDiagnostics()
-    }
-
-    func loadDiagnostics() async {
-        guard let traceRepository else { return }
-        routingDiagnostics = try? await traceRepository.diagnostics()
     }
 
     func selectPreset(_ preset: ModelProviderPreset) {
@@ -166,92 +110,8 @@ final class ProviderSettingsModel {
         } catch { errorMessage = Self.message(for: error) }
     }
 
-    // MARK: - 语义检索 (RAG)
-
-    func testEmbedding() async {
-        guard let configuration = embeddingConfiguration() else { return }
-        isEmbeddingWorking = true
-        embeddingStatusMessage = nil
-        defer { isEmbeddingWorking = false }
-        do {
-            let key = try await embeddingResolvedKey()
-            try await ProviderEmbeddingTester().test(configuration: configuration, apiKey: key)
-            embeddingStatusMessage = "Embedding 连接成功"
-        } catch { errorMessage = Self.message(for: error) }
-    }
-
-    /// Persists the embedding role (model + its own endpoint/key), then
-    /// re-enqueues existing books so the index pipeline picks them up for
-    /// semantic indexing (`.lexicalReady` books get an embed-only pass; model
-    /// switches get a re-embed).
-    func enableEmbedding() async {
-        guard let configuration = embeddingConfiguration() else { return }
-        isEmbeddingWorking = true
-        embeddingStatusMessage = nil
-        defer { isEmbeddingWorking = false }
-        do {
-            let key = try await embeddingResolvedKey()
-            try await ProviderEmbeddingTester().test(configuration: configuration, apiKey: key)
-            try await configurations.save(configuration)
-            try await secrets.save(key, for: Self.embeddingSecretReference)
-            embeddingApiKey = ""
-            embeddingHasSavedKey = true
-            embeddingEnabled = true
-            embeddingStatusMessage = "语义检索已启用，正在为已有书籍建立索引"
-            let allBooks = try await books.allBooks()
-            await indexCoordinator?.resume(allBooks)
-        } catch { errorMessage = Self.message(for: error) }
-    }
-
-    func disableEmbedding() async {
-        guard let base = configuration() else { return }
-        try? await configurations.save(embeddingCleared(base))
-        embeddingModelID = ""
-        embeddingEnabled = false
-        embeddingStatusMessage = "语义检索已停用"
-    }
-
-    // MARK: - Reranker（RAG 精排门禁）
-
-    func testReranker() async {
-        guard let configuration = rerankerConfiguration() else { return }
-        isRerankerWorking = true
-        rerankerStatusMessage = nil
-        defer { isRerankerWorking = false }
-        do {
-            let key = try await rerankerResolvedKey()
-            try await ProviderRerankerTester().test(configuration: configuration, apiKey: key)
-            rerankerStatusMessage = "Reranker 连接成功"
-        } catch { errorMessage = Self.message(for: error) }
-    }
-
-    /// Persists the reranker role. No re-embedding needed — reranking happens
-    /// at query time on existing fused candidates.
-    func enableReranker() async {
-        guard let configuration = rerankerConfiguration() else { return }
-        isRerankerWorking = true
-        rerankerStatusMessage = nil
-        defer { isRerankerWorking = false }
-        do {
-            let key = try await rerankerResolvedKey()
-            try await ProviderRerankerTester().test(configuration: configuration, apiKey: key)
-            try await configurations.save(configuration)
-            try await secrets.save(key, for: Self.rerankerSecretReference)
-            rerankerApiKey = ""
-            rerankerHasSavedKey = true
-            rerankerEnabled = true
-            rerankerStatusMessage = "Reranker 已启用（检索精排门禁）"
-        } catch { errorMessage = Self.message(for: error) }
-    }
-
-    func disableReranker() async {
-        guard let base = configuration() else { return }
-        try? await configurations.save(rerankerCleared(base))
-        rerankerModelID = ""
-        rerankerEnabled = false
-        rerankerStatusMessage = "Reranker 已停用"
-    }
-
+    /// Deletes the whole provider configuration plus every role's API Key.
+    /// Role models reset their own UI state by reloading after this.
     func deleteConfiguration() async {
         isWorking = true
         defer { isWorking = false }
@@ -267,19 +127,17 @@ final class ProviderSettingsModel {
             try? await secrets.removeSecret(for: Self.embeddingSecretReference)
             try? await secrets.removeSecret(for: Self.rerankerSecretReference)
             apiKey = ""
-            embeddingApiKey = ""
-            rerankerApiKey = ""
             hasSavedKey = false
-            embeddingHasSavedKey = false
-            rerankerHasSavedKey = false
+            loadedConfiguration = nil
             statusMessage = "配置和 API Key 已删除"
         } catch { errorMessage = Self.message(for: error) }
     }
 
-    private func configuration() -> ProviderConfiguration? {
+    /// The full provider row: chat fields from this model, role (embedding/
+    /// reranker) fields from the persisted row. Role models build their own
+    /// rows on top of this base and persist via `saveRoleConfiguration`.
+    func configuration() -> ProviderConfiguration? {
         let model = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let embedding = embeddingModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let reranker = rerankerModelID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
               ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.host != nil,
@@ -293,120 +151,26 @@ final class ProviderSettingsModel {
             modelID: model,
             secretReference: Self.secretReference,
             streamingEnabled: streamingEnabled,
-            embeddingModelID: embedding.isEmpty ? nil : embedding,
-            embeddingBaseURL: parsedEndpoint(embeddingBaseURL),
+            embeddingModelID: loadedConfiguration?.embeddingModelID,
+            embeddingBaseURL: loadedConfiguration?.embeddingBaseURL,
             embeddingSecretReference: Self.embeddingSecretReference,
-            rerankerModelID: reranker.isEmpty ? nil : reranker,
-            rerankerBaseURL: parsedEndpoint(rerankerBaseURL),
+            rerankerModelID: loadedConfiguration?.rerankerModelID,
+            rerankerBaseURL: loadedConfiguration?.rerankerBaseURL,
             rerankerSecretReference: Self.rerankerSecretReference
         )
     }
 
-    /// Picker selection: the matching preset model, or "" for custom/free text.
-    /// Selecting a preset also points the role's Base URL at SiliconFlow.
-    var embeddingPresetSelection: String {
-        get { Self.siliconFlowEmbeddingModels.first(where: { $0.model == embeddingModelID })?.model ?? "" }
-        set {
-            embeddingModelID = newValue
-            if !newValue.isEmpty {
-                embeddingBaseURL = ModelProviderPreset.siliconFlow.baseURL?.absoluteString ?? embeddingBaseURL
-            }
-        }
+    /// Persists a role-merged row and refreshes the cached copy.
+    func saveRoleConfiguration(_ configuration: ProviderConfiguration) async throws {
+        try await configurations.save(configuration)
+        loadedConfiguration = configuration
     }
 
-    var rerankerPresetSelection: String {
-        get { Self.siliconFlowRerankerModels.first(where: { $0.model == rerankerModelID })?.model ?? "" }
-        set {
-            rerankerModelID = newValue
-            if !newValue.isEmpty {
-                rerankerBaseURL = ModelProviderPreset.siliconFlow.baseURL?.absoluteString ?? rerankerBaseURL
-            }
-        }
-    }
+    /// The raw persisted row (role fields included), or nil when nothing is stored.
+    func persistedConfiguration() -> ProviderConfiguration? { loadedConfiguration }
 
-    private func embeddingConfiguration() -> ProviderConfiguration? {
-        guard let base = configuration() else { return nil }
-        let embedding = embeddingModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !embedding.isEmpty else {
-            errorMessage = "请填写 Embedding 模型名称。"
-            return nil
-        }
-        guard let url = parsedEndpoint(embeddingBaseURL) else {
-            errorMessage = "请填写有效的 Embedding Base URL。"
-            return nil
-        }
-        return ProviderConfiguration(
-            id: base.id, provider: base.provider, baseURL: base.baseURL,
-            modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: embedding,
-            embeddingBaseURL: url, embeddingSecretReference: Self.embeddingSecretReference,
-            rerankerModelID: base.rerankerModelID, rerankerBaseURL: base.rerankerBaseURL,
-            rerankerSecretReference: base.rerankerSecretReference
-        )
-    }
-
-    private func rerankerConfiguration() -> ProviderConfiguration? {
-        guard let base = configuration() else { return nil }
-        let reranker = rerankerModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !reranker.isEmpty else {
-            errorMessage = "请填写 Reranker 模型名称。"
-            return nil
-        }
-        guard let url = parsedEndpoint(rerankerBaseURL) else {
-            errorMessage = "请填写有效的 Reranker Base URL。"
-            return nil
-        }
-        return ProviderConfiguration(
-            id: base.id, provider: base.provider, baseURL: base.baseURL,
-            modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
-            embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
-            rerankerModelID: reranker,
-            rerankerBaseURL: url, rerankerSecretReference: Self.rerankerSecretReference
-        )
-    }
-
-    private func embeddingCleared(_ base: ProviderConfiguration) -> ProviderConfiguration {
-        ProviderConfiguration(
-            id: base.id, provider: base.provider, baseURL: base.baseURL,
-            modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: nil,
-            embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
-            rerankerModelID: base.rerankerModelID, rerankerBaseURL: base.rerankerBaseURL,
-            rerankerSecretReference: base.rerankerSecretReference
-        )
-    }
-
-    private func rerankerCleared(_ base: ProviderConfiguration) -> ProviderConfiguration {
-        ProviderConfiguration(
-            id: base.id, provider: base.provider, baseURL: base.baseURL,
-            modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
-            embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
-            rerankerModelID: nil,
-            rerankerBaseURL: base.rerankerBaseURL, rerankerSecretReference: base.rerankerSecretReference
-        )
-    }
-
-    private func embeddingResolvedKey() async throws -> String {
-        let typed = embeddingApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !typed.isEmpty { return typed }
-        if let saved = try await secrets.secret(for: Self.embeddingSecretReference), !saved.isEmpty { return saved }
-        throw ModelFailure.invalidConfiguration
-    }
-
-    private func rerankerResolvedKey() async throws -> String {
-        let typed = rerankerApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !typed.isEmpty { return typed }
-        if let saved = try await secrets.secret(for: Self.rerankerSecretReference), !saved.isEmpty { return saved }
-        throw ModelFailure.invalidConfiguration
-    }
-
-    private func parsedEndpoint(_ raw: String) -> URL? {
-        guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
-              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-              url.host != nil else { return nil }
-        return url
+    func clearTransientSecret() {
+        apiKey = ""
     }
 
     private func keyForSave() -> String? {
@@ -423,55 +187,6 @@ final class ProviderSettingsModel {
         if !typed.isEmpty { return typed }
         if let saved = try await secrets.secret(for: Self.secretReference), !saved.isEmpty { return saved }
         throw ModelFailure.invalidConfiguration
-    }
-
-    // MARK: - 数据控制
-
-    /// Runs the exporter and writes the pretty JSON to a temp file the view can
-    /// hand to a ShareLink. Provider configuration and Keychain are never read.
-    func exportMyData() async {
-        do {
-            let data = try await exporter.export()
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("elsepage-my-data.json")
-            try data.write(to: url, options: .atomic)
-            exportedDataURL = url
-        } catch {
-            errorMessage = Self.message(for: error)
-        }
-    }
-
-    /// Deletes every book's DB record (FK cascade removes positions, highlights,
-    /// notes, preferences, sessions, reflections, journal and index rows) plus
-    /// its sandbox EPUB file, mirroring LibraryModel's two-phase trash flow per
-    /// book. Provider configuration and Keychain stay untouched.
-    func deleteAllBooks() async {
-        guard !isDeletingAllBooks else { return }
-        isDeletingAllBooks = true
-        defer { isDeletingAllBooks = false }
-        indexCoordinator?.cancelAll()
-        do {
-            let allBooks = try await books.allBooks()
-            for book in allBooks {
-                let trashed = try files.stageDeletion(bookID: book.id)
-                do {
-                    try await books.delete(book.id)
-                    files.commitDeletion(trashed)
-                } catch {
-                    if let trashed { try? files.restore(trashed, for: book.id) }
-                    throw error
-                }
-            }
-            exportedDataURL = nil
-            await onDataDeleted?()
-        } catch {
-            errorMessage = Self.message(for: error)
-        }
-    }
-
-    func clearTransientSecret() {
-        apiKey = ""
-        embeddingApiKey = ""
-        rerankerApiKey = ""
     }
 
     static func message(for error: Error) -> String {
