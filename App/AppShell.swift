@@ -7,6 +7,7 @@ struct AppShell: View {
     @Bindable var thoughts: ThoughtsModel
     @Bindable var myMind: MyMindModel
     @Bindable var settings: SettingsRootModel
+    @Bindable var appModel: AppModel
     @State private var selection: AppTab = .today
     @State private var readerDestination: ReaderDestination?
 
@@ -42,6 +43,12 @@ struct AppShell: View {
                 model: library.readerModel(for: destination.book, locator: destination.locator),
                 onReflectionSaved: { selection = .today }
             )
+        }
+        // A document imported via "用 ReadLoop 打开" lands on 书架 so the result is visible.
+        .onChange(of: appModel.openLibraryAfterExternalImport) { _, shouldOpen in
+            guard shouldOpen else { return }
+            selection = .library
+            appModel.openLibraryAfterExternalImport = false
         }
     }
 }

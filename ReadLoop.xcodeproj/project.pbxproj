@@ -158,6 +158,7 @@
 		66EE9BCD5892EF245E64083C /* ReadiumMetadataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumMetadataReader.swift; sourceTree = "<group>"; };
 		6C0E2DCD2EE34B503D2C3BAE /* LexicalSearchCJKTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalSearchCJKTests.swift; sourceTree = "<group>"; };
 		6D7DC675947E863895D35559 /* RAGManagementModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAGManagementModel.swift; sourceTree = "<group>"; };
+		6FD07CC4D8BE7FC9D7AE2FC5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		731BF6181C2F03AD959521F2 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		7374A2B8429A778AE5F22ADB /* minimal.epub */ = {isa = PBXFileReference; path = minimal.epub; sourceTree = "<group>"; };
 		73D705601303A87157EE4015 /* ThoughtsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtsView.swift; sourceTree = "<group>"; };
@@ -359,6 +360,7 @@
 				9732B9E459EE944232BA4360 /* AppModel.swift */,
 				AFCFA4B39B6C45BE89C0D038 /* AppShell.swift */,
 				B402E1AAFFC907D2A1F8BE7E /* Assets.xcassets */,
+				6FD07CC4D8BE7FC9D7AE2FC5 /* Info.plist */,
 				5BF9ECFADAEA467B41E4AA5A /* ReadLoopApp.swift */,
 			);
 			path = App;
@@ -815,8 +817,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U6Y3X5W7T2;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -899,8 +901,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U6Y3X5W7T2;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

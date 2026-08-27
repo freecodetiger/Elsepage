@@ -30,6 +30,34 @@ targets:
     type: application
     platform: iOS
     productName: Reader
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
+        CFBundleDisplayName: 页外
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: "用于录下你的阅读感想并在本机转写。"
+        NSSpeechRecognitionUsageDescription: "用于把你的语音感想转成可编辑文字。"
+        LSSupportsOpeningDocumentsInPlace: false
+        UISupportsDocumentBrowser: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: EPUB 电子书
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - org.idpf.epub-container
+              - public.epub
     sources:
       - path: App
     dependencies:
@@ -69,12 +97,11 @@ targets:
         product: ReadiumAdapterGCDWebServer
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_MODULE_NAME: ReadLoop
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: U6Y3X5W7T2
         TARGETED_DEVICE_FAMILY: "1"
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         ENABLE_USER_SCRIPT_SANDBOXING: YES

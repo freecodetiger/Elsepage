@@ -17,6 +17,13 @@ final class AppModel {
     private(set) var myMind: MyMindModel?
     private(set) var settings: SettingsRootModel?
     private(set) var startupError: String?
+    /// A file URL received via "用 ReadLoop 打开" (Files / Share Sheet / AirDrop)
+    /// while the library wasn't ready yet (e.g. during cold launch). Buffered until
+    /// `start()` has finished wiring the object graph, then imported once.
+    private var pendingImportURL: URL?
+    /// Set when an external document import lands, so AppShell can surface the
+    /// result by switching to 书架.
+    var openLibraryAfterExternalImport = false
 
     func start() async {
         guard library == nil, startupError == nil else { return }
@@ -154,8 +161,23 @@ final class AppModel {
             await settings?.loadAll()
             await library?.reload()
             await library?.resumeBookIndexing()
+            await importPendingIfReady()
         } catch {
             startupError = error.localizedDescription
         }
+    }
+
+    /// Entry point for documents delivered by the system ("用 ReadLoop 打开").
+    /// Safe to call before or after startup; the URL is drained once the library exists.
+    func handleIncoming(_ url: URL) async {
+        pendingImportURL = url
+        await importPendingIfReady()
+    }
+
+    private func importPendingIfReady() async {
+        guard let url = pendingImportURL, let library else { return }
+        pendingImportURL = nil
+        await library.importBook(url)
+        openLibraryAfterExternalImport = true
     }
 }
