@@ -45,7 +45,7 @@ public struct SmallToBigExpander: Sendable {
 
     private func makeWindow(anchor: BookChunk, siblings: [BookChunk], boundary: ReadingBoundary?, score: Double) throws -> BookChunk {
         let ordered = siblings.sorted { $0.ordinal < $1.ordinal }
-        guard let anchorIndex = ordered.firstIndex(where: { $0.id == anchor.id }) else { return anchor }
+        guard ordered.contains(where: { $0.id == anchor.id }) else { return anchor }
         // Only siblings whose start lies within the boundary may join the window.
         let included = ordered.filter { boundary?.contains($0) ?? true }
         guard let anchorIncluded = included.firstIndex(where: { $0.id == anchor.id }) else { return anchor }

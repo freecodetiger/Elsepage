@@ -4,13 +4,16 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Bindable var model: LibraryModel
+    @Bindable var providerSettings: ProviderSettingsModel
     let onReflectionSaved: () -> Void
     @State private var importing = false
+    @State private var showsSettings = false
     @State private var selectedBook: Book?
     @State private var deletingBook: Book?
 
-    init(model: LibraryModel, onReflectionSaved: @escaping () -> Void = {}) {
+    init(model: LibraryModel, providerSettings: ProviderSettingsModel, onReflectionSaved: @escaping () -> Void = {}) {
         self.model = model
+        self.providerSettings = providerSettings
         self.onReflectionSaved = onReflectionSaved
     }
 
@@ -23,7 +26,7 @@ struct LibraryView: View {
             .navigationTitle("书架")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     Menu {
                         Picker("排序", selection: $model.sortOrder) {
                             ForEach(LibrarySortOrder.allCases) { order in
@@ -34,17 +37,28 @@ struct LibraryView: View {
                         Image(systemName: "arrow.up.arrow.down")
                     }
                     .accessibilityLabel("排序书架")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                    // 导入与排序同风格的原生工具栏按钮;导入中显示进度圈。
                     if model.isImporting {
                         ProgressView().accessibilityLabel("正在导入 EPUB")
                     } else {
-                        ElsepageIconButton(systemName: "plus", accessibilityLabel: "导入 EPUB") { importing = true }
+                        Button { importing = true } label: {
+                            Image(systemName: "square.and.arrow.down")
+                        }
+                        .accessibilityLabel("导入 EPUB")
                     }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showsSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("设置")
                 }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [UTType.epub], allowsMultipleSelection: false) { result in
                 if case .success(let urls) = result, let url = urls.first { Task { await model.importBook(url) } }
+            }
+            .sheet(isPresented: $showsSettings) {
+                ProviderSettingsView(model: providerSettings)
             }
             .navigationDestination(item: $selectedBook) { book in
                 ReaderScreen(model: model.readerModel(for: book), onReflectionSaved: onReflectionSaved)

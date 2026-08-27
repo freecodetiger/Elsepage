@@ -49,7 +49,7 @@ struct ThoughtsView: View {
                     Button { showsProviderSettings = true } label: {
                         Image(systemName: "gearshape")
                     }
-                    .accessibilityLabel("AI Provider 设置")
+                    .accessibilityLabel("设置")
                 }
             }
             .task { await model.reload() }

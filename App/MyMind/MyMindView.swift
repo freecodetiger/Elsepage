@@ -9,16 +9,19 @@ import SwiftUI
 /// 从阅读与讨论中形成的理解" — never a psychological-diagnosis vibe.
 struct MyMindView: View {
     @Bindable var model: MyMindModel
+    @Bindable var providerSettings: ProviderSettingsModel
     let openSource: (Book, BookLocator) -> Void
 
     @State private var expandedMemoryID: UUID?
     @State private var editingMemory: ReaderMemory?
     @State private var editText = ""
     @State private var showsClearAll = false
+    @State private var showsSettings = false
     @State private var evidenceByMemory: [UUID: MemoryEvidence] = [:]
 
-    init(model: MyMindModel, openSource: @escaping (Book, BookLocator) -> Void) {
+    init(model: MyMindModel, providerSettings: ProviderSettingsModel, openSource: @escaping (Book, BookLocator) -> Void) {
         self.model = model
+        self.providerSettings = providerSettings
         self.openSource = openSource
     }
 
@@ -38,6 +41,12 @@ struct MyMindView: View {
             .navigationBarTitleDisplayMode(.large)
             .task { await model.reload() }
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showsSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("设置")
+                }
                 if !model.allMemories.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(role: .destructive) { showsClearAll = true } label: {
@@ -46,6 +55,9 @@ struct MyMindView: View {
                         .accessibilityLabel("清除全部记忆")
                     }
                 }
+            }
+            .sheet(isPresented: $showsSettings) {
+                ProviderSettingsView(model: providerSettings)
             }
             .alert("暂时无法完成操作", isPresented: errorBinding) {
                 Button("好") {}
