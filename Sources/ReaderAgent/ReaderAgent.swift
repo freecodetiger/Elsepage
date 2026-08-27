@@ -77,6 +77,9 @@ public struct ReaderAgent: Sendable {
     private let contextValidator: ContextPlanValidator
     private let traceRepository: (any RoutingTraceRepository)?
     private let memories: (any MemoryRepository)?
+    /// Optional semantic recall lane for reflection/memory retrieval (Phase 5).
+    /// Nil → the existing lexical-only behavior, unchanged.
+    private let semanticRanking: (any SemanticRanking)?
 
     public init(
         reflections: any ReflectionRepository,
@@ -88,7 +91,8 @@ public struct ReaderAgent: Sendable {
         contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
         contextValidator: ContextPlanValidator = .init(),
         traceRepository: (any RoutingTraceRepository)? = nil,
-        memories: (any MemoryRepository)? = nil
+        memories: (any MemoryRepository)? = nil,
+        semanticRanking: (any SemanticRanking)? = nil
     ) {
         self.reflections = reflections
         self.models = models
@@ -100,6 +104,7 @@ public struct ReaderAgent: Sendable {
         self.contextValidator = contextValidator
         self.traceRepository = traceRepository
         self.memories = memories
+        self.semanticRanking = semanticRanking
     }
 
     public func respond(to reflectionID: ReflectionID) -> AsyncStream<ReaderAgentEvent> {
@@ -182,7 +187,7 @@ public struct ReaderAgent: Sendable {
                         excluding: reflection.id
                     ) ?? .empty
                     let routingText = followUp?.text ?? reflection.originalText
-                    let matchedMemories = await MemoryRetriever().matchingMemories(
+                    let matchedMemories = await MemoryRetriever(semantic: semanticRanking).matchingMemories(
                         routingText: routingText,
                         in: memories,
                         topN: 2
@@ -214,13 +219,18 @@ public struct ReaderAgent: Sendable {
                     let routingResult = await contextRouter.route(routingInput, using: client)
                     let routingDuration = routingStart.duration(to: clock.now)
                     let plan = contextValidator.validate(routingResult.plan, input: routingInput)
-                    let connection = plan.pastThoughtRetrieval.flatMap { pastPlan in
-                        if let sameBookMatch = strongestConnection(
-                            for: reflection, query: pastPlan.query, among: sameBookCandidates
-                        ) {
-                            return sameBookMatch
+                    let connection: ReflectionConnection?
+                    if let pastPlan = plan.pastThoughtRetrieval {
+                        // Same-book preference is strict (WS3): a same-book match wins
+                        // even over a stronger cross-book one. Each lane fuses lexical +
+                        // semantic when a SemanticRanking is configured.
+                        if let sameBookMatch = await strongestConnection(for: reflection, query: pastPlan.query, among: sameBookCandidates) {
+                            connection = sameBookMatch
+                        } else {
+                            connection = await strongestConnection(for: reflection, query: pastPlan.query, among: crossBookCandidates)
                         }
-                        return strongestConnection(for: reflection, query: pastPlan.query, among: crossBookCandidates)
+                    } else {
+                        connection = nil
                     }
                     if let connection { try await reflections.saveConnection(connection) }
                     continuation.yield(.contextPrepared(connection))
@@ -392,8 +402,8 @@ public struct ReaderAgent: Sendable {
         try? await traceRepository.save(trace)
     }
 
-    private func strongestConnection(for reflection: Reflection, query: String, among candidates: [Reflection]) -> ReflectionConnection? {
-        guard let match = ReflectionLexicalMatcher.strongestMatch(
+    private func strongestConnection(for reflection: Reflection, query: String, among candidates: [Reflection]) async -> ReflectionConnection? {
+        guard let match = await ReflectionRetriever(semantic: semanticRanking).strongestMatch(
             for: query,
             among: candidates
         ) else { return nil }

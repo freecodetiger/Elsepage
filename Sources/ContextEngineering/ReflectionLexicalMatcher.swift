@@ -14,15 +14,8 @@ public enum ReflectionLexicalMatcher {
         for query: String,
         among candidates: [Reflection]
     ) -> Match? {
-        let queryTokens = tokens(in: query)
-        guard queryTokens.count >= 2 else { return nil }
-        return candidates.compactMap { reflection -> Match? in
-            let candidateTokens = tokens(in: reflection.originalText)
-            let overlap = queryTokens.intersection(candidateTokens).count
-            guard overlap >= 2 else { return nil }
-            let relevance = Double(overlap) / Double(max(1, min(queryTokens.count, candidateTokens.count)))
-            guard relevance >= 0.40 else { return nil }
-            return Match(reflection: reflection, relevance: relevance)
+        candidates.compactMap { reflection -> Match? in
+            lexicalRelevance(query: query, candidate: reflection).map { Match(reflection: reflection, relevance: $0) }
         }
         .max { lhs, rhs in
             if lhs.relevance == rhs.relevance {
@@ -30,6 +23,20 @@ public enum ReflectionLexicalMatcher {
             }
             return lhs.relevance < rhs.relevance
         }
+    }
+
+    /// Lexical relevance of one candidate, or nil when it fails the conservative
+    /// bar (≥2 shared tokens AND ≥40% overlap). Shared by the pure-lexical matcher
+    /// and the hybrid fusion lane.
+    public static func lexicalRelevance(query: String, candidate: Reflection) -> Double? {
+        let queryTokens = tokens(in: query)
+        guard queryTokens.count >= 2 else { return nil }
+        let candidateTokens = tokens(in: candidate.originalText)
+        let overlap = queryTokens.intersection(candidateTokens).count
+        guard overlap >= 2 else { return nil }
+        let relevance = Double(overlap) / Double(max(1, min(queryTokens.count, candidateTokens.count)))
+        guard relevance >= 0.40 else { return nil }
+        return relevance
     }
 
     /// CJK-aware tokenization: latin/number words (length >= 2) plus CJK bigrams.

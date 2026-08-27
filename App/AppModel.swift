@@ -1,5 +1,6 @@
 import AgentRuntime
 import AppInfrastructure
+import ContextEngineering
 import Foundation
 import ModelProviders
 import Observation
@@ -68,7 +69,10 @@ final class AppModel {
                     reflections: reflections
                 ),
                 traceRepository: routingTraces,
-                memories: memories
+                memories: memories,
+                // Reflection/Memory semantic recall lane (Phase 5): query-time embed
+                // behind a process-local cache; nil provider degrades to lexical.
+                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider)
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
             // Re-checked every time a reflection sheet opens, so the polish button appears as soon
