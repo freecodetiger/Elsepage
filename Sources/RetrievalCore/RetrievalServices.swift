@@ -37,19 +37,23 @@ public struct LocalBookRetriever: BookRetriever {
     /// a nonzero gate so the reranker reorders *and* filters; tune against real
     /// bge-reranker score distributions if too aggressive/lenient.
     private let minimumRelevance: Double
+    /// Small-to-big: ranked children are expanded into parent-anchored windows.
+    private let expander: SmallToBigExpander
 
     public init(
         repository: any BookIndexRepository,
         embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)? = nil,
         reranker: (@Sendable () async -> (any Reranker)?)? = nil,
         rerankCandidateCount: Int = 10,
-        minimumRelevance: Double = 0.25
+        minimumRelevance: Double = 0.25,
+        expander: SmallToBigExpander = .init()
     ) {
         self.repository = repository
         self.embeddingProvider = embeddingProvider
         self.reranker = reranker
         self.rerankCandidateCount = max(1, rerankCandidateCount)
         self.minimumRelevance = minimumRelevance
+        self.expander = expander
     }
 
     public func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence] {
@@ -85,7 +89,7 @@ public struct LocalBookRetriever: BookRetriever {
                 return RerankCandidate(id: id.rawValue, text: chunk.text)
             }
             if !candidates.isEmpty,
-               let reranked = try? await provider.rerank(query: query.text, candidates: candidates, limit: query.limit) {
+               let reranked = try? await provider.rerank(query: query.text, candidates: candidates, limit: rerankCandidateCount) {
                 let scoreByID = Dictionary(uniqueKeysWithValues: reranked.map { ($0.id, $0.score) })
                 ranked = candidates
                     .map { (BookChunkID(rawValue: $0.id), scoreByID[$0.id] ?? 0) }
@@ -93,9 +97,30 @@ public struct LocalBookRetriever: BookRetriever {
                     .sorted { $0.1 > $1.1 }
             }
         }
-        return ranked.prefix(query.limit).compactMap { id, score in
-            guard let chunk = chunks[id], query.boundary?.contains(chunk) ?? true else { return nil }
-            return BookEvidence(id: id, bookID: chunk.bookID, chapterTitle: chunk.chapterTitle,
+        // Small-to-big: query.limit now means parent count, so expand the ranked
+        // children into one parent-anchored window per parent (dedup by parentID),
+        // then keep the top `limit` windows. Window tails are re-checked against
+        // the boundary inside the expander.
+        let expanded: [(BookChunk, Double)]
+        do {
+            let rankedChildren = ranked.compactMap { id, score -> (BookChunk, Double)? in
+                guard let chunk = chunks[id] else { return nil }
+                return (chunk, score)
+            }
+            expanded = try await expander.expand(
+                rankedChildren,
+                boundary: query.boundary, using: repository,
+                bookID: query.bookID, version: BookIndexPipeline.currentVersion
+            )
+        } catch {
+            expanded = ranked.prefix(query.limit).compactMap { id, score in
+                guard let chunk = chunks[id] else { return nil }
+                return (chunk, score)
+            }
+        }
+        return expanded.prefix(query.limit).compactMap { chunk, score in
+            guard query.boundary?.contains(chunk) ?? true else { return nil }
+            return BookEvidence(id: chunk.id, bookID: chunk.bookID, chapterTitle: chunk.chapterTitle,
                 sectionTitle: chunk.sectionTitle, excerpt: chunk.text, locator: chunk.startLocator, score: score)
         }
     }
