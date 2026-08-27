@@ -164,6 +164,15 @@ public struct ContextBudget: Hashable, Codable, Sendable {
     public let bookEvidenceCharacters: Int
     public let pastThoughtCharacters: Int
     public let conversationCharacters: Int
+
+    public init(totalCharacters: Int, nearbyCharacters: Int, bookEvidenceCharacters: Int,
+                pastThoughtCharacters: Int, conversationCharacters: Int) {
+        self.totalCharacters = totalCharacters
+        self.nearbyCharacters = nearbyCharacters
+        self.bookEvidenceCharacters = bookEvidenceCharacters
+        self.pastThoughtCharacters = pastThoughtCharacters
+        self.conversationCharacters = conversationCharacters
+    }
 }
 
 public struct ValidatedContextPlan: Hashable, Codable, Sendable {

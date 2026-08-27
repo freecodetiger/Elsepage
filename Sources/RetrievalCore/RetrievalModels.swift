@@ -131,6 +131,17 @@ public struct BookEvidence: Hashable, Sendable, Identifiable {
     public let excerpt: String
     public let locator: BookLocator
     public let score: Double
+
+    public init(id: BookChunkID, bookID: BookID, chapterTitle: String? = nil, sectionTitle: String? = nil,
+                excerpt: String, locator: BookLocator, score: Double) {
+        self.id = id
+        self.bookID = bookID
+        self.chapterTitle = chapterTitle
+        self.sectionTitle = sectionTitle
+        self.excerpt = excerpt
+        self.locator = locator
+        self.score = score
+    }
 }
 
 /// A lightweight chapter reference resolved from the persisted book index.

@@ -250,17 +250,31 @@ public struct ReaderAgent: Sendable {
                         bookContext = nil
                     }
                     let messageID = UUID()
-                    let responseEvidence = Self.responseEvidence(
-                        messageID: messageID,
-                        reflection: reflection,
-                        currentEvidence: evidence,
-                        previousReflection: prior,
-                        longTermMemories: matchedMemories,
+                    // Context Engineering layer owns source competition + budgeting:
+                    // nearby/book/reflection/memory become candidates, get deduped,
+                    // ranked by source priority, and packed under the plan's budgets.
+                    let nearbyCandidate: NearbyPassageCandidate?
+                    if plan.nearbyPassage == .include,
+                       let source = evidence.first(where: { $0.locator != nil }),
+                       let locator = source.locator {
+                        let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
+                        nearbyCandidate = text.isEmpty ? nil : NearbyPassageCandidate(text: text, sourceID: source.id.uuidString.lowercased(), locator: locator)
+                    } else {
+                        nearbyCandidate = nil
+                    }
+                    let assembly = ContextAssembler().assemble(
+                        nearby: nearbyCandidate,
                         bookEvidence: bookContext?.evidence ?? [],
-                        includeNearbyPassage: plan.nearbyPassage == .include,
-                        nearbyCharacterBudget: plan.budget.nearbyCharacters,
-                        pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters
+                        previousReflection: prior,
+                        memories: matchedMemories,
+                        reflectionBookID: reflection.bookID,
+                        plan: plan
                     )
+                    let responseEvidence = assembly.evidence.enumerated().map { offset, item in
+                        AgentResponseEvidence(id: "E\(offset + 1)", messageID: messageID, kind: item.kind,
+                            sourceID: item.sourceID, bookID: item.bookID, title: item.title,
+                            excerpt: item.excerpt, locator: item.locator)
+                    }
                     let citationBoundary: ReadingBoundary?
                     if let currentLocator, let contextBuilder {
                         citationBoundary = await contextBuilder.readingBoundary(for: reflection.bookID, locator: currentLocator)
@@ -423,54 +437,6 @@ public struct ReaderAgent: Sendable {
     private static func previousAgentAskedQuestion(in messages: [ReflectionMessage]) -> Bool {
         guard let agent = messages.last(where: { $0.author == .agent }) else { return false }
         return agent.content.contains("？") || agent.content.contains("?")
-    }
-
-    private static func responseEvidence(
-        messageID: UUID,
-        reflection: Reflection,
-        currentEvidence: [ReflectionEvidence],
-        previousReflection: Reflection?,
-        longTermMemories: [ReaderMemory] = [],
-        bookEvidence: [BookEvidence],
-        includeNearbyPassage: Bool,
-        nearbyCharacterBudget: Int,
-        pastThoughtCharacterBudget: Int
-    ) -> [AgentResponseEvidence] {
-        var snapshots: [(AgentEvidenceKind, String, BookID, String?, String, BookLocator?)] = []
-        if includeNearbyPassage, let source = currentEvidence.first(where: { $0.locator != nil }),
-           let locator = source.locator {
-            let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
-            let excerpt = String(text.prefix(max(0, nearbyCharacterBudget)))
-            if !excerpt.isEmpty {
-                snapshots.append((.nearbyPassage, source.id.uuidString.lowercased(), reflection.bookID, "当前阅读位置", excerpt, locator))
-            }
-        }
-        snapshots.append(contentsOf: bookEvidence.map { item in
-            let title = [item.chapterTitle, item.sectionTitle].compactMap { $0 }.joined(separator: " / ")
-            return (.bookPassage, item.id.rawValue, item.bookID, title.isEmpty ? item.locator.href : title, item.excerpt, item.locator)
-        })
-        if let previousReflection {
-            snapshots.append((
-                .pastReflection, previousReflection.id.description, previousReflection.bookID, "过去的想法",
-                String(previousReflection.originalText.prefix(max(0, pastThoughtCharacterBudget))), nil
-            ))
-        }
-        // Long-term memories are evidence only: they have no source Reflection,
-        // so they never create a ReflectionConnection. Memories carry no book;
-        // reuse the current reflection's bookID so the persisted row satisfies
-        // the agentResponseEvidence.bookID foreign key.
-        for memory in longTermMemories {
-            snapshots.append((
-                .pastReflection, memory.id.uuidString.lowercased(), reflection.bookID, "长期记忆",
-                String(memory.claim.prefix(max(0, pastThoughtCharacterBudget))), nil
-            ))
-        }
-        return snapshots.enumerated().map { offset, item in
-            AgentResponseEvidence(
-                id: "E\(offset + 1)", messageID: messageID, kind: item.0, sourceID: item.1,
-                bookID: item.2, title: item.3, excerpt: item.4, locator: item.5
-            )
-        }
     }
 
 }
