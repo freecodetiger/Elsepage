@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?style=for-the-badge&logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/Local%20first-No%20backend-9cb099?style=for-the-badge" alt="Local first">
   <img src="https://img.shields.io/badge/BYOK-Your%20key%2C%20your%20data-5f6e5f?style=for-the-badge" alt="BYOK">
-  <img src="https://img.shields.io/badge/tests-149%20passing-9cb099?style=for-the-badge" alt="149 tests">
+  <img src="https://img.shields.io/badge/tests-207%20passing-9cb099?style=for-the-badge" alt="207 tests">
 </p>
 
 <p align="center">
@@ -91,15 +91,16 @@ If you want an iOS reader that treats **what you thought** as the deliverable, y
 
 ## Status
 
-A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **149 tests green**, and an unsigned iOS build gate passes.
+A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **207 tests green**, and an unsigned iOS build gate passes.
 
 | Area | State |
 |------|-------|
 | Reader foundation | ~85% |
 | Reflection loop | ~80% |
-| Book context / Agent | ~85% (citations grounded; cross-book + memory + semantic RAG) |
+| Book context / Agent | ~90% — citations grounded; **small-to-big** child retrieval (≈350-char retrieval units → parent-anchored evidence windows), hybrid lexical + semantic recall for reflections/memories, cross-encoder rerank gate |
+| Context engineering | planner-grade context plan (dense/lexical split) → source-specific retrieval → candidate ranking/dedup/budget → `ContextBundle`; anti-spoiler enforced at retrieval **and** expansion |
 | Voice reflection | shipped: hold/tap, MP3, AI polish |
-| Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall |
+| Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall, semantic memory matching |
 | Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
 
 Open backlog and ideas: [Issues](https://github.com/freecodetiger/Elsepage/issues).
@@ -124,7 +125,7 @@ open ReadLoop.xcodeproj    # resolve packages, run the ReadLoop scheme
 The portable suite needs no Xcode:
 
 ```bash
-swift test                 # 149 tests
+swift test                 # 207 tests
 ```
 
 A device/simulator run needs the full Xcode install — Readium's navigator is UIKit-based. Manual-device checks are tracked in `docs/READER_FOUNDATION_XCODE_GATE.md`.
@@ -140,7 +141,8 @@ EPUB
   → Readium                  book rendering, positions, highlights, search
   → ReadingSessionService    explicit session lifecycle ("这一段约 N 分钟")
   → Reflection + Evidence    your words, saved first (locator / session / highlights)
-  → Context Routing          what the Agent may use: proposed plan → validated plan
+  → Context Planning         planner-grade plan: sources, dense/lexical split, budgets
+  → Context Engineering      deterministic: source retrieval → rank/dedup/budget → bundle
   → ReaderAgent              grounded reply, locally verified citations, disclosure
   → Journal / Thoughts       what survives the two minutes after the book
 ```
@@ -150,8 +152,9 @@ EPUB
 | EPUB / reading | `ReaderCore` + Readium |
 | Session lifecycle | `ReadingSessionCore` |
 | Reflection & evidence | `ReflectionCore` + `Persistence` |
-| Local book retrieval | `RetrievalCore` (lexical FTS + optional BYOK semantic embeddings, hybrid ranker, all local) |
-| Context routing | `ContextRouting` (proposed vs validated, fallback) |
+| Local book retrieval | `RetrievalCore` — child retrieval (FTS5 trigram + BYOK semantic embeddings), RRF fusion, rerank gate, small-to-big expansion |
+| Context planning | `ContextRouting` — planner-grade plan (dense/lexical split, retrieval knobs), proposed vs validated, deterministic fallback |
+| Context engineering | `ContextEngineering` — candidate ranking/dedup/budget, `ContextBundle`, reflection/memory hybrid retrieval |
 | Agent runtime | `AgentRuntime` / `ReaderAgent` |
 | Voice | `SpeechCore` (system Speech, MP3/AAC) |
 | AI polish | `TranscriptPolishService` (standalone, BYOK) |
@@ -160,13 +163,14 @@ EPUB
 ```text
 Sources/
   ReaderCore / ReadingSessionCore / ReflectionCore   domain
-  RetrievalCore                                      local book retrieval
-  ContextRouting / ReaderAgent / AgentRuntime        the thinking loop
+  RetrievalCore                                      child retrieval + small-to-big
+  ContextRouting / ContextEngineering                planning + context assembly
+  ReaderAgent / AgentRuntime                         the thinking loop
   ModelProviders / SpeechCore                        BYOK providers & voice
   Persistence / LibraryCore / AppInfrastructure      storage & app plumbing
 
-App/     SwiftUI: Reader, Today, Thoughts (Journal), Reflection, Settings
-Tests/   swift-testing (123 tests)
+App/     SwiftUI: Reader, Today, Thoughts (Journal), My Mind, Settings
+Tests/   swift-testing (207 tests)
 ```
 
 ---
