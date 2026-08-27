@@ -62,6 +62,25 @@ import Testing
     #expect(results.map(\.id.rawValue).contains("hit"))
 }
 
+@Test func localBookRetrieverDefaultThresholdGatesIrrelevantPassages() async throws {
+    let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "default-gate"), title: "默认", fileName: "default.epub", fileSize: 1)
+    try await books.insert(book)
+    let chunks = [
+        try chunk(book: book.id, id: "hit", text: "自由与制度"),
+        try chunk(book: book.id, id: "noise", text: "自由市场"),
+    ]
+    try await index.replace(chunks: chunks, for: book.id, version: 1)
+
+    let reranker = FakeReranker { _, candidates in
+        candidates.map { RerankedPassage(id: $0.id, score: $0.id == "hit" ? 0.9 : 0.1) }
+    }
+    // Default minimumRelevance must gate: noise (0.1) is dropped without any explicit threshold.
+    let retriever = LocalBookRetriever(repository: index, reranker: { reranker })
+    let results = try await retriever.retrieve(.init(bookID: book.id, text: "自由", boundary: nil, limit: 2))
+    #expect(results.map(\.id.rawValue) == ["hit"])
+}
+
 // MARK: - Fakes
 
 private struct FakeReranker: Reranker {

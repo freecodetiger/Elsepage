@@ -26,10 +26,25 @@ import Testing
     let book = BookID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
     let start = try locator("a.xhtml", 0.2)
     let block = BookTextBlock(id: .init(rawValue: "long"), bookID: book, resourceHref: "a.xhtml", resourceOrdinal: 0, ordinal: 0, text: String(repeating: "字", count: 25), startLocator: start, endLocator: start)
-    let chunks = StructureAwareChunker(targetCharacters: 8, maximumCharacters: 10).chunks(from: [block], indexVersion: 1)
+    // overlapCharacters: 0 keeps this test about hard-boundary splitting + boundary filter, not overlap.
+    let chunks = StructureAwareChunker(targetCharacters: 8, maximumCharacters: 10, overlapCharacters: 0).chunks(from: [block], indexVersion: 1)
     #expect(chunks.map { $0.text.count } == [10, 10, 5])
     #expect(ReadingBoundary(resourceOrdinal: 0, progression: 0.1).contains(chunks[0]) == false)
     #expect(ReadingBoundary(resourceOrdinal: 1).contains(chunks[0]))
+}
+
+@Test func chunkerSplitPartsShareOverlapAcrossBoundaries() throws {
+    let book = BookID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
+    let start = try locator("a.xhtml", 0.2)
+    let block = BookTextBlock(id: .init(rawValue: "overlap"), bookID: book, resourceHref: "a.xhtml", resourceOrdinal: 0, ordinal: 0, text: "abcdefghijklmnopqrstuvwxyz", startLocator: start, endLocator: start)
+    // max=10, overlap=4 → parts advance by 6: [0,10) [6,16) [12,22) [18,26) [24,26);
+    // consecutive parts share 4 chars (last part is the 2-char tail).
+    let chunks = StructureAwareChunker(targetCharacters: 8, maximumCharacters: 10, overlapCharacters: 4).chunks(from: [block], indexVersion: 1)
+    #expect(chunks.map { $0.text.count } == [10, 10, 10, 8, 2])
+    #expect(chunks[0].text == "abcdefghij")
+    #expect(chunks[1].text == "ghijklmnop")
+    #expect(chunks[2].text == "mnopqrstuv")
+    #expect(chunks[3].text == "stuvwxyz")
 }
 
 private func locator(_ href: String, _ progression: Double) throws -> BookLocator {

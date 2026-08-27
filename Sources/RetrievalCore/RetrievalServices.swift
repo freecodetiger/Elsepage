@@ -1,15 +1,7 @@
 import Foundation
 import LibraryCore
 
-public actor FlatVectorIndex: VectorIndex {
-    private var vectors: [BookChunkID: [Float]] = [:]
-    public init() {}
-    public func upsert(_ vectors: [BookChunkID: [Float]]) { self.vectors.merge(vectors) { _, new in new } }
-    public func search(vector: [Float], candidates: Set<BookChunkID>?, limit: Int) -> [(BookChunkID, Double)] {
-        vectors.lazy.filter { candidates?.contains($0.key) ?? true }
-            .map { ($0.key, Self.cosine(vector, $0.value)) }
-            .sorted { $0.1 > $1.1 }.prefix(max(0, limit)).map { $0 }
-    }
+public enum VectorMath {
     public static func cosine(_ lhs: [Float], _ rhs: [Float]) -> Double {
         guard lhs.count == rhs.count, !lhs.isEmpty else { return 0 }
         var dot: Double = 0, a: Double = 0, b: Double = 0
@@ -41,7 +33,9 @@ public struct LocalBookRetriever: BookRetriever {
     private let reranker: (@Sendable () async -> (any Reranker)?)?
     /// How many fused candidates to hand to the reranker (cost control).
     private let rerankCandidateCount: Int
-    /// Rerank score floor: passages below it never become evidence.
+    /// Rerank score floor: passages below it never become evidence. Default is
+    /// a nonzero gate so the reranker reorders *and* filters; tune against real
+    /// bge-reranker score distributions if too aggressive/lenient.
     private let minimumRelevance: Double
 
     public init(
@@ -49,7 +43,7 @@ public struct LocalBookRetriever: BookRetriever {
         embeddingProvider: (@Sendable () async -> (any EmbeddingProvider)?)? = nil,
         reranker: (@Sendable () async -> (any Reranker)?)? = nil,
         rerankCandidateCount: Int = 10,
-        minimumRelevance: Double = 0
+        minimumRelevance: Double = 0.25
     ) {
         self.repository = repository
         self.embeddingProvider = embeddingProvider
@@ -65,6 +59,11 @@ public struct LocalBookRetriever: BookRetriever {
         if let embeddingProvider,
            let provider = await embeddingProvider(),
            let queryVector = try? await provider.embed([query.text]).first {
+            // ponytail: loads the whole book's vectors + filters the boundary in
+            // memory every query. Fine at single-book/read-so-far scale (~1k chunks,
+            // user-triggered). If a book grows to thousands of chunks or retrieval
+            // becomes hot, push the boundary predicate into the embeddings JOIN's
+            // WHERE (same predicate lexicalSearch already uses) instead.
             let stored = try await repository.embeddings(bookID: query.bookID, model: provider.modelIdentifier)
             let allChunks = try await repository.chunks(for: query.bookID, version: BookIndexPipeline.currentVersion)
                 .filter { chunk in
@@ -74,7 +73,7 @@ public struct LocalBookRetriever: BookRetriever {
             chunks.merge(Dictionary(uniqueKeysWithValues: allChunks.map { ($0.id, $0) })) { current, _ in current }
             let allowed = Set(allChunks.map(\.id))
             let semantic = stored.filter { allowed.contains($0.key) }
-                .map { ($0.key, FlatVectorIndex.cosine(queryVector, $0.value)) }.sorted { $0.1 > $1.1 }
+                .map { ($0.key, VectorMath.cosine(queryVector, $0.value)) }.sorted { $0.1 > $1.1 }
             ranked = HybridRanker.fuse(lexical: ranked, semantic: semantic, limit: max(query.limit, rerankCandidateCount))
         }
         // Reranker gate: re-score the fused top-K against the query and drop
@@ -102,7 +101,9 @@ public struct LocalBookRetriever: BookRetriever {
 }
 
 public struct BookIndexPipeline: Sendable {
-    public static let currentVersion = 1
+    // v2: chunker gained overlapCharacters, so oversized-block splits produce
+    // different chunks than v1 — existing v1 indexes must be re-chunked.
+    public static let currentVersion = 2
     /// Batches per `/embeddings` request. Keeps payloads small and lets the
     /// `bookChunkEmbeddings` table count double as live progress.
     public static let embeddingBatchSize = 100

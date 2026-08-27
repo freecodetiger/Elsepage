@@ -24,6 +24,7 @@ public struct AgentExecutor: Sendable {
                 do {
                     let response = try await executeModelCall(input: input, continuation: continuation)
                     try Task.checkCancellation()
+                    if response.finishReason == "length" { continuation.yield(.truncated) }
                     continuation.yield(.completed(.init(
                         runID: runID,
                         metadata: input.metadata,
@@ -55,7 +56,8 @@ public struct AgentExecutor: Sendable {
                 let request = ModelRequest(
                     messages: input.messages,
                     temperature: input.temperature,
-                    maxOutputTokens: budget.maxOutputTokens
+                    maxOutputTokens: budget.maxOutputTokens,
+                    responseFormat: input.responseFormat
                 )
                 for try await event in client.stream(request: request) {
                     try Task.checkCancellation()

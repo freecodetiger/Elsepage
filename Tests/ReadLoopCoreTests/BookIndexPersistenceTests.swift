@@ -56,14 +56,14 @@ import Testing
     let extractor = InterruptibleExtractor(blocks: [block], shouldFail: true)
     let pipeline = BookIndexPipeline(extractor: extractor, repository: index, chunker: .init(targetCharacters: 20, maximumCharacters: 40))
     await #expect(throws: TestExtractionError.self) { try await pipeline.index(bookID: book.id) }
-    #expect(try await index.job(for: book.id, version: 1)?.state == .failed)
-    #expect(try await index.chunks(for: book.id, version: 1).isEmpty)
+    #expect(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion)?.state == .failed)
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).isEmpty)
     await extractor.setShouldFail(false)
     try await pipeline.index(bookID: book.id)
-    #expect(try await index.job(for: book.id, version: 1)?.state == .lexicalReady)
-    #expect(try await index.chunks(for: book.id, version: 1).count == 1)
+    #expect(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion)?.state == .lexicalReady)
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 1)
     try await pipeline.index(bookID: book.id)
-    #expect(try await index.chunks(for: book.id, version: 1).count == 1)
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 1)
 }
 
 @Test func contextBuilderNeverSearchesBeyondCurrentLocatorAndHonorsBudget() async throws {

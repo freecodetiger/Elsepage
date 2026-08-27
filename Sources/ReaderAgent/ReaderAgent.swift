@@ -30,6 +30,9 @@ public struct ContextDisclosure: Equatable, Sendable {
     public let fallbackReason: RoutingFallbackReason?
     public let routingDuration: Duration
     public let retrievalDuration: Duration
+    /// True when the provider stopped the reply at maxOutputTokens; the response
+    /// may end mid-sentence and its citation block may be missing.
+    public let replyTruncated: Bool
 
     public init(
         includedNearbyPassage: Bool,
@@ -38,7 +41,8 @@ public struct ContextDisclosure: Equatable, Sendable {
         usedFallback: Bool,
         fallbackReason: RoutingFallbackReason?,
         routingDuration: Duration,
-        retrievalDuration: Duration
+        retrievalDuration: Duration,
+        replyTruncated: Bool = false
     ) {
         self.includedNearbyPassage = includedNearbyPassage
         self.retrievedBookEvidenceCount = retrievedBookEvidenceCount
@@ -47,6 +51,7 @@ public struct ContextDisclosure: Equatable, Sendable {
         self.fallbackReason = fallbackReason
         self.routingDuration = routingDuration
         self.retrievalDuration = retrievalDuration
+        self.replyTruncated = replyTruncated
     }
 }
 
@@ -254,6 +259,7 @@ public struct ReaderAgent: Sendable {
                     let retrievalDuration = retrievalStart.duration(to: clock.now)
                     var completedMessage: ReflectionMessage?
                     var replyUsage: TokenUsage?
+                    var replyTruncated = false
                     let replyStart = clock.now
                     for await event in AgentExecutor(client: client, budget: budget).run(
                         input: policy.input(
@@ -273,6 +279,7 @@ public struct ReaderAgent: Sendable {
                     ) {
                         switch event {
                         case .textDelta(let text): continuation.yield(.textDelta(text))
+                        case .truncated: replyTruncated = true
                         case .usageUpdated(let usage): replyUsage = usage
                         case .completed(let result):
                             let validated = await AgentCitationValidator().validate(
@@ -327,7 +334,8 @@ public struct ReaderAgent: Sendable {
                             usedFallback: routingResult.usedFallback,
                             fallbackReason: routingResult.fallbackReason,
                             routingDuration: routingDuration,
-                            retrievalDuration: retrievalDuration
+                            retrievalDuration: retrievalDuration,
+                            replyTruncated: replyTruncated
                         )))
                         await saveTrace(
                             reflection: reflection,

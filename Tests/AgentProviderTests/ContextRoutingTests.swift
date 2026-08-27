@@ -36,7 +36,7 @@ import Testing
     #expect(validated.budget.bookEvidenceCharacters <= validated.budget.totalCharacters)
 }
 
-@Test func llmRouterDecodesStrictPlanAndFallsBackOnMarkdownOrFailure() async {
+@Test func llmRouterDecodesPlanStripsFencesAndFallsBackOnBadOrFailedOutput() async {
     let json = """
     {"intent":"passageObservation","nearbyPassage":"include","bookRetrieval":{"query":"自由与责任","purpose":"findEarlierContrast","preferredScope":"readSoFar","maximumEvidenceCount":2},"pastThoughtRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":false,"shouldNaturallyEnd":true},"rationale":"需要对照已读段落"}
     """
@@ -46,16 +46,45 @@ import Testing
     #expect(routed.usedFallback == false)
     #expect(routed.plan.bookRetrieval?.query == "自由与责任")
 
+    // A code-fenced JSON is recovered by stripping the fence — not a fallback.
     let markdownClient = FakeModelClient(events: [.completed(.init(content: "```json\n\(json)\n```"))])
-    let fallback = await router.route(routingInput(), using: markdownClient)
-    #expect(fallback.usedFallback)
-    #expect(fallback.fallbackReason == .invalidStructuredOutput)
+    let fenced = await router.route(routingInput(), using: markdownClient)
+    #expect(fenced.usedFallback == false)
+    #expect(fenced.plan.bookRetrieval?.query == "自由与责任")
+
+    // Genuinely unparseable content still falls back with a traceable reason.
+    let garbageClient = FakeModelClient(events: [.completed(.init(content: "不是 JSON"))])
+    let garbage = await router.route(routingInput(), using: garbageClient)
+    #expect(garbage.usedFallback)
+    #expect(garbage.fallbackReason == .invalidStructuredOutput)
 
     let failedClient = FakeModelClient(events: [], terminalFailure: .network)
     let failed = await router.route(routingInput(), using: failedClient)
     #expect(failed.usedFallback)
     #expect(failed.fallbackReason == .modelFailure)
     #expect(failed.fallbackDetail == "network")
+}
+
+@Test func llmRouterRequestsJSONModeOnlyWhenProviderSupportsStructuredOutput() async {
+    let json = """
+    {"intent":"passageObservation","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":false,"shouldNaturallyEnd":true},"rationale":null}
+    """
+    let recorder = RequestRecorder()
+    let supported = RecordingModelClient(
+        descriptor: .init(provider: "openai", model: "m", capabilities: .init(supportsStructuredOutput: true)),
+        response: .init(content: json),
+        onRequest: { recorder.record($0) }
+    )
+    _ = await LLMReaderContextRouter().route(routingInput(), using: supported)
+    #expect(recorder.all().first?.responseFormat == .jsonObject)
+
+    let plain = RecordingModelClient(
+        descriptor: .init(provider: "openai", model: "m", capabilities: .init()),
+        response: .init(content: json),
+        onRequest: { recorder.record($0) }
+    )
+    _ = await LLMReaderContextRouter().route(routingInput(), using: plain)
+    #expect(recorder.all().last?.responseFormat == nil)
 }
 
 @Test func llmRouterPropagatesRateLimitedAndBudgetFailuresAsFallbackDetail() async {
@@ -147,6 +176,26 @@ import Testing
 private func durationSeconds(_ duration: Duration) -> Double {
     let components = duration.components
     return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+}
+
+private final class RequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [ModelRequest] = []
+    func record(_ request: ModelRequest) { lock.withLock { stored.append(request) } }
+    func all() -> [ModelRequest] { lock.withLock { stored } }
+}
+
+private struct RecordingModelClient: ModelClient {
+    let descriptor: ModelDescriptor
+    let response: ModelResponse
+    let onRequest: @Sendable (ModelRequest) -> Void
+    func stream(request: ModelRequest) -> AsyncThrowingStream<ModelEvent, Error> {
+        onRequest(request)
+        return AsyncThrowingStream { continuation in
+            continuation.yield(.completed(response))
+            continuation.finish()
+        }
+    }
 }
 
 private func routingInput(

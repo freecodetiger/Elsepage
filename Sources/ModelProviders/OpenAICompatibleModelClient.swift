@@ -41,7 +41,9 @@ public struct OpenAICompatibleModelClient: ModelClient {
         descriptor = ModelDescriptor(
             provider: configuration.provider.rawValue,
             model: configuration.modelID,
-            capabilities: ModelCapabilities(supportsStreaming: false)
+            // OpenAI-compatible endpoints broadly implement response_format json_object;
+            // the router degrades to prompt-only if a specific endpoint rejects it.
+            capabilities: ModelCapabilities(supportsStreaming: false, supportsStructuredOutput: true)
         )
     }
 
@@ -106,6 +108,7 @@ private struct OpenAIRequest: Encodable {
     let temperature: Double?
     let maxTokens: Int?
     let stream: Bool
+    let responseFormat: ModelResponseFormat?
     let thinking: Thinking?
 
     init(configuration: ProviderConfiguration, request: ModelRequest) {
@@ -114,6 +117,7 @@ private struct OpenAIRequest: Encodable {
         temperature = request.temperature
         maxTokens = request.maxOutputTokens
         stream = false
+        responseFormat = request.responseFormat
         thinking = configuration.baseURL.host?.lowercased() == "api.deepseek.com"
             ? Thinking(type: "disabled")
             : nil
@@ -122,7 +126,27 @@ private struct OpenAIRequest: Encodable {
     struct Thinking: Encodable { let type: String }
 
     enum CodingKeys: String, CodingKey {
-        case model, messages, temperature, maxTokens = "max_tokens", stream, thinking
+        case model, messages, temperature, maxTokens = "max_tokens", stream, responseFormat = "response_format", thinking
+    }
+
+    enum ResponseFormatKey: String, CodingKey { case type }
+
+    // ModelResponseFormat is a raw enum (Codable would emit "jsonObject");
+    // the API needs the shape {"type":"json_object"}.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(model, forKey: .model)
+        try container.encode(messages, forKey: .messages)
+        try container.encodeIfPresent(temperature, forKey: .temperature)
+        try container.encodeIfPresent(maxTokens, forKey: .maxTokens)
+        try container.encode(stream, forKey: .stream)
+        if let responseFormat {
+            var format = container.nestedContainer(keyedBy: ResponseFormatKey.self, forKey: .responseFormat)
+            switch responseFormat {
+            case .jsonObject: try format.encode("json_object", forKey: .type)
+            }
+        }
+        try container.encodeIfPresent(thinking, forKey: .thinking)
     }
 }
 

@@ -13,22 +13,30 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
         let encoded: Data
         do { encoded = try JSONEncoder().encode(input) }
         catch { return fallback.result(for: input, reason: .invalidStructuredOutput, detail: "inputEncodingFailed") }
+        // JSON mode is requested only when the provider declares it; otherwise the
+        // prompt-only constraint (and the fence-strip retry below) still applies.
         let request = AgentInput(
             metadata: .init(agentKind: "reader.context-router", promptVersion: "reader-context-router-v1", contextRecipeVersion: "routing-input-v1"),
             messages: [
                 .init(role: .system, content: Self.prompt),
                 .init(role: .user, content: String(decoding: encoded, as: UTF8.self)),
-            ], temperature: 0
+            ], temperature: 0,
+            responseFormat: client.descriptor.capabilities.supportsStructuredOutput ? .jsonObject : nil
         )
         var usage: TokenUsage?
         for await event in AgentExecutor(client: client, budget: .init(maxModelCalls: 1, maxWallTime: .seconds(8), maxOutputTokens: 500)).run(input: request) {
             switch event {
             case .usageUpdated(let update): usage = update
             case .completed(let result):
-                guard let plan = try? JSONDecoder().decode(ReaderContextPlan.self, from: Data(result.response.content.utf8)) else {
-                    return fallback.result(for: input, reason: .invalidStructuredOutput, detail: "structuredDecodeFailed", tokenUsage: usage)
+                let content = result.response.content
+                if let plan = Self.decodePlan(content) {
+                    return ContextRoutingResult(plan: plan, usedFallback: false, fallbackReason: nil, tokenUsage: usage)
                 }
-                return ContextRoutingResult(plan: plan, usedFallback: false, fallbackReason: nil, tokenUsage: usage)
+                // Retry once: some models wrap JSON in a Markdown code fence.
+                if let stripped = Self.strippingJSONFences(content), let plan = Self.decodePlan(stripped) {
+                    return ContextRoutingResult(plan: plan, usedFallback: false, fallbackReason: nil, tokenUsage: usage)
+                }
+                return fallback.result(for: input, reason: .invalidStructuredOutput, detail: "structuredDecodeFailed", tokenUsage: usage)
             case .failed(let failure):
                 return fallback.result(for: input, reason: .modelFailure, detail: Self.failureName(failure), tokenUsage: usage)
             case .cancelled:
@@ -49,6 +57,20 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
         case .budgetExceeded: "budgetExceeded"
         case .unknown: "unknown"
         }
+    }
+
+    private static func decodePlan(_ content: String) -> ReaderContextPlan? {
+        try? JSONDecoder().decode(ReaderContextPlan.self, from: Data(content.utf8))
+    }
+
+    /// Removes a Markdown ```json (or bare ```) code fence around JSON, if present.
+    private static func strippingJSONFences(_ content: String) -> String? {
+        var lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count >= 2, lines.first?.hasPrefix("```") == true else { return nil }
+        lines.removeFirst()
+        if lines.last?.hasPrefix("```") == true { lines.removeLast() }
+        let stripped = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return stripped.isEmpty ? nil : stripped
     }
 
     static let prompt = """

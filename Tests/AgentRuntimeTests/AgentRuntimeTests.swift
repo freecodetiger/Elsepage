@@ -65,6 +65,24 @@ import Testing
     #expect(await collect(slow.run(input: testInput())).last == .failed(.budgetExceeded))
 }
 
+@Test func executorSurfacesTruncationWhenResponseHitTokenCap() async {
+    let response = ModelResponse(content: "部分回应", finishReason: "length")
+    let executor = AgentExecutor(
+        client: FakeModelClient(events: [.started, .textDelta("部分"), .completed(response)]),
+        budget: .init(maxWallTime: .seconds(1))
+    )
+    let events = await collect(executor.run(input: testInput()))
+    #expect(events.contains(.truncated))
+    // .truncated must precede .completed so consumers can mark before persisting.
+    if let truncatedIndex = events.firstIndex(of: .truncated) {
+        #expect(truncatedIndex < events.count - 1)
+    }
+    guard case .completed(let result) = events.last else {
+        Issue.record("Expected completed event"); return
+    }
+    #expect(result.response == response)
+}
+
 @Test func executorNormalizesModelAuthenticationFailure() async {
     let executor = AgentExecutor(
         client: FakeModelClient(events: [], terminalFailure: .authentication),

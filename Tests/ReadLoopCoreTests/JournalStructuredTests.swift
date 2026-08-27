@@ -49,9 +49,9 @@ import Testing
         try chunk(book: book.id, id: "c0", resource: 0, progression: 0.2, text: "第一章正文"),
         try chunk(book: book.id, id: "c2", resource: 2, progression: 0.5, text: "第三章正文"),
     ]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.replace(blocks: [try block(book: book.id, id: "b0", resource: 0, chapterID: "ch0", chapterTitle: "第一章")], inResource: "0.xhtml", for: book.id, version: 1)
-    try await index.replace(blocks: [try block(book: book.id, id: "b2", resource: 2, chapterID: "ch2", chapterTitle: "第三章")], inResource: "2.xhtml", for: book.id, version: 1)
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.replace(blocks: [try block(book: book.id, id: "b0", resource: 0, chapterID: "ch0", chapterTitle: "第一章")], inResource: "0.xhtml", for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.replace(blocks: [try block(book: book.id, id: "b2", resource: 2, chapterID: "ch2", chapterTitle: "第三章")], inResource: "2.xhtml", for: book.id, version: BookIndexPipeline.currentVersion)
 
     let start = try locator(href: "0.xhtml", progression: 0.1)
     let end = try locator(href: "2.xhtml", progression: 0.9)
@@ -103,9 +103,9 @@ import Testing
     try await index.replace(chunks: [
         try chunk(book: book.id, id: "c0", resource: 0, progression: 0.2, text: "第一章正文"),
         try chunk(book: book.id, id: "c2", resource: 2, progression: 0.5, text: "第三章正文"),
-    ], for: book.id, version: 1)
-    try await index.replace(blocks: [try block(book: book.id, id: "b0", resource: 0, chapterID: "ch0", chapterTitle: "第一章")], inResource: "0.xhtml", for: book.id, version: 1)
-    try await index.replace(blocks: [try block(book: book.id, id: "b2", resource: 2, chapterID: "ch2", chapterTitle: "第三章")], inResource: "2.xhtml", for: book.id, version: 1)
+    ], for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.replace(blocks: [try block(book: book.id, id: "b0", resource: 0, chapterID: "ch0", chapterTitle: "第一章")], inResource: "0.xhtml", for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.replace(blocks: [try block(book: book.id, id: "b2", resource: 2, chapterID: "ch2", chapterTitle: "第三章")], inResource: "2.xhtml", for: book.id, version: BookIndexPipeline.currentVersion)
 
     let t0 = Date(timeIntervalSince1970: 1_000)
     let mid = Date(timeIntervalSince1970: 1_030)

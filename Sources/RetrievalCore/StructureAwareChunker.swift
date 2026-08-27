@@ -3,10 +3,15 @@ import Foundation
 public struct StructureAwareChunker: Sendable {
     public let targetCharacters: Int
     public let maximumCharacters: Int
+    /// Characters shared between consecutive split parts, so a hard cut at
+    /// `maximumCharacters` does not lose the sentence that spans the boundary.
+    public let overlapCharacters: Int
 
-    public init(targetCharacters: Int = 900, maximumCharacters: Int = 1_400) {
+    public init(targetCharacters: Int = 900, maximumCharacters: Int = 1_400, overlapCharacters: Int = 150) {
         precondition(targetCharacters > 0 && maximumCharacters >= targetCharacters)
+        // Clamp so the split stride is never 0 (overlap >= max would loop forever).
         self.targetCharacters = targetCharacters; self.maximumCharacters = maximumCharacters
+        self.overlapCharacters = Swift.max(0, Swift.min(overlapCharacters, maximumCharacters - 1))
     }
 
     public func chunks(from blocks: [BookTextBlock], indexVersion: Int) -> [BookChunk] {
@@ -34,16 +39,19 @@ public struct StructureAwareChunker: Sendable {
 
     private func split(_ block: BookTextBlock) -> [BookTextBlock] {
         var result: [BookTextBlock] = []
-        var start = block.text.startIndex
+        // Sliding window: parts advance by (max - overlap) so consecutive parts
+        // share the tail of the previous one. stride >= 1 via the overlap clamp.
+        let stride = maximumCharacters - overlapCharacters
         var part = 0
-        while start < block.text.endIndex {
+        while part * stride < block.text.count {
+            let start = block.text.index(block.text.startIndex, offsetBy: part * stride)
             let end = block.text.index(start, offsetBy: maximumCharacters, limitedBy: block.text.endIndex) ?? block.text.endIndex
             let text = String(block.text[start..<end])
             result.append(BookTextBlock(id: .init(rawValue: "\(block.id.rawValue):\(part)"), bookID: block.bookID,
                 resourceHref: block.resourceHref, chapterID: block.chapterID, chapterTitle: block.chapterTitle,
                 sectionID: block.sectionID, sectionTitle: block.sectionTitle, resourceOrdinal: block.resourceOrdinal,
                 ordinal: block.ordinal * 10_000 + part, text: text, startLocator: block.startLocator, endLocator: block.endLocator))
-            start = end; part += 1
+            part += 1
         }
         return result
     }

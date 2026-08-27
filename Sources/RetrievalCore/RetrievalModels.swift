@@ -248,7 +248,3 @@ public protocol Reranker: Sendable {
     func rerank(query: String, candidates: [RerankCandidate], limit: Int?) async throws -> [RerankedPassage]
 }
 
-public protocol VectorIndex: Sendable {
-    func upsert(_ vectors: [BookChunkID: [Float]]) async throws
-    func search(vector: [Float], candidates: Set<BookChunkID>?, limit: Int) async throws -> [(BookChunkID, Double)]
-}

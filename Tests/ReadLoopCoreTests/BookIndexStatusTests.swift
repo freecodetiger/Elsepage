@@ -21,14 +21,14 @@ import Testing
         try chunk(book: embedding.id, id: "a1", resource: 1, ordinal: 0, text: "文本二"),
         try chunk(book: embedding.id, id: "a2", resource: 1, ordinal: 1, text: "文本三"),
     ]
-    try await index.replace(chunks: chunksA, for: embedding.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: embedding.id, indexVersion: 1, state: .embedding, nextResourceOrdinal: 2, embeddingModel: "m"))
+    try await index.replace(chunks: chunksA, for: embedding.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: embedding.id, indexVersion: BookIndexPipeline.currentVersion, state: .embedding, nextResourceOrdinal: 2, embeddingModel: "m"))
     try await index.saveEmbeddings([.init(rawValue: "a0"): [1, 2], .init(rawValue: "a1"): [1, 2]], model: "m", dimensions: 2)
 
     // Book B: ready but embedded with an old model → semantic progress is 0 for "m".
     let chunksB = [try chunk(book: stale.id, id: "b0", resource: 0, ordinal: 0, text: "旧模型内容")]
-    try await index.replace(chunks: chunksB, for: stale.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: stale.id, indexVersion: 1, state: .ready, embeddingModel: "old-model"))
+    try await index.replace(chunks: chunksB, for: stale.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: stale.id, indexVersion: BookIndexPipeline.currentVersion, state: .ready, embeddingModel: "old-model"))
 
     // Book C: no job → pending.
     let service = BookIndexStatusService(books: books, repository: index, currentEmbeddingModel: { "m" })
@@ -63,8 +63,8 @@ import Testing
     let book = Book(fingerprint: .init(rawValue: "disabled"), title: "禁用", fileName: "disabled.epub", fileSize: 1)
     try await books.insert(book)
     let chunks = [try chunk(book: book.id, id: "d0", resource: 0, ordinal: 0, text: "内容")]
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: 1, state: .ready, embeddingModel: "m"))
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: BookIndexPipeline.currentVersion, state: .ready, embeddingModel: "m"))
     try await index.saveEmbeddings([.init(rawValue: "d0"): [1]], model: "m", dimensions: 1)
 
     // currentEmbeddingModel == nil → no semantic indexing is active → 0 embedded.

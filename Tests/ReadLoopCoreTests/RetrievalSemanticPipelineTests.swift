@@ -51,15 +51,15 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     let book = Book(fingerprint: .init(rawValue: "embed"), title: "Embed", fileName: "embed.epub", fileSize: 1)
     try await books.insert(book)
     let chunks = try (0..<120).map { try chunk(book: book.id, id: "c\($0)", resource: $0 % 3, ordinal: $0, text: "第 \($0) 段内容") }
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: 1, state: .lexicalReady, nextResourceOrdinal: 3))
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: BookIndexPipeline.currentVersion, state: .lexicalReady, nextResourceOrdinal: 3))
 
     let recorder = EmbeddingCallRecorder()
     let provider = RecordingEmbeddingProvider(modelIdentifier: "embed-model", dimensions: 4, recorder: recorder)
     let factory: @Sendable () async -> (any EmbeddingProvider)? = { provider }
     try await BookIndexPipeline(repository: index, embeddings: factory).embed(bookID: book.id)
 
-    let job = try #require(try await index.job(for: book.id, version: 1))
+    let job = try #require(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion))
     #expect(job.state == .ready)
     #expect(job.embeddingModel == "embed-model")
     #expect(try await index.embeddings(bookID: book.id, model: "embed-model").count == 120)
@@ -73,8 +73,8 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     let book = Book(fingerprint: .init(rawValue: "skip"), title: "Skip", fileName: "skip.epub", fileSize: 1)
     try await books.insert(book)
     let chunks = try (0..<3).map { try chunk(book: book.id, id: "c\($0)", resource: 0, ordinal: $0, text: "文本 \($0)") }
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: 1, state: .lexicalReady))
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: BookIndexPipeline.currentVersion, state: .lexicalReady))
 
     let recorder = EmbeddingCallRecorder()
     let provider = RecordingEmbeddingProvider(modelIdentifier: "m", dimensions: 2, recorder: recorder)
@@ -92,7 +92,7 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     // Forced → re-embeds.
     try await pipeline.embed(bookID: book.id, force: true)
     #expect(await recorder.batches.count == afterFirst + 1)
-    let job = try #require(try await index.job(for: book.id, version: 1))
+    let job = try #require(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion))
     #expect(job.state == .ready)
     #expect(job.embeddingModel == "m")
 }
@@ -102,8 +102,8 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     let book = Book(fingerprint: .init(rawValue: "switch"), title: "Switch", fileName: "switch.epub", fileSize: 1)
     try await books.insert(book)
     let chunks = try (0..<2).map { try chunk(book: book.id, id: "c\($0)", resource: 0, ordinal: $0, text: "文本 \($0)") }
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: 1, state: .lexicalReady))
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: BookIndexPipeline.currentVersion, state: .lexicalReady))
 
     let recorderA = EmbeddingCallRecorder()
     let factoryA: @Sendable () async -> (any EmbeddingProvider)? = {
@@ -119,7 +119,7 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     }
     try await BookIndexPipeline(repository: index, embeddings: factoryB).embed(bookID: book.id)
 
-    let job = try #require(try await index.job(for: book.id, version: 1))
+    let job = try #require(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion))
     #expect(job.state == .ready)
     #expect(job.embeddingModel == "model-b")
     #expect(try await index.embeddings(bookID: book.id, model: "model-b").count == 2)
@@ -131,11 +131,11 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     let book = Book(fingerprint: .init(rawValue: "noop"), title: "Noop", fileName: "noop.epub", fileSize: 1)
     try await books.insert(book)
     let chunks = try (0..<2).map { try chunk(book: book.id, id: "c\($0)", resource: 0, ordinal: $0, text: "文本 \($0)") }
-    try await index.replace(chunks: chunks, for: book.id, version: 1)
-    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: 1, state: .lexicalReady))
+    try await index.replace(chunks: chunks, for: book.id, version: BookIndexPipeline.currentVersion)
+    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: BookIndexPipeline.currentVersion, state: .lexicalReady))
 
     try await BookIndexPipeline(repository: index).embed(bookID: book.id)
-    #expect(try await index.job(for: book.id, version: 1)?.state == .lexicalReady)
+    #expect(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion)?.state == .lexicalReady)
 }
 
 @Test func indexReachesReadyWithEmbeddingsWhenFactoryProvided() async throws {
@@ -157,9 +157,9 @@ private func block(book: BookID, href: String, resource: Int, ordinal: Int, text
     )
     try await pipeline.index(bookID: book.id)
 
-    let job = try #require(try await index.job(for: book.id, version: 1))
+    let job = try #require(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion))
     #expect(job.state == .ready)
     #expect(job.embeddingModel == "full-model")
     let embedded = try await index.embeddings(bookID: book.id, model: "full-model")
-    #expect(embedded.count == (try await index.chunks(for: book.id, version: 1)).count)
+    #expect(embedded.count == (try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion)).count)
 }

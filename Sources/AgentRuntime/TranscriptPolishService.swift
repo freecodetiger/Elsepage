@@ -18,8 +18,9 @@ public struct TranscriptPolishService: Sendable {
                 ModelMessage(role: .system, content: Self.systemPrompt),
                 ModelMessage(role: .user, content: transcript)
             ],
-            temperature: 0.2,
-            maxOutputTokens: 800
+            temperature: 0.2
+            // No maxOutputTokens: polish output ≈ transcript length, which can run
+            // to a thousand+ Chinese chars. Truncation would silently cut the reply.
         )
         var content = ""
         for try await event in client.stream(request: request) {
