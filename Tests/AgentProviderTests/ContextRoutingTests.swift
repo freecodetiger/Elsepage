@@ -170,6 +170,28 @@ import Testing
     #expect(validated.memoryRetrieval?.maximumEvidenceCount == 4)  // clamped 1...4
 }
 
+@Test func pipelineMetricsRoundTripAndMissingMetricsDecodeToNil() throws {
+    // Old-shape traces (no pipelineMetrics key) keep decoding.
+    let old = try JSONDecoder().decode(ContextPlanTrace.self, from: Data(traceJSONWithoutMetrics.utf8))
+    #expect(old.pipelineMetrics == nil)
+
+    var metrics = ContextPipelineMetrics()
+    metrics.retrievalMode = .hybrid
+    metrics.denseQueryCustomized = true
+    metrics.expandedEvidenceCount = 3
+    metrics.deduplicatedCount = 2
+    metrics.actualContextTokens = 1_200
+    metrics.semanticCacheHits = 4
+    metrics.semanticCacheMisses = 1
+    let encoded = try JSONEncoder().encode(metrics)
+    let decoded = try JSONDecoder().decode(ContextPipelineMetrics.self, from: encoded)
+    #expect(decoded.retrievalMode == .hybrid)
+    #expect(decoded.denseQueryCustomized == true)
+    #expect(decoded.expandedEvidenceCount == 3)
+    #expect(decoded.deduplicatedCount == 2)
+    #expect(decoded.semanticCacheMisses == 1)
+}
+
 @Test func contextPlanTraceRoundTripsThroughCodable() throws {
     let proposed = ReaderContextPlan(
         intent: .conceptualQuestion,
@@ -268,6 +290,27 @@ private struct RecordingModelClient: ModelClient {
         }
     }
 }
+
+/// A trace encoded BEFORE ContextPipelineMetrics existed (no pipelineMetrics key).
+private let traceJSONWithoutMetrics = """
+{
+  "id": "00000000-0000-0000-0000-000000000001",
+  "reflectionID": "ref-1",
+  "createdAt": 750000000,
+  "proposedPlan": {"intent":"passageObservation","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":false,"shouldNaturallyEnd":true},"rationale":null},
+  "validatedPlan": {"intent":"passageObservation","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":false,"shouldNaturallyEnd":true},"budget":{"totalCharacters":6000,"nearbyCharacters":1200,"bookEvidenceCharacters":2200,"pastThoughtCharacters":800,"conversationCharacters":1400}},
+  "usedFallback": false,
+  "fallbackReason": null,
+  "fallbackDetail": null,
+  "routingDurationSeconds": 0.1,
+  "retrievalDurationSeconds": 0.2,
+  "replyDurationSeconds": 0.3,
+  "selectedBookEvidenceIDs": [],
+  "connectedReflectionID": null,
+  "routingTokenUsage": null,
+  "replyTokenUsage": null
+}
+"""
 
 private func routingInput(
     hasLocator: Bool = true,

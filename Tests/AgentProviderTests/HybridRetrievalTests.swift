@@ -123,6 +123,7 @@ import Testing
 
 private struct TextDrivenSemanticRanking: SemanticRanking {
     let scores: [String: Double]
+    var cacheHitMiss: (hits: Int, misses: Int) { (0, 0) }
     func scores(query: String, items: [(id: String, text: String)], source: ContextSource) async -> SemanticScores? {
         SemanticScores(
             scores: Dictionary(uniqueKeysWithValues: items.map { ($0.id, scores[$0.text] ?? 0) }),
@@ -132,6 +133,7 @@ private struct TextDrivenSemanticRanking: SemanticRanking {
 }
 
 private struct NilSemanticRanking: SemanticRanking {
+    var cacheHitMiss: (hits: Int, misses: Int) { (0, 0) }
     func scores(query: String, items: [(id: String, text: String)], source: ContextSource) async -> SemanticScores? { nil }
 }
 

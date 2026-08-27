@@ -34,6 +34,8 @@ public struct ContextDisclosure: Equatable, Sendable {
     /// True when the provider stopped the reply at maxOutputTokens; the response
     /// may end mid-sentence and its citation block may be missing.
     public let replyTruncated: Bool
+    /// Candidates the assembly layer deduplicated (informational).
+    public let deduplicatedCandidateCount: Int?
 
     public init(
         includedNearbyPassage: Bool,
@@ -43,7 +45,8 @@ public struct ContextDisclosure: Equatable, Sendable {
         fallbackReason: RoutingFallbackReason?,
         routingDuration: Duration,
         retrievalDuration: Duration,
-        replyTruncated: Bool = false
+        replyTruncated: Bool = false,
+        deduplicatedCandidateCount: Int? = nil
     ) {
         self.includedNearbyPassage = includedNearbyPassage
         self.retrievedBookEvidenceCount = retrievedBookEvidenceCount
@@ -53,6 +56,7 @@ public struct ContextDisclosure: Equatable, Sendable {
         self.routingDuration = routingDuration
         self.retrievalDuration = retrievalDuration
         self.replyTruncated = replyTruncated
+        self.deduplicatedCandidateCount = deduplicatedCandidateCount
     }
 }
 
@@ -262,6 +266,7 @@ public struct ReaderAgent: Sendable {
                     } else {
                         nearbyCandidate = nil
                     }
+                    let assemblyStart = clock.now
                     let assembly = ContextAssembler().assemble(
                         nearby: nearbyCandidate,
                         bookEvidence: bookContext?.evidence ?? [],
@@ -270,11 +275,28 @@ public struct ReaderAgent: Sendable {
                         reflectionBookID: reflection.bookID,
                         plan: plan
                     )
+                    let assemblyDuration = assemblyStart.duration(to: clock.now)
                     let responseEvidence = assembly.evidence.enumerated().map { offset, item in
                         AgentResponseEvidence(id: "E\(offset + 1)", messageID: messageID, kind: item.kind,
                             sourceID: item.sourceID, bookID: item.bookID, title: item.title,
                             excerpt: item.excerpt, locator: item.locator)
                     }
+                    // Context-pipeline observability (all optional, decode-safe).
+                    let bookPlan = plan.bookRetrieval
+                    var pipelineMetrics = ContextPipelineMetrics()
+                    pipelineMetrics.retrievalMode = bookPlan?.retrievalMode
+                    pipelineMetrics.denseQueryCustomized = bookPlan.flatMap { plan in plan.denseQuery.map { $0 != plan.query } }
+                    pipelineMetrics.lexicalTermsCustomized = bookPlan.flatMap { plan in plan.lexicalTerms.map { $0 != plan.query } }
+                    pipelineMetrics.expandedEvidenceCount = bookContext?.evidence.count
+                    pipelineMetrics.reflectionEvidenceCount = prior == nil ? nil : 1
+                    pipelineMetrics.memoryEvidenceCount = matchedMemories.isEmpty ? nil : matchedMemories.count
+                    pipelineMetrics.deduplicatedCount = assembly.stats.deduplicatedCount
+                    pipelineMetrics.contextTokenBudget = plan.budget.totalCharacters
+                    pipelineMetrics.actualContextTokens = assembly.stats.usedCharacters
+                    pipelineMetrics.assemblyDurationSeconds = Self.seconds(assemblyDuration)
+                    pipelineMetrics.semanticCacheHits = semanticRanking?.cacheHitMiss.hits
+                    pipelineMetrics.semanticCacheMisses = semanticRanking?.cacheHitMiss.misses
+                    pipelineMetrics.semanticUnavailable = semanticRanking == nil
                     let citationBoundary: ReadingBoundary?
                     if let currentLocator, let contextBuilder {
                         citationBoundary = await contextBuilder.readingBoundary(for: reflection.bookID, locator: currentLocator)
@@ -360,7 +382,8 @@ public struct ReaderAgent: Sendable {
                             fallbackReason: routingResult.fallbackReason,
                             routingDuration: routingDuration,
                             retrievalDuration: retrievalDuration,
-                            replyTruncated: replyTruncated
+                            replyTruncated: replyTruncated,
+                            deduplicatedCandidateCount: assembly.stats.deduplicatedCount
                         )))
                         await saveTrace(
                             reflection: reflection,
@@ -371,7 +394,8 @@ public struct ReaderAgent: Sendable {
                             routingDuration: routingDuration,
                             retrievalDuration: retrievalDuration,
                             replyDuration: replyDuration,
-                            replyUsage: replyUsage
+                            replyUsage: replyUsage,
+                            pipelineMetrics: pipelineMetrics
                         )
                     }
                 } catch is CancellationError {
@@ -394,7 +418,8 @@ public struct ReaderAgent: Sendable {
         routingDuration: Duration,
         retrievalDuration: Duration,
         replyDuration: Duration,
-        replyUsage: TokenUsage?
+        replyUsage: TokenUsage?,
+        pipelineMetrics: ContextPipelineMetrics
     ) async {
         guard let traceRepository else { return }
         let trace = ContextPlanTrace(
@@ -410,10 +435,16 @@ public struct ReaderAgent: Sendable {
             selectedBookEvidenceIDs: bookContext?.evidence.map(\.id.rawValue) ?? [],
             connectedReflectionID: connection?.sourceReflectionID.description,
             routingTokenUsage: routingResult.tokenUsage,
-            replyTokenUsage: replyUsage
+            replyTokenUsage: replyUsage,
+            pipelineMetrics: pipelineMetrics
         )
         // Best-effort: a trace-save failure must never break the reply.
         try? await traceRepository.save(trace)
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
     }
 
     private func strongestConnection(for reflection: Reflection, query: String, among candidates: [Reflection]) async -> ReflectionConnection? {

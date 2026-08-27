@@ -20,6 +20,8 @@ public struct QueryTimeSemanticRanking: SemanticRanking {
         self.cache = cache
     }
 
+    public var cacheHitMiss: (hits: Int, misses: Int) { cache.hitMissCounts }
+
     public func scores(query: String, items: [(id: String, text: String)], source: ContextSource) async -> SemanticScores? {
         guard let provider = await embeddingFactory() else { return nil }
         let start = ContinuousClock.now

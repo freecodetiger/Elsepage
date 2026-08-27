@@ -158,6 +158,30 @@ public struct ReaderContextPlan: Hashable, Codable, Sendable {
     }
 }
 
+/// Optional per-reply context-pipeline metrics (small-to-big expansion, hybrid
+/// reflection/memory retrieval, assembly). Every field is optional so traces
+/// persisted before this evolution keep decoding (diagnostics() decodes all rows).
+public struct ContextPipelineMetrics: Hashable, Codable, Sendable {
+    public var retrievalMode: RetrievalMode?
+    /// True when the planner provided a denseQuery distinct from the plain query.
+    public var denseQueryCustomized: Bool?
+    public var lexicalTermsCustomized: Bool?
+    /// Book evidence units actually emitted (parent-anchored expanded windows).
+    public var expandedEvidenceCount: Int?
+    public var reflectionEvidenceCount: Int?
+    public var memoryEvidenceCount: Int?
+    /// Candidates removed by dedup in the assembly layer.
+    public var deduplicatedCount: Int?
+    public var contextTokenBudget: Int?
+    public var actualContextTokens: Int?
+    public var assemblyDurationSeconds: Double?
+    public var semanticCacheHits: Int?
+    public var semanticCacheMisses: Int?
+    public var semanticUnavailable: Bool?
+
+    public init() {}
+}
+
 public struct ContextBudget: Hashable, Codable, Sendable {
     public let totalCharacters: Int
     public let nearbyCharacters: Int
@@ -255,6 +279,7 @@ public struct ContextPlanTrace: Hashable, Codable, Sendable {
     public let connectedReflectionID: String?
     public let routingTokenUsage: TokenUsage?
     public let replyTokenUsage: TokenUsage?
+    public let pipelineMetrics: ContextPipelineMetrics?
 
     public init(
         id: UUID = UUID(),
@@ -271,7 +296,8 @@ public struct ContextPlanTrace: Hashable, Codable, Sendable {
         selectedBookEvidenceIDs: [String],
         connectedReflectionID: String? = nil,
         routingTokenUsage: TokenUsage? = nil,
-        replyTokenUsage: TokenUsage? = nil
+        replyTokenUsage: TokenUsage? = nil,
+        pipelineMetrics: ContextPipelineMetrics? = nil
     ) {
         self.id = id
         self.reflectionID = reflectionID
@@ -288,6 +314,7 @@ public struct ContextPlanTrace: Hashable, Codable, Sendable {
         self.connectedReflectionID = connectedReflectionID
         self.routingTokenUsage = routingTokenUsage
         self.replyTokenUsage = replyTokenUsage
+        self.pipelineMetrics = pipelineMetrics
     }
 }
 
@@ -297,6 +324,7 @@ extension ContextPlanTrace {
         case fallbackReason, fallbackDetail
         case routingDurationSeconds, retrievalDurationSeconds, replyDurationSeconds
         case selectedBookEvidenceIDs, connectedReflectionID, routingTokenUsage, replyTokenUsage
+        case pipelineMetrics
     }
 
     public init(from decoder: Decoder) throws {
@@ -316,6 +344,7 @@ extension ContextPlanTrace {
         connectedReflectionID = try container.decodeIfPresent(String.self, forKey: .connectedReflectionID)
         routingTokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .routingTokenUsage)
         replyTokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .replyTokenUsage)
+        pipelineMetrics = try container.decodeIfPresent(ContextPipelineMetrics.self, forKey: .pipelineMetrics)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -335,6 +364,7 @@ extension ContextPlanTrace {
         try container.encodeIfPresent(connectedReflectionID, forKey: .connectedReflectionID)
         try container.encodeIfPresent(routingTokenUsage, forKey: .routingTokenUsage)
         try container.encodeIfPresent(replyTokenUsage, forKey: .replyTokenUsage)
+        try container.encodeIfPresent(pipelineMetrics, forKey: .pipelineMetrics)
     }
 }
 

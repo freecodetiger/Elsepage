@@ -8,6 +8,8 @@ public protocol SemanticRanking: Sendable {
     /// Cosine similarity of every eligible item to the query. Returns nil when no
     /// provider is available or embedding fails — callers fall back to lexical-only.
     func scores(query: String, items: [(id: String, text: String)], source: ContextSource) async -> SemanticScores?
+    /// Cumulative process-local cache hit/miss counts across calls (for traces).
+    var cacheHitMiss: (hits: Int, misses: Int) { get }
 }
 
 /// Result of a semantic pass: per-item similarity plus observability counts.
