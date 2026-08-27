@@ -1,3 +1,4 @@
+import AchievementCore
 import AgentRuntime
 import LibraryCore
 import Observation
@@ -27,6 +28,7 @@ final class SessionReflectionModel: Identifiable {
     private let reflectionRepository: any ReflectionRepository
     private let readerAgent: ReaderAgent
     private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
+    let achievements: AchievementModel?
     /// Built lazily by `refreshPolish()` whenever the sheet appears, so a provider
     /// configured after launch is picked up on the next reflection sheet.
     private(set) var polishService: TranscriptPolishService?
@@ -67,7 +69,8 @@ final class SessionReflectionModel: Identifiable {
         linkedHighlightIDs: [UUID] = [],
         reflectionRepository: any ReflectionRepository,
         readerAgent: ReaderAgent,
-        makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil
+        makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
+        achievements: AchievementModel? = nil
     ) {
         self.book = book
         self.summary = summary
@@ -76,6 +79,7 @@ final class SessionReflectionModel: Identifiable {
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
         self.makePolishService = makePolishService
+        self.achievements = achievements
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
         voiceSubmission = VoiceReflectionSubmissionService(repository: reflectionRepository)
     }
@@ -92,24 +96,57 @@ final class SessionReflectionModel: Identifiable {
         polishService != nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var polishedApplied: Bool { rawTranscript != nil }
+    /// The AI-optimized version of the user's words (one tier: 忠实+清晰). Kept
+    /// separate from the editor so 查看我的原话 can swap without losing either side.
+    private(set) var optimizedText: String?
+    /// Whether the editor currently shows the optimized version instead of the raw words.
+    private(set) var showingOptimized = false
+    /// One auto-optimization per draft, so a second recording never overwrites the
+    /// first raw capture (rawTranscript stays the true original).
+    private(set) var hasAutoOptimized = false
+    var isOptimizing = false
 
-    /// One-tap AI tidy-up of the spoken/typed words. Keeps the pre-polish text as
-    /// the raw source of truth; replaces the editor with the polished version.
-    func polishCurrentText() async {
+    /// 录音结束后的自动优化:说得乱没关系,AI 把表达理顺(忠实+清晰),原话始终可切回。
+    func autoOptimizeAfterRecording() async {
+        guard !hasAutoOptimized, polishService != nil,
+              text.trimmingCharacters(in: .whitespacesAndNewlines).count >= Self.autoOptimizeMinimumCharacters else { return }
+        hasAutoOptimized = true
+        await applyOptimization()
+    }
+
+    /// 表达优化(唯一档位):忠于原意,把表达变清楚。保留原始转写为 source of truth。
+    func applyOptimization() async {
         let current = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !current.isEmpty, let polishService else { return }
         if rawTranscript == nil {
             rawTranscript = text
         }
+        isOptimizing = true
+        defer { isOptimizing = false }
         do {
-            let polished = try await polishService.polish(current)
-            guard !polished.isEmpty else { return }
-            text = polished
+            let optimized = try await polishService.polish(current)
+            guard !optimized.isEmpty else { return }
+            optimizedText = optimized
+            text = optimized
+            showingOptimized = true
         } catch {
-            errorMessage = "润色暂不可用，已保留你的原话。"
+            errorMessage = "优化暂不可用，已保留你的原话。"
         }
     }
+
+    func showRaw() {
+        guard let rawTranscript, showingOptimized else { return }
+        text = rawTranscript
+        showingOptimized = false
+    }
+
+    func showOptimized() {
+        guard let optimizedText, !showingOptimized else { return }
+        text = optimizedText
+        showingOptimized = true
+    }
+
+    private static let autoOptimizeMinimumCharacters = 20
 
     var canSubmit: Bool {
         state == .editing && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -125,19 +162,22 @@ final class SessionReflectionModel: Identifiable {
                     id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator,
                     editedTranscript: rawTranscript ?? text,
                     audioFileName: audioFileName,
-                    polishedText: polishedApplied ? text : nil,
+                    polishedText: showingOptimized ? text : nil,
                     linkedHighlightIDs: linkedHighlightIDs
                 ))
             } else {
                 reflection = try await submission.submit(.init(
                     id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator,
                     originalText: rawTranscript ?? text,
-                    polishedText: polishedApplied ? text : nil,
+                    polishedText: showingOptimized ? text : nil,
                     linkedHighlightIDs: linkedHighlightIDs
                 ))
             }
             self.reflection = reflection
             state = .saved
+            if let achievements {
+                await achievements.handle(.init(reflection: reflection, connectedSource: nil, now: Date()))
+            }
             return reflection
         } catch is CancellationError {
             state = .editing
@@ -185,6 +225,13 @@ final class SessionReflectionModel: Identifiable {
             case .contextPrepared(let connection):
                 if let connection {
                     connectedReflection = try? await reflectionRepository.reflection(id: connection.sourceReflectionID)
+                    if let connectedReflection, let reflection, let achievements {
+                        await achievements.handle(.init(
+                            reflection: reflection,
+                            connectedSource: .init(reflection: connectedReflection, bookID: connectedReflection.bookID),
+                            now: Date()
+                        ))
+                    }
                 }
             case .textDelta(let text):
                 streamingResponse = Self.withoutCitationBlock(streamingResponse + text)
@@ -267,7 +314,8 @@ struct SessionReflectionSheet: View {
                             set: { model.audioFileName = $0 }
                         ),
                         canPolish: model.canPolish,
-                        onPolish: { await model.polishCurrentText() },
+                        onPolish: { await model.applyOptimization() },
+                        onAutoPolish: { await model.autoOptimizeAfterRecording() },
                         onVoiceTranscript: { model.markVoiceTranscript() }
                     )
                     .padding(.horizontal, ElsepageTheme.Spacing.page)
@@ -294,6 +342,7 @@ struct SessionReflectionSheet: View {
                 } }
             }
             .task { await model.refreshPolish() }
+            .achievementToast(model.achievements)
         }
         .alert("暂时无法保存", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -307,6 +356,15 @@ struct SessionReflectionSheet: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            if model.optimizedText != nil {
+                optimizationToggle
+            }
+            if model.isOptimizing {
+                HStack(spacing: ElsepageTheme.Spacing.small) {
+                    ProgressView().controlSize(.small)
+                    Text("正在优化你的表达…").font(.footnote).foregroundStyle(.secondary)
+                }
+            }
             TextField("写下一点此刻真正留下来的东西…", text: $model.text, axis: .vertical)
                 .lineLimit(5...12)
                 .padding(ElsepageTheme.Spacing.medium)
@@ -316,6 +374,26 @@ struct SessionReflectionSheet: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// 原话 ↔ 优化版切换。优化始终忠实原意(PRD P2),原话一键可回。
+    private var optimizationToggle: some View {
+        HStack(spacing: ElsepageTheme.Spacing.small) {
+            Label(
+                model.showingOptimized ? "AI 优化版" : "我的原话",
+                systemImage: model.showingOptimized ? "wand.and.stars" : "text.quote"
+            )
+            .font(.caption.weight(.medium))
+            .foregroundStyle(Color.elsepageAccent)
+            Spacer()
+            Button(model.showingOptimized ? "查看我的原话" : "查看 AI 优化版") {
+                if model.showingOptimized { model.showRaw() } else { model.showOptimized() }
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+        }
+        .accessibilityLabel("切换原话与优化版")
     }
 
     private var conversation: some View {

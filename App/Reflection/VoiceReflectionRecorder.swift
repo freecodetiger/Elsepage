@@ -104,6 +104,10 @@ struct VoiceReflectionControls: View {
     @Binding var audioFileName: String?
     var canPolish = false
     var onPolish: (() async -> Void)? = nil
+    /// Fired once per recording completion so the model can auto-optimize the
+    /// transcript (说得乱没关系,AI 把表达理顺)。The model's own guard makes it
+    /// a no-op after the first per-draft optimization.
+    var onAutoPolish: (() async -> Void)? = nil
     var onVoiceTranscript: () -> Void = {}
     @State private var recorder = VoiceReflectionRecorder()
     @State private var textBeforeRecording = ""
@@ -135,7 +139,7 @@ struct VoiceReflectionControls: View {
                         if isPolishing {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("一键润色", systemImage: "wand.and.stars")
+                            Label("优化", systemImage: "wand.and.stars")
                         }
                     }
                     .buttonStyle(.bordered)
@@ -154,6 +158,11 @@ struct VoiceReflectionControls: View {
         }
         .onChange(of: recorder.state.audioFileName) { _, name in
             audioFileName = name
+        }
+        .onChange(of: recorder.state.phase) { _, phase in
+            if phase == .transcriptReady {
+                Task { await onAutoPolish?() }
+            }
         }
         .onDisappear { recorder.cancel() }
         .accessibilityElement(children: .contain)

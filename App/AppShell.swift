@@ -7,13 +7,14 @@ struct AppShell: View {
     @Bindable var thoughts: ThoughtsModel
     @Bindable var myMind: MyMindModel
     @Bindable var settings: SettingsRootModel
+    @Bindable var achievements: AchievementModel
     @Bindable var appModel: AppModel
     @State private var selection: AppTab = .today
     @State private var readerDestination: ReaderDestination?
 
     var body: some View {
         TabView(selection: $selection) {
-            TodayView(library: library) { book in
+            TodayView(library: library, achievements: achievements) { book in
                 readerDestination = .init(book: book, locator: nil)
             } openLibrary: {
                 selection = .library
@@ -31,7 +32,7 @@ struct AppShell: View {
             .tabItem { Label("思想", systemImage: "brain.head.profile") }
             .tag(AppTab.mind)
 
-            MyMindView(model: myMind, settings: settings) { book, locator in
+            MyMindView(model: myMind, settings: settings, achievements: achievements) { book, locator in
                 readerDestination = .init(book: book, locator: locator)
             }
             .tabItem { Label("我的头脑", systemImage: "person.crop.rectangle") }
@@ -41,6 +42,7 @@ struct AppShell: View {
         .fullScreenCover(item: $readerDestination) { destination in
             ReaderScreen(
                 model: library.readerModel(for: destination.book, locator: destination.locator),
+                achievements: achievements,
                 onReflectionSaved: { selection = .today }
             )
         }

@@ -1,3 +1,4 @@
+import AchievementCore
 import LibraryCore
 import ReaderCore
 import ReflectionCore
@@ -10,6 +11,7 @@ import SwiftUI
 struct MyMindView: View {
     @Bindable var model: MyMindModel
     @Bindable var settings: SettingsRootModel
+    @Bindable var achievements: AchievementModel
     let openSource: (Book, BookLocator) -> Void
 
     @State private var expandedMemoryID: UUID?
@@ -19,9 +21,15 @@ struct MyMindView: View {
     @State private var showsSettings = false
     @State private var evidenceByMemory: [UUID: MemoryEvidence] = [:]
 
-    init(model: MyMindModel, settings: SettingsRootModel, openSource: @escaping (Book, BookLocator) -> Void) {
+    init(
+        model: MyMindModel,
+        settings: SettingsRootModel,
+        achievements: AchievementModel,
+        openSource: @escaping (Book, BookLocator) -> Void
+    ) {
         self.model = model
         self.settings = settings
+        self.achievements = achievements
         self.openSource = openSource
     }
 
@@ -86,11 +94,63 @@ struct MyMindView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
                 profileSection
+                achievementsSection
                 memoriesSection
             }
             .padding(ElsepageTheme.Spacing.page)
         }
         .refreshable { await model.reload() }
+    }
+
+    /// 低调徽章区(PRD F13):只列出已解锁的成就,无锁定/进度/积分。
+    private var achievementsSection: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("成就")
+                    .font(.system(.headline, design: .serif, weight: .semibold))
+                Spacer()
+                Text("\(achievements.unlocked.count) 枚")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            if achievements.unlocked.isEmpty {
+                Text("读完并留下想法后，会开始解锁一些有意义的徽章。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Achievement.all.filter { definition in
+                    achievements.unlocked.contains { $0.id == definition.id }
+                }) { definition in
+                    badgeRow(definition)
+                }
+            }
+        }
+    }
+
+    private func badgeRow(_ achievement: Achievement) -> some View {
+        HStack(spacing: ElsepageTheme.Spacing.medium) {
+            Image(systemName: achievement.systemImage)
+                .font(.title3)
+                .foregroundStyle(Color.elsepageAccent)
+                .frame(width: 40, height: 40)
+                .background(Color.elsepageAccent.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(achievement.title).font(.subheadline.weight(.semibold))
+                Text(achievement.blurb).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if let record = achievements.unlocked.first(where: { $0.id == achievement.id }) {
+                Text(record.unlockedAt, format: .dateTime.month().day())
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(ElsepageTheme.Spacing.medium)
+        .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
+                .stroke(.primary.opacity(0.06))
+        }
     }
 
     private var emptyState: some View {

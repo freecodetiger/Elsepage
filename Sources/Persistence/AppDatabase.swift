@@ -398,6 +398,17 @@ public final class AppDatabase: @unchecked Sendable {
             }
             try db.create(index: "bookChunks_onParentID", on: "bookChunks", columns: ["parentID"])
         }
+
+        // V1 achievements (PRD F13, low-key badges). Unlock-once records for
+        // meaningful thinking behaviors; deliberately no locked/progress rows.
+        migrator.registerMigration("v17_achievements") { db in
+            try db.create(table: "achievements", ifNotExists: true) { t in
+                t.column("id", .text).primaryKey()
+                t.column("unlockedAt", .datetime).notNull()
+                t.column("sourceReflectionID", .text)
+                t.column("bookID", .text)
+            }
+        }
         return migrator
     }
 

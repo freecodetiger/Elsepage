@@ -1,3 +1,4 @@
+import AchievementCore
 import ContextRouting
 import Foundation
 import LibraryCore
@@ -17,6 +18,8 @@ final class ThoughtsModel {
     private let journalService: JournalEntryService
     private let readerAgent: ReaderAgent
     private let traceRepository: (any RoutingTraceRepository)?
+    private let reflections: any ReflectionRepository
+    let achievements: AchievementModel?
 
     private(set) var entries: [ReflectionArchiveEntry] = []
     private(set) var journalEntries: [JournalEntry] = []
@@ -35,7 +38,8 @@ final class ThoughtsModel {
         journal: any JournalRepository,
         readerAgent: ReaderAgent,
         traceRepository: (any RoutingTraceRepository)? = nil,
-        memoryRepository: (any MemoryRepository)? = nil
+        memoryRepository: (any MemoryRepository)? = nil,
+        achievements: AchievementModel? = nil
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
         journalService = JournalEntryService(
@@ -43,8 +47,10 @@ final class ThoughtsModel {
             sessions: sessions, index: index, reading: reading, journal: journal,
             memoryRepository: memoryRepository
         )
+        self.reflections = reflections
         self.readerAgent = readerAgent
         self.traceRepository = traceRepository
+        self.achievements = achievements
     }
 
     func reload() async {
@@ -81,7 +87,16 @@ final class ThoughtsModel {
                 await reload()
             case .failed(let failure):
                 errorMessage = Self.message(for: failure)
-            case .started, .contextPrepared, .textDelta, .citationsValidated, .contextDisclosed, .cancelled:
+            case .contextPrepared(let connection):
+                if let connection, let achievements,
+                   let connected = try? await reflections.reflection(id: connection.sourceReflectionID) {
+                    await achievements.handle(.init(
+                        reflection: reflection,
+                        connectedSource: .init(reflection: connected, bookID: connected.bookID),
+                        now: Date()
+                    ))
+                }
+            case .started, .textDelta, .citationsValidated, .contextDisclosed, .cancelled:
                 break
             }
         }

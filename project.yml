@@ -70,6 +70,8 @@ targets:
       - package: ReadLoopCore
         product: ReflectionCore
       - package: ReadLoopCore
+        product: AchievementCore
+      - package: ReadLoopCore
         product: SpeechCore
       - package: ReadLoopCore
         product: RetrievalCore
@@ -124,6 +126,8 @@ targets:
         product: ReadingSessionCore
       - package: ReadLoopCore
         product: ReflectionCore
+      - package: ReadLoopCore
+        product: AchievementCore
       - package: ReadLoopCore
         product: SpeechCore
       - package: ReadLoopCore

@@ -56,6 +56,7 @@ struct ThoughtsView: View {
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)
             }
+            .achievementToast(model.achievements)
             .alert("暂时无法完成操作", isPresented: Binding(
                 get: { model.errorMessage != nil },
                 set: { if !$0 { model.errorMessage = nil } }

@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "ReaderCore", targets: ["ReaderCore"]),
         .library(name: "ReadingSessionCore", targets: ["ReadingSessionCore"]),
         .library(name: "ReflectionCore", targets: ["ReflectionCore"]),
+        .library(name: "AchievementCore", targets: ["AchievementCore"]),
         .library(name: "SpeechCore", targets: ["SpeechCore"]),
         .library(name: "RetrievalCore", targets: ["RetrievalCore"]),
         .library(name: "ContextRouting", targets: ["ContextRouting"]),
@@ -30,6 +31,7 @@ let package = Package(
         .target(name: "SpeechCore"),
         .target(name: "AgentRuntime"),
         .target(name: "ContextRouting", dependencies: ["AgentRuntime", "LibraryCore"]),
+        .target(name: "AchievementCore", dependencies: ["LibraryCore", "ReflectionCore"]),
         .target(name: "RetrievalCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ContextEngineering", dependencies: ["ContextRouting", "RetrievalCore", "ReflectionCore", "ReaderCore", "LibraryCore"]),
         .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ContextRouting", "ContextEngineering", "ReaderCore", "ReflectionCore", "RetrievalCore"]),
@@ -37,7 +39,7 @@ let package = Package(
         .target(
             name: "Persistence",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "RetrievalCore", "ModelProviders", "ContextRouting",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "AchievementCore", "RetrievalCore", "ModelProviders", "ContextRouting",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
@@ -45,7 +47,7 @@ let package = Package(
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "SpeechCore", "RetrievalCore", "ContextRouting",
+                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "AchievementCore", "SpeechCore", "RetrievalCore", "ContextRouting",
                 "ContextEngineering", "AgentRuntime", "ReaderAgent", "ModelProviders", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],

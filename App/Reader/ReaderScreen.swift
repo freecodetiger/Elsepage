@@ -11,8 +11,13 @@ struct ReaderScreen: View {
     @State private var dismissAfterReflection = false
     let onReflectionSaved: () -> Void
 
-    init(model: ReaderModel, onReflectionSaved: @escaping () -> Void = {}) {
+    init(
+        model: ReaderModel,
+        achievements: AchievementModel? = nil,
+        onReflectionSaved: @escaping () -> Void = {}
+    ) {
         _model = State(initialValue: model)
+        model.achievements = achievements
         self.onReflectionSaved = onReflectionSaved
     }
 
@@ -222,7 +227,8 @@ struct ReaderScreen: View {
                 linkedHighlightIDs: model.highlights(in: summary.session).map(\.id),
                 reflectionRepository: model.reflectionRepository,
                 readerAgent: model.readerAgent,
-                makePolishService: model.makePolishService
+                makePolishService: model.makePolishService,
+                achievements: model.achievements
             )
         }
     }

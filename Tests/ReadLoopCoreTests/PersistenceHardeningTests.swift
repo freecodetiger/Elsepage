@@ -59,7 +59,7 @@ import Testing
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
-        "v15_rag_role_endpoints", "v16_parent_child_retrieval"
+        "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements"
     ])
 }
 

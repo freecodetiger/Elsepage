@@ -70,13 +70,16 @@ struct TodayView: View {
     @State private var reflection: SessionReflectionModel?
     let openBook: (Book) -> Void
     let openLibrary: () -> Void
+    let achievements: AchievementModel?
 
     init(
         library: LibraryModel,
+        achievements: AchievementModel? = nil,
         openBook: @escaping (Book) -> Void,
         openLibrary: @escaping () -> Void
     ) {
         _model = State(initialValue: TodayModel(library: library))
+        self.achievements = achievements
         self.openBook = openBook
         self.openLibrary = openLibrary
     }
@@ -115,7 +118,8 @@ struct TodayView: View {
                     locator: locator,
                     reflectionRepository: model.library.reflectionRepository,
                     readerAgent: model.library.readerAgent,
-                    makePolishService: model.library.makePolishService
+                    makePolishService: model.library.makePolishService,
+                    achievements: achievements
                 )
             }
         case .reflectionComplete(let book):

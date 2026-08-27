@@ -16,6 +16,9 @@ final class ReaderModel {
     let reflectionRepository: any ReflectionRepository
     let readerAgent: ReaderAgent
     let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
+    /// Injected by ReaderScreen so reflection models built here can report
+    /// achievement events (unlock badges are App-layer, not part of ReaderAgent).
+    var achievements: AchievementModel?
     private let sessions: ReadingSessionService
     let readium: ReadiumServices
     var initialLocatorJSON: Data?
@@ -353,7 +356,8 @@ final class ReaderModel {
                 linkedHighlightIDs: highlights(in: session).map(\.id),
                 reflectionRepository: reflectionRepository,
                 readerAgent: readerAgent,
-                makePolishService: makePolishService
+                makePolishService: makePolishService,
+                achievements: achievements
             )
         } catch is CancellationError {
             return

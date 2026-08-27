@@ -1,3 +1,4 @@
+import AchievementCore
 import AgentRuntime
 import AppInfrastructure
 import ContextEngineering
@@ -16,6 +17,7 @@ final class AppModel {
     private(set) var thoughts: ThoughtsModel?
     private(set) var myMind: MyMindModel?
     private(set) var settings: SettingsRootModel?
+    private(set) var achievements: AchievementModel?
     private(set) var startupError: String?
     /// A file URL received via "用 ReadLoop 打开" (Files / Share Sheet / AirDrop)
     /// while the library wasn't ready yet (e.g. during cold launch). Buffered until
@@ -142,6 +144,12 @@ final class AppModel {
                 data: dataSettings,
                 ragManagement: ragManagement
             )
+            let achievements = AchievementModel(
+                service: AchievementService(
+                    repository: GRDBAchievementRepository(database: database),
+                    reflections: reflections
+                )
+            )
             thoughts = ThoughtsModel(
                 books: books,
                 reflections: reflections,
@@ -151,16 +159,19 @@ final class AppModel {
                 journal: journal,
                 readerAgent: readerAgent,
                 traceRepository: routingTraces,
-                memoryRepository: memories
+                memoryRepository: memories,
+                achievements: achievements
             )
             myMind = MyMindModel(
                 memories: memories,
                 reflections: reflections,
                 books: books
             )
+            self.achievements = achievements
             await settings?.loadAll()
             await library?.reload()
             await library?.resumeBookIndexing()
+            await achievements.reload()
             await importPendingIfReady()
         } catch {
             startupError = error.localizedDescription
