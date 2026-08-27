@@ -79,8 +79,25 @@ public struct BookRetrievalPlan: Hashable, Codable, Sendable {
     public let purpose: RetrievalPurpose
     public let preferredScope: PreferredBookScope
     public let maximumEvidenceCount: Int
-    public init(query: String, purpose: RetrievalPurpose, preferredScope: PreferredBookScope, maximumEvidenceCount: Int) {
+    // Context-engineering v2: denseQuery drives semantic recall, lexicalTerms drives
+    // BM25/lexical recall. Both optional so plans persisted before this evolution
+    // decode cleanly; consumers fall back to `query` when absent. New retrieval
+    // knobs are optional too and get defaults/clamps at the assembly layer.
+    public let denseQuery: String?
+    public let lexicalTerms: String?
+    public let retrievalMode: RetrievalMode?
+    public let candidateLimit: Int?
+    public let useReranker: Bool?
+    public let expansionMode: ContextExpansionMode?
+    public let expansionMaxTokens: Int?
+    public init(query: String, purpose: RetrievalPurpose, preferredScope: PreferredBookScope, maximumEvidenceCount: Int,
+                denseQuery: String? = nil, lexicalTerms: String? = nil, retrievalMode: RetrievalMode? = nil,
+                candidateLimit: Int? = nil, useReranker: Bool? = nil, expansionMode: ContextExpansionMode? = nil,
+                expansionMaxTokens: Int? = nil) {
         self.query = query; self.purpose = purpose; self.preferredScope = preferredScope; self.maximumEvidenceCount = maximumEvidenceCount
+        self.denseQuery = denseQuery; self.lexicalTerms = lexicalTerms; self.retrievalMode = retrievalMode
+        self.candidateLimit = candidateLimit; self.useReranker = useReranker
+        self.expansionMode = expansionMode; self.expansionMaxTokens = expansionMaxTokens
     }
 }
 
@@ -90,6 +107,24 @@ public struct PastThoughtRetrievalPlan: Hashable, Codable, Sendable {
     public let maximumEvidenceCount: Int
     public init(query: String, purpose: PastThoughtPurpose, maximumEvidenceCount: Int) {
         self.query = query; self.purpose = purpose; self.maximumEvidenceCount = maximumEvidenceCount
+    }
+}
+
+public enum RetrievalMode: String, Hashable, Codable, Sendable {
+    case dense, lexical, hybrid
+}
+
+public enum ContextExpansionMode: String, Hashable, Codable, Sendable {
+    /// Expand from a hit child to a bounded sibling window inside its parent,
+    /// re-checking the reading boundary before emitting evidence.
+    case boundedWindow
+}
+
+public struct MemoryRetrievalPlan: Hashable, Codable, Sendable {
+    public let query: String
+    public let maximumEvidenceCount: Int
+    public init(query: String, maximumEvidenceCount: Int) {
+        self.query = query; self.maximumEvidenceCount = maximumEvidenceCount
     }
 }
 
@@ -107,13 +142,19 @@ public struct ReaderContextPlan: Hashable, Codable, Sendable {
     public let nearbyPassage: NearbyPassagePlan
     public let bookRetrieval: BookRetrievalPlan?
     public let pastThoughtRetrieval: PastThoughtRetrievalPlan?
+    /// Evidence-only memory source (never a ReflectionConnection). Optional so
+    /// pre-evolution plans decode; the validator defaults it on to preserve the
+    /// current always-consulted behavior.
+    public let memoryRetrieval: MemoryRetrievalPlan?
     public let responseGuidance: ResponseGuidance
     public let rationale: String?
     public init(intent: ReflectionIntent, nearbyPassage: NearbyPassagePlan,
                 bookRetrieval: BookRetrievalPlan?, pastThoughtRetrieval: PastThoughtRetrievalPlan?,
+                memoryRetrieval: MemoryRetrievalPlan? = nil,
                 responseGuidance: ResponseGuidance, rationale: String? = nil) {
         self.intent = intent; self.nearbyPassage = nearbyPassage; self.bookRetrieval = bookRetrieval
-        self.pastThoughtRetrieval = pastThoughtRetrieval; self.responseGuidance = responseGuidance; self.rationale = rationale
+        self.pastThoughtRetrieval = pastThoughtRetrieval; self.memoryRetrieval = memoryRetrieval
+        self.responseGuidance = responseGuidance; self.rationale = rationale
     }
 }
 
@@ -130,8 +171,19 @@ public struct ValidatedContextPlan: Hashable, Codable, Sendable {
     public let nearbyPassage: NearbyPassagePlan
     public let bookRetrieval: BookRetrievalPlan?
     public let pastThoughtRetrieval: PastThoughtRetrievalPlan?
+    /// Optional so traces persisted before this evolution keep decoding; the
+    /// assembly layer treats nil as "memory not planned" and defaults it on.
+    public let memoryRetrieval: MemoryRetrievalPlan?
     public let responseGuidance: ResponseGuidance
     public let budget: ContextBudget
+    public init(intent: ReflectionIntent, nearbyPassage: NearbyPassagePlan,
+                bookRetrieval: BookRetrievalPlan?, pastThoughtRetrieval: PastThoughtRetrievalPlan?,
+                memoryRetrieval: MemoryRetrievalPlan? = nil,
+                responseGuidance: ResponseGuidance, budget: ContextBudget) {
+        self.intent = intent; self.nearbyPassage = nearbyPassage; self.bookRetrieval = bookRetrieval
+        self.pastThoughtRetrieval = pastThoughtRetrieval; self.memoryRetrieval = memoryRetrieval
+        self.responseGuidance = responseGuidance; self.budget = budget
+    }
 }
 
 public enum RoutingFallbackReason: String, Hashable, Codable, Sendable { case invalidStructuredOutput, modelFailure }

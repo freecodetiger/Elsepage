@@ -99,6 +99,77 @@ import Testing
     }
 }
 
+@Test func oldShapeTraceDecodesWhenContextPlanGainsOptionalFields() throws {
+    // A trace persisted before the context-engineering plan evolution — no
+    // denseQuery/lexicalTerms/retrieval knobs, no memoryRetrieval. It must still
+    // decode so Settings diagnostics survive upgrades (diagnostics() decodes all rows).
+    let json = """
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "reflectionID": "ref-1",
+      "createdAt": 750000000,
+      "proposedPlan": {"intent":"passageObservation","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":false,"shouldNaturallyEnd":true},"rationale":null},
+      "validatedPlan": {"intent":"passageObservation","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":false,"shouldNaturallyEnd":true},"budget":{"totalCharacters":6000,"nearbyCharacters":1200,"bookEvidenceCharacters":2200,"pastThoughtCharacters":800,"conversationCharacters":1400}},
+      "usedFallback": false,
+      "fallbackReason": null,
+      "fallbackDetail": null,
+      "routingDurationSeconds": 0.1,
+      "retrievalDurationSeconds": 0.2,
+      "replyDurationSeconds": 0.3,
+      "selectedBookEvidenceIDs": [],
+      "connectedReflectionID": null,
+      "routingTokenUsage": null,
+      "replyTokenUsage": null
+    }
+    """
+    let trace = try JSONDecoder().decode(ContextPlanTrace.self, from: Data(json.utf8))
+    #expect(trace.reflectionID == "ref-1")
+    #expect(trace.proposedPlan?.memoryRetrieval == nil)
+    #expect(trace.validatedPlan.memoryRetrieval == nil)
+    #expect(trace.validatedPlan.bookRetrieval == nil)
+    #expect(trace.validatedPlan.budget.totalCharacters == 6_000)
+}
+
+@Test func validatorResolvesDenseLexicalDefaultsButDoesNotInjectMemory() {
+    let proposal = ReaderContextPlan(
+        intent: .passageObservation,
+        nearbyPassage: .include,
+        bookRetrieval: .init(query: "自由与责任", purpose: .clarifyCurrentPassage, preferredScope: .readSoFar, maximumEvidenceCount: 3),
+        pastThoughtRetrieval: nil,
+        responseGuidance: .init(targetLength: .short, allowQuestion: false, shouldNaturallyEnd: true)
+    )
+    let validated = ContextPlanValidator().validate(proposal, input: routingInput())
+    #expect(validated.bookRetrieval?.denseQuery == "自由与责任")
+    #expect(validated.bookRetrieval?.lexicalTerms == "自由与责任")
+    // Omitted memory must NOT default to currentReflection: that would persist raw
+    // user text into routingTraces (ADR 0001). The assembly layer owns the default.
+    #expect(validated.memoryRetrieval == nil)
+}
+
+@Test func validatorCarriesExplicitRetrievalConfigAndClampsMemoryCount() {
+    let proposal = ReaderContextPlan(
+        intent: .conceptualQuestion,
+        nearbyPassage: .include,
+        bookRetrieval: .init(
+            query: "作者对自由的态度", purpose: .traceConcept, preferredScope: .currentChapter, maximumEvidenceCount: 2,
+            denseQuery: "  作者如何看待自由与责任的张力  ", lexicalTerms: "自由 责任 作者",
+            retrievalMode: .hybrid, candidateLimit: 12, useReranker: false
+        ),
+        pastThoughtRetrieval: nil,
+        memoryRetrieval: .init(query: "自由观", maximumEvidenceCount: 99),
+        responseGuidance: .init(targetLength: .medium, allowQuestion: true, shouldNaturallyEnd: false)
+    )
+    let validated = ContextPlanValidator().validate(proposal, input: routingInput())
+    let book = validated.bookRetrieval
+    #expect(book?.denseQuery == "作者如何看待自由与责任的张力")
+    #expect(book?.lexicalTerms == "自由 责任 作者")
+    #expect(book?.retrievalMode == .hybrid)
+    #expect(book?.candidateLimit == 12)
+    #expect(book?.useReranker == false)
+    #expect(validated.memoryRetrieval?.query == "自由观")
+    #expect(validated.memoryRetrieval?.maximumEvidenceCount == 4)  // clamped 1...4
+}
+
 @Test func contextPlanTraceRoundTripsThroughCodable() throws {
     let proposed = ReaderContextPlan(
         intent: .conceptualQuestion,
