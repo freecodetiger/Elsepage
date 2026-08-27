@@ -1,4 +1,5 @@
 import AgentRuntime
+import ContextEngineering
 import ContextRouting
 import Foundation
 import LibraryCore
@@ -181,7 +182,7 @@ public struct ReaderAgent: Sendable {
                         excluding: reflection.id
                     ) ?? .empty
                     let routingText = followUp?.text ?? reflection.originalText
-                    let matchedMemories = await Self.matchingMemories(
+                    let matchedMemories = await MemoryRetriever().matchingMemories(
                         routingText: routingText,
                         in: memories,
                         topN: 2
@@ -462,77 +463,4 @@ public struct ReaderAgent: Sendable {
         }
     }
 
-    /// Lexically matches the routing text against long-term memory claims using
-    /// the same CJK-aware tokenization as `ReflectionLexicalMatcher`. A lighter
-    /// relevance bar than the reflection matcher because memory claims are
-    /// distilled and short; ranking picks the strongest matches and non-active
-    /// memories are ignored. Memories surface as evidence only (no connection).
-    private static func matchingMemories(
-        routingText: String,
-        in repository: (any MemoryRepository)?,
-        topN: Int
-    ) async -> [ReaderMemory] {
-        guard let repository, !routingText.isEmpty else { return [] }
-        let queryTokens = ReflectionLexicalMatcher.tokens(in: routingText)
-        guard queryTokens.count >= 2 else { return [] }
-        let all = (try? await repository.memories()) ?? []
-        return all
-            .filter { $0.status != .superseded }
-            .compactMap { memory -> (memory: ReaderMemory, relevance: Double)? in
-                let claimTokens = ReflectionLexicalMatcher.tokens(in: memory.claim)
-                let overlap = queryTokens.intersection(claimTokens).count
-                guard overlap >= 2 else { return nil }
-                let relevance = Double(overlap) / Double(max(1, min(queryTokens.count, claimTokens.count)))
-                guard relevance >= 0.30 else { return nil }
-                return (memory, relevance)
-            }
-            .sorted { $0.relevance > $1.relevance }
-            .prefix(topN)
-            .map(\.memory)
-    }
-}
-
-public enum ReflectionLexicalMatcher {
-    public struct Match: Hashable, Sendable {
-        public let reflection: Reflection
-        public let relevance: Double
-    }
-
-    /// Conservative lexical retrieval: at least two shared meaningful tokens and
-    /// a 40% overlap against the smaller thought. This favors silence over a weak
-    /// or performative personal connection.
-    public static func strongestMatch(
-        for query: String,
-        among candidates: [Reflection]
-    ) -> Match? {
-        let queryTokens = tokens(in: query)
-        guard queryTokens.count >= 2 else { return nil }
-        return candidates.compactMap { reflection -> Match? in
-            let candidateTokens = tokens(in: reflection.originalText)
-            let overlap = queryTokens.intersection(candidateTokens).count
-            guard overlap >= 2 else { return nil }
-            let relevance = Double(overlap) / Double(max(1, min(queryTokens.count, candidateTokens.count)))
-            guard relevance >= 0.40 else { return nil }
-            return Match(reflection: reflection, relevance: relevance)
-        }
-        .max { lhs, rhs in
-            if lhs.relevance == rhs.relevance {
-                return lhs.reflection.createdAt < rhs.reflection.createdAt
-            }
-            return lhs.relevance < rhs.relevance
-        }
-    }
-
-    static func tokens(in text: String) -> Set<String> {
-        let lowered = text.lowercased()
-        let words = lowered.split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
-            .filter { $0.count >= 2 }
-        let cjk = lowered.unicodeScalars.filter { scalar in
-            (0x3400...0x4DBF).contains(scalar.value)
-                || (0x4E00...0x9FFF).contains(scalar.value)
-        }
-        let bigrams = zip(cjk, cjk.dropFirst()).map { String($0) + String($1) }
-        return Set(words + bigrams)
-    }
 }

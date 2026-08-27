@@ -50,6 +50,8 @@ targets:
       - package: ReadLoopCore
         product: ContextRouting
       - package: ReadLoopCore
+        product: ContextEngineering
+      - package: ReadLoopCore
         product: ReaderAgent
       - package: ReadLoopCore
         product: ModelProviders
@@ -103,6 +105,8 @@ targets:
         product: AgentRuntime
       - package: ReadLoopCore
         product: ContextRouting
+      - package: ReadLoopCore
+        product: ContextEngineering
       - package: ReadLoopCore
         product: ReaderAgent
       - package: ReadLoopCore

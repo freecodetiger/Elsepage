@@ -11,7 +11,7 @@
 		107EC613931D95B05335AF4B /* SpeechCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A502579C3E299BCF6F1D439 /* SpeechCore */; };
 		10D4D22BB8FCDEE4F56BA777 /* BookIndexStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6766AA682DF76C5C0963332 /* BookIndexStatusTests.swift */; };
 		114CD3F82D7D72DBB5664E9E /* SessionReflectionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D511F1C39D1392E27F83BE /* SessionReflectionSheet.swift */; };
-		127858DE14F61ABD9D2C7C0A /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = FAA496C0619186AE3DCCA5B8 /* Persistence */; };
+		127858DE14F61ABD9D2C7C0A /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = F9602D3B20E48A9F2C4A7A14 /* ReaderAgent */; };
 		1357C27CC23C95B930ED5E09 /* ProductLoopIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5168C1CFB5ED2480B0CA42F0 /* ProductLoopIntegrationTests.swift */; };
 		13618D58076248F0C1F9AF39 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 5CB651BEA886D981413F1F07 /* ReadiumShared */; };
 		14572461F3D3928F0D5CBDC4 /* VoiceReflectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D36E449C5A23178A792E7E8E /* VoiceReflectionTests.swift */; };
@@ -28,7 +28,7 @@
 		3A17B9E2EF231427BB40BBF1 /* MemoryRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 182B2152207DC2CC7B2832C4 /* MemoryRepositoryTests.swift */; };
 		3A6A395EB182962A3951C62A /* ProviderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C438732DAC81CDEC4CE59A /* ProviderSettingsView.swift */; };
 		3D5A833BDD3AABB5E665E2FE /* ReaderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17217B45491685767A98789 /* ReaderModel.swift */; };
-		3DBB52E66244A880F22E45B7 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 14157B016983F45E250D41BD /* ReadiumShared */; };
+		3DBB52E66244A880F22E45B7 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */; };
 		3F4AC3062F18C7C41CE13F59 /* RetrievalCore in Frameworks */ = {isa = PBXBuildFile; productRef = 26F53A00FB7A59A9F8028016 /* RetrievalCore */; };
 		4316A094E378C71ED902FC6C /* RetrievalSemanticPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A997B4D0B3148C0CD6A3CA6 /* RetrievalSemanticPipelineTests.swift */; };
 		43A21BF812DDA847BFEFB62C /* ContextRouting in Frameworks */ = {isa = PBXBuildFile; productRef = 0CDE845F8FA2E1852A657013 /* ContextRouting */; };
@@ -39,7 +39,7 @@
 		4C21FA3E171833BA8A152903 /* ElsepageTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB660ABDB582C5FFF22452F /* ElsepageTheme.swift */; };
 		4CC56E8B1E5E137CE3F3C17D /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 4FADAA5B8DE1FC390342D187 /* README.md */; };
 		528199402979A4A9712E0766 /* RetrievalCore in Frameworks */ = {isa = PBXBuildFile; productRef = FFA2E63C5E26142AA7030D3E /* RetrievalCore */; };
-		5446788AD9E0C7BC95540FE6 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 32E84A47FBAE26EC3C3A385F /* GRDB */; };
+		5446788AD9E0C7BC95540FE6 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 4B88E02C78BB96FC5CDDC13B /* AppInfrastructure */; };
 		55B5CF5C7637C2585E1E215C /* MyMindModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747644A932D194CB5263EBFB /* MyMindModel.swift */; };
 		562131A6C3CC31746D55546F /* ReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = D053F9E8C184BD4A40F4CFB7 /* ReaderCore */; };
 		56765FB95DFFA3B8FB1A31E0 /* RAGManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D97F4DD7A93F5BFC6BD20AB /* RAGManagementView.swift */; };
@@ -53,19 +53,21 @@
 		61F7F87BECCDE80F37D2F0FC /* ReaderCoordinationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CE7E67BD0AB98946CD3C0BD /* ReaderCoordinationTests.swift */; };
 		634031668A19ED232A345866 /* MyMindView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9F42C365060E8F7A316B61 /* MyMindView.swift */; };
 		687ACCFA905B58C3FB1359E2 /* ReaderProfileProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E315711D3F9AA135D8F5FFBF /* ReaderProfileProjectionTests.swift */; };
+		68D1B16F0CD4006629CD5485 /* OpenAICompatibleModelClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D879B857508A77FE67213D5 /* OpenAICompatibleModelClientTests.swift */; };
 		6980106596A47E10F72E7450 /* ReadiumMetadataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66EE9BCD5892EF245E64083C /* ReadiumMetadataReader.swift */; };
 		6D3551BB7604A37E2686E2F7 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = A26E7C374147AAC3B9C133F2 /* AppInfrastructure */; };
 		6D61031A5E66E045035EAB07 /* RoutingTracePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4F7D643BE30C426EADB07F /* RoutingTracePersistenceTests.swift */; };
 		6DBB33C874EB21849FA36E0E /* ReaderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4775351EC3328731E57858C0 /* ReaderScreen.swift */; };
-		6FFF29DAB7456325939FC514 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A39B871343335FF088DF30A4 /* ReadiumNavigator */; };
-		739069444F35954CEA6764A6 /* ModelProviders in Frameworks */ = {isa = PBXBuildFile; productRef = 2E828F1FA7007F0BFAAF63AD /* ModelProviders */; };
+		6FFF29DAB7456325939FC514 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 303B2BF3C97ADB415239C9F7 /* ReadiumStreamer */; };
+		739069444F35954CEA6764A6 /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = 6F921148D5F8EDA27439F5AE /* ReaderAgent */; };
 		73C172F594B4A9EDB5A66693 /* minimal.epub in Resources */ = {isa = PBXBuildFile; fileRef = 7374A2B8429A778AE5F22ADB /* minimal.epub */; };
-		73FE54AB2B3184953DA75706 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 303B2BF3C97ADB415239C9F7 /* ReadiumStreamer */; };
+		73FE54AB2B3184953DA75706 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 14157B016983F45E250D41BD /* ReadiumShared */; };
 		792942EBAB3264DB01B406CF /* minimal.epub in Resources */ = {isa = PBXBuildFile; fileRef = 7374A2B8429A778AE5F22ADB /* minimal.epub */; };
 		7FC73606EBFF4A5E8F4C9605 /* SpeechCore in Frameworks */ = {isa = PBXBuildFile; productRef = B12F2AE27BF871798BC98087 /* SpeechCore */; };
 		81173A889CF964F288964C96 /* PersistenceHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAAA36A8711C5E5DB8D4CC1A /* PersistenceHardeningTests.swift */; };
 		84C6AB73F190A3DAF97EE645 /* VoiceReflectionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558FE6449FEB79C3574FF057 /* VoiceReflectionRecorder.swift */; };
 		87269EB51BCFE5BA105ED490 /* ImportHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 763AB1DDEA8450791C00CCA5 /* ImportHardeningTests.swift */; };
+		8C14BC1D9F3D68890C18B1E0 /* SiliconFlowRerankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01047116935CD74763107825 /* SiliconFlowRerankerTests.swift */; };
 		90C44E64CB624EE47ADE14D2 /* JournalEntryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C5CDB7BFE6154CD0B5E57D /* JournalEntryCard.swift */; };
 		934C8B1B09C601B5DF3B8EC3 /* ReflectionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2A42F4617B2CBC1E133B68 /* ReflectionPersistenceTests.swift */; };
 		9707104E08429946C1A2D24A /* ReflectionLoopServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86B205F06DEFC7879EB6B14 /* ReflectionLoopServiceTests.swift */; };
@@ -77,31 +79,34 @@
 		A409B447F29C532AF154CE4F /* ReadingSessionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0E5D34A20C524BA77AFBBDCC /* ReadingSessionCore */; };
 		A469E33B8988D890B60EAFA6 /* ReadingSessionCore in Frameworks */ = {isa = PBXBuildFile; productRef = B97AA797DAD9344400492B26 /* ReadingSessionCore */; };
 		A607604868A804CA119B7CC5 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 3A66CADD0591CABD69D3A20B /* README.md */; };
-		AB9362EBC641154698B9D24B /* ReadiumAdapterGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = 6A4AF0225E65CE1DEE9B6000 /* ReadiumAdapterGCDWebServer */; };
-		ACED885380E2BF2375E4DD57 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 4B88E02C78BB96FC5CDDC13B /* AppInfrastructure */; };
+		AB9362EBC641154698B9D24B /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A39B871343335FF088DF30A4 /* ReadiumNavigator */; };
+		ACED885380E2BF2375E4DD57 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = FAA496C0619186AE3DCCA5B8 /* Persistence */; };
 		AD10D2DEF5F308451D908248 /* ReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4F012576A33D6FA4259AFF97 /* ReaderCore */; };
 		B6E74FAF07E4AEC5D78FA22E /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B8655FAF8076A2B7FD4B64 /* TestFixtures.swift */; };
+		B82D917BBAF1CB3BB783DE77 /* ReadiumAdapterGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = 6A4AF0225E65CE1DEE9B6000 /* ReadiumAdapterGCDWebServer */; };
 		BCF12F7BDE014C820B6BBD40 /* ThoughtsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D705601303A87157EE4015 /* ThoughtsView.swift */; };
 		BEF90B351A51F33994324EE0 /* RetrievalChunkingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC5466CD5F18C5F5FFE1CC7 /* RetrievalChunkingTests.swift */; };
-		C14891C8F8FC52A3F02B405F /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = F9602D3B20E48A9F2C4A7A14 /* ReaderAgent */; };
+		C14891C8F8FC52A3F02B405F /* ContextEngineering in Frameworks */ = {isa = PBXBuildFile; productRef = 0A73BFCFD52646778628B489 /* ContextEngineering */; };
 		C26DA02B3F9A8C35E9F6C756 /* ThoughtsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9873A9A1DCAB50645CD89D82 /* ThoughtsModel.swift */; };
 		C4BAC49B67F3E0A07742FFE2 /* ReflectionArchiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB0F9F7F0385EB45FD94025 /* ReflectionArchiveTests.swift */; };
 		C5E28E84484C80A63D0B53F5 /* StreakCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD720F779D1E2F380A16925 /* StreakCalculatorTests.swift */; };
 		C6BC143F6DAB75CAD8D9FBE5 /* BookIndexPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6091F0254AA8FBAD94F5956 /* BookIndexPersistenceTests.swift */; };
-		CA1CBECBFE0693EA2499D9D0 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 499F3F0E1BB1A21324F25FBA /* Persistence */; };
+		CA1CBECBFE0693EA2499D9D0 /* ModelProviders in Frameworks */ = {isa = PBXBuildFile; productRef = 2E828F1FA7007F0BFAAF63AD /* ModelProviders */; };
 		CA3EFC2A30136CE9B551DBC0 /* ReadiumPublicationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 071CD8577B634BCCA3B9B3A5 /* ReadiumPublicationIntegrationTests.swift */; };
 		CFB6ECB328C361B1DCAF2CE2 /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05A33B98BD21AF7593C5D6EF /* LibraryModel.swift */; };
 		D212B53D304B5A5C369D0E37 /* ContextRouting in Frameworks */ = {isa = PBXBuildFile; productRef = B5E8B4041526AE178FC5AD26 /* ContextRouting */; };
 		D71C869DDC4716F8C3FBD66D /* ReadiumServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A3069ECDB501E8EF30EF58 /* ReadiumServices.swift */; };
 		D9300D54F299A3CC2E338B8E /* AppShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCFA4B39B6C45BE89C0D038 /* AppShell.swift */; };
 		DB1681D6696E7574AE2AE093 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731BF6181C2F03AD959521F2 /* LibraryView.swift */; };
-		DDB31037CCD8DA96EBA5F106 /* AppInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */; };
+		DDB31037CCD8DA96EBA5F106 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 499F3F0E1BB1A21324F25FBA /* Persistence */; };
 		DF1E21FF7C793E26B8B51C7E /* ElsepageComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9663C3CAFB779777C386F10 /* ElsepageComponents.swift */; };
 		E0430F1F511246468621194E /* PersonalDataExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62F9262B401229D3D809CF2C /* PersonalDataExporterTests.swift */; };
 		E4D1C924B1823D21FCE52A46 /* AgentRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 90714C30F7492E2D43B30D14 /* AgentRuntime */; };
 		E702281F1BC89A6D1FA32BD4 /* ReaderFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B89083F818E40F555FF2F92 /* ReaderFoundationTests.swift */; };
+		E9B84F1E0B48159F6FBF84B5 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 32E84A47FBAE26EC3C3A385F /* GRDB */; };
 		EF47114999B723220A4FD77B /* AgentRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = EDD545EBFD3C50B809FBF99F /* AgentRuntime */; };
-		F8BAA6C7A354A1BF0ACB82F6 /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = 6F921148D5F8EDA27439F5AE /* ReaderAgent */; };
+		EFE3D031F3000994F56FD85E /* LocalBookRetrieverRerankTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959BBC054309C519134DCA81 /* LocalBookRetrieverRerankTests.swift */; };
+		F8BAA6C7A354A1BF0ACB82F6 /* ContextEngineering in Frameworks */ = {isa = PBXBuildFile; productRef = F067BF20AD567434925913BB /* ContextEngineering */; };
 		F9D3999E577D1C15ABCE2750 /* CrossBookRetrievalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8353073EC8D822339F330EE1 /* CrossBookRetrievalTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -116,6 +121,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01047116935CD74763107825 /* SiliconFlowRerankerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiliconFlowRerankerTests.swift; sourceTree = "<group>"; };
 		058175D072CFD86802F55599 /* ReadLoopCoreTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ReadLoopCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		05A33B98BD21AF7593C5D6EF /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		071CD8577B634BCCA3B9B3A5 /* ReadiumPublicationIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPublicationIntegrationTests.swift; sourceTree = "<group>"; };
@@ -140,6 +146,7 @@
 		558FE6449FEB79C3574FF057 /* VoiceReflectionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceReflectionRecorder.swift; sourceTree = "<group>"; };
 		5BD720F779D1E2F380A16925 /* StreakCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakCalculatorTests.swift; sourceTree = "<group>"; };
 		5BF9ECFADAEA467B41E4AA5A /* ReadLoopApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadLoopApp.swift; sourceTree = "<group>"; };
+		5D879B857508A77FE67213D5 /* OpenAICompatibleModelClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleModelClientTests.swift; sourceTree = "<group>"; };
 		62F9262B401229D3D809CF2C /* PersonalDataExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataExporterTests.swift; sourceTree = "<group>"; };
 		66EE9BCD5892EF245E64083C /* ReadiumMetadataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumMetadataReader.swift; sourceTree = "<group>"; };
 		6C0E2DCD2EE34B503D2C3BAE /* LexicalSearchCJKTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalSearchCJKTests.swift; sourceTree = "<group>"; };
@@ -156,6 +163,7 @@
 		8D2C8D60EAE897860577B506 /* ProviderSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsModel.swift; sourceTree = "<group>"; };
 		8FBB4E02618581B6372645CE /* AgentCitationPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCitationPersistenceTests.swift; sourceTree = "<group>"; };
 		92C438732DAC81CDEC4CE59A /* ProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsView.swift; sourceTree = "<group>"; };
+		959BBC054309C519134DCA81 /* LocalBookRetrieverRerankTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalBookRetrieverRerankTests.swift; sourceTree = "<group>"; };
 		9732B9E459EE944232BA4360 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		9873A9A1DCAB50645CD89D82 /* ThoughtsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtsModel.swift; sourceTree = "<group>"; };
 		98C5CDB7BFE6154CD0B5E57D /* JournalEntryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryCard.swift; sourceTree = "<group>"; };
@@ -195,14 +203,15 @@
 				49729F72297A6EA4CDC6B681 /* RetrievalCore in Frameworks */,
 				E4D1C924B1823D21FCE52A46 /* AgentRuntime in Frameworks */,
 				D212B53D304B5A5C369D0E37 /* ContextRouting in Frameworks */,
-				F8BAA6C7A354A1BF0ACB82F6 /* ReaderAgent in Frameworks */,
-				739069444F35954CEA6764A6 /* ModelProviders in Frameworks */,
-				CA1CBECBFE0693EA2499D9D0 /* Persistence in Frameworks */,
-				DDB31037CCD8DA96EBA5F106 /* AppInfrastructure in Frameworks */,
-				3DBB52E66244A880F22E45B7 /* ReadiumShared in Frameworks */,
-				73FE54AB2B3184953DA75706 /* ReadiumStreamer in Frameworks */,
-				6FFF29DAB7456325939FC514 /* ReadiumNavigator in Frameworks */,
-				AB9362EBC641154698B9D24B /* ReadiumAdapterGCDWebServer in Frameworks */,
+				F8BAA6C7A354A1BF0ACB82F6 /* ContextEngineering in Frameworks */,
+				739069444F35954CEA6764A6 /* ReaderAgent in Frameworks */,
+				CA1CBECBFE0693EA2499D9D0 /* ModelProviders in Frameworks */,
+				DDB31037CCD8DA96EBA5F106 /* Persistence in Frameworks */,
+				3DBB52E66244A880F22E45B7 /* AppInfrastructure in Frameworks */,
+				73FE54AB2B3184953DA75706 /* ReadiumShared in Frameworks */,
+				6FFF29DAB7456325939FC514 /* ReadiumStreamer in Frameworks */,
+				AB9362EBC641154698B9D24B /* ReadiumNavigator in Frameworks */,
+				B82D917BBAF1CB3BB783DE77 /* ReadiumAdapterGCDWebServer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -218,10 +227,11 @@
 				3F4AC3062F18C7C41CE13F59 /* RetrievalCore in Frameworks */,
 				EF47114999B723220A4FD77B /* AgentRuntime in Frameworks */,
 				43A21BF812DDA847BFEFB62C /* ContextRouting in Frameworks */,
-				C14891C8F8FC52A3F02B405F /* ReaderAgent in Frameworks */,
-				127858DE14F61ABD9D2C7C0A /* Persistence in Frameworks */,
-				ACED885380E2BF2375E4DD57 /* AppInfrastructure in Frameworks */,
-				5446788AD9E0C7BC95540FE6 /* GRDB in Frameworks */,
+				C14891C8F8FC52A3F02B405F /* ContextEngineering in Frameworks */,
+				127858DE14F61ABD9D2C7C0A /* ReaderAgent in Frameworks */,
+				ACED885380E2BF2375E4DD57 /* Persistence in Frameworks */,
+				5446788AD9E0C7BC95540FE6 /* AppInfrastructure in Frameworks */,
+				E9B84F1E0B48159F6FBF84B5 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -363,10 +373,12 @@
 				1BA9A148F06827703F567E88 /* JournalStructuredTests.swift */,
 				6C0E2DCD2EE34B503D2C3BAE /* LexicalSearchCJKTests.swift */,
 				13081E30FAA8827EEB4EFFD7 /* LibraryGridLayoutTests.swift */,
+				959BBC054309C519134DCA81 /* LocalBookRetrieverRerankTests.swift */,
 				1214AAD7D7D2F8EA76B585E9 /* LocatorAndRestorationTests.swift */,
 				4DE2F8A71486BBA0DF0D231D /* MemoryApplicationServiceTests.swift */,
 				182B2152207DC2CC7B2832C4 /* MemoryRepositoryTests.swift */,
 				C74DA42FD6542F0E48B90A18 /* OpenAICompatibleEmbeddingProviderTests.swift */,
+				5D879B857508A77FE67213D5 /* OpenAICompatibleModelClientTests.swift */,
 				EAAA36A8711C5E5DB8D4CC1A /* PersistenceHardeningTests.swift */,
 				62F9262B401229D3D809CF2C /* PersonalDataExporterTests.swift */,
 				5168C1CFB5ED2480B0CA42F0 /* ProductLoopIntegrationTests.swift */,
@@ -381,6 +393,7 @@
 				1A997B4D0B3148C0CD6A3CA6 /* RetrievalSemanticPipelineTests.swift */,
 				CF4F7D643BE30C426EADB07F /* RoutingTracePersistenceTests.swift */,
 				FE4E8506C02A11428CEF5FCC /* SessionContextBuilderTests.swift */,
+				01047116935CD74763107825 /* SiliconFlowRerankerTests.swift */,
 				5BD720F779D1E2F380A16925 /* StreakCalculatorTests.swift */,
 				F6B8655FAF8076A2B7FD4B64 /* TestFixtures.swift */,
 				D36E449C5A23178A792E7E8E /* VoiceReflectionTests.swift */,
@@ -459,6 +472,7 @@
 				26F53A00FB7A59A9F8028016 /* RetrievalCore */,
 				EDD545EBFD3C50B809FBF99F /* AgentRuntime */,
 				0CDE845F8FA2E1852A657013 /* ContextRouting */,
+				0A73BFCFD52646778628B489 /* ContextEngineering */,
 				F9602D3B20E48A9F2C4A7A14 /* ReaderAgent */,
 				FAA496C0619186AE3DCCA5B8 /* Persistence */,
 				4B88E02C78BB96FC5CDDC13B /* AppInfrastructure */,
@@ -490,6 +504,7 @@
 				75C6F4F0BD3EDF889E82DBE0 /* RetrievalCore */,
 				90714C30F7492E2D43B30D14 /* AgentRuntime */,
 				B5E8B4041526AE178FC5AD26 /* ContextRouting */,
+				F067BF20AD567434925913BB /* ContextEngineering */,
 				6F921148D5F8EDA27439F5AE /* ReaderAgent */,
 				2E828F1FA7007F0BFAAF63AD /* ModelProviders */,
 				499F3F0E1BB1A21324F25FBA /* Persistence */,
@@ -660,10 +675,12 @@
 				60CA8F0626CA131008F502F4 /* JournalStructuredTests.swift in Sources */,
 				56834B46E1D657DDD7064A5F /* LexicalSearchCJKTests.swift in Sources */,
 				25199EB74C051D10A699EBF3 /* LibraryGridLayoutTests.swift in Sources */,
+				EFE3D031F3000994F56FD85E /* LocalBookRetrieverRerankTests.swift in Sources */,
 				225F43E12C242E79432E8751 /* LocatorAndRestorationTests.swift in Sources */,
 				35FD861AF9A5447785B0A1AC /* MemoryApplicationServiceTests.swift in Sources */,
 				3A17B9E2EF231427BB40BBF1 /* MemoryRepositoryTests.swift in Sources */,
 				16B62E1F0DBD88F1D0625453 /* OpenAICompatibleEmbeddingProviderTests.swift in Sources */,
+				68D1B16F0CD4006629CD5485 /* OpenAICompatibleModelClientTests.swift in Sources */,
 				81173A889CF964F288964C96 /* PersistenceHardeningTests.swift in Sources */,
 				E0430F1F511246468621194E /* PersonalDataExporterTests.swift in Sources */,
 				1357C27CC23C95B930ED5E09 /* ProductLoopIntegrationTests.swift in Sources */,
@@ -678,6 +695,7 @@
 				4316A094E378C71ED902FC6C /* RetrievalSemanticPipelineTests.swift in Sources */,
 				6D61031A5E66E045035EAB07 /* RoutingTracePersistenceTests.swift in Sources */,
 				987BD82121AE69A608B69986 /* SessionContextBuilderTests.swift in Sources */,
+				8C14BC1D9F3D68890C18B1E0 /* SiliconFlowRerankerTests.swift in Sources */,
 				C5E28E84484C80A63D0B53F5 /* StreakCalculatorTests.swift in Sources */,
 				B6E74FAF07E4AEC5D78FA22E /* TestFixtures.swift in Sources */,
 				14572461F3D3928F0D5CBDC4 /* VoiceReflectionTests.swift in Sources */,
@@ -1010,6 +1028,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		0A73BFCFD52646778628B489 /* ContextEngineering */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ContextEngineering;
+		};
 		0B4FD2F89117EA936344DC03 /* ReflectionCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ReflectionCore;
@@ -1140,6 +1162,10 @@
 		EDD545EBFD3C50B809FBF99F /* AgentRuntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AgentRuntime;
+		};
+		F067BF20AD567434925913BB /* ContextEngineering */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ContextEngineering;
 		};
 		F30E53677A32ED5B7D3A2A5B /* AppInfrastructure */ = {
 			isa = XCSwiftPackageProductDependency;

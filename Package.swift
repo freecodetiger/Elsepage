@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "SpeechCore", targets: ["SpeechCore"]),
         .library(name: "RetrievalCore", targets: ["RetrievalCore"]),
         .library(name: "ContextRouting", targets: ["ContextRouting"]),
+        .library(name: "ContextEngineering", targets: ["ContextEngineering"]),
         .library(name: "AgentRuntime", targets: ["AgentRuntime"]),
         .library(name: "ReaderAgent", targets: ["ReaderAgent"]),
         .library(name: "ModelProviders", targets: ["ModelProviders"]),
@@ -30,7 +31,8 @@ let package = Package(
         .target(name: "AgentRuntime"),
         .target(name: "ContextRouting", dependencies: ["AgentRuntime", "LibraryCore"]),
         .target(name: "RetrievalCore", dependencies: ["LibraryCore", "ReaderCore"]),
-        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ContextRouting", "ReaderCore", "ReflectionCore", "RetrievalCore"]),
+        .target(name: "ContextEngineering", dependencies: ["ContextRouting", "RetrievalCore", "ReflectionCore", "ReaderCore", "LibraryCore"]),
+        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ContextRouting", "ContextEngineering", "ReaderCore", "ReflectionCore", "RetrievalCore"]),
         .target(name: "ModelProviders", dependencies: ["AgentRuntime", "RetrievalCore"]),
         .target(
             name: "Persistence",
@@ -44,14 +46,14 @@ let package = Package(
             name: "ReadLoopCoreTests",
             dependencies: [
                 "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "SpeechCore", "RetrievalCore", "ContextRouting",
-                "AgentRuntime", "ReaderAgent", "ModelProviders", "Persistence", "AppInfrastructure",
+                "ContextEngineering", "AgentRuntime", "ReaderAgent", "ModelProviders", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [.copy("Fixtures")]
         ),
         .testTarget(
             name: "AgentProviderTests",
-            dependencies: ["AgentRuntime", "ReaderAgent", "ModelProviders", "ReflectionCore", "LibraryCore", "ContextRouting", "RetrievalCore"]
+            dependencies: ["AgentRuntime", "ReaderAgent", "ModelProviders", "ReflectionCore", "LibraryCore", "ContextRouting", "ContextEngineering", "RetrievalCore"]
         ),
         .testTarget(
             name: "AgentRuntimeTests",
