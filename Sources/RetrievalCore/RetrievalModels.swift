@@ -195,6 +195,11 @@ public protocol BookIndexRepository: Sendable {
     /// one version, so a later `index` run rebuilds from scratch. Embeddings and
     /// FTS rows cascade with their chunks.
     func deleteIndex(for bookID: BookID, version: Int) async throws
+    /// Clears a book's stale index rows for ALL versions below `version`. A
+    /// version bump leaves older rows in the same tables; block ids are format-
+    /// tagged rather than versioned, so stale rows would collide with the new
+    /// version's PRIMARY KEY. The pipeline runs this before building a new index.
+    func deleteIndex(below version: Int, for bookID: BookID) async throws
 }
 
 public protocol BookContentExtractor: Sendable {

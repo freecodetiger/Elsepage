@@ -170,6 +170,17 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
         }
     }
 
+    public func deleteIndex(below version: Int, for bookID: BookID) async throws {
+        try await database.writer.write { db in
+            try db.execute(sql: "DELETE FROM bookTextBlocks WHERE bookID=? AND indexVersion < ?", arguments: [bookID.description, version])
+            // Deleting chunks cascades to embeddings and fires the FTS cleanup trigger.
+            try db.execute(sql: "DELETE FROM bookChunks WHERE bookID=? AND indexVersion < ?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookChapters WHERE bookID=? AND indexVersion < ?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookSections WHERE bookID=? AND indexVersion < ?", arguments: [bookID.description, version])
+            try db.execute(sql: "DELETE FROM bookIndexJobs WHERE bookID=? AND indexVersion < ?", arguments: [bookID.description, version])
+        }
+    }
+
     public func saveEmbeddings(_ embeddings: [BookChunkID: [Float]], model: String, dimensions: Int) async throws {
         try await database.writer.write { db in
             for (id, vector) in embeddings {

@@ -67,6 +67,33 @@ import Testing
     #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 2)
 }
 
+@Test func versionBumpClearsStaleIndexBeforeRebuildingWithoutConstraintError() async throws {
+    // Regression: a v2 index leaves bookTextBlocks rows whose ids ("v1|book|N|M")
+    // are format-tagged, not versioned. Indexing at currentVersion (3) must clear
+    // the stale v2 rows first, or re-inserting the same ids hits the PRIMARY KEY
+    // → SQLITE_CONSTRAINT (error 19) on every upgraded book.
+    let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "stale"), title: "Stale", fileName: "stale.epub", fileSize: 1)
+    try await books.insert(book)
+    let locator = try locator(href: "0.xhtml", progression: 0.1)
+    let staleBlock = BookTextBlock(id: .init(rawValue: "v1|\(book.id)|0|0"), bookID: book.id, resourceHref: "0.xhtml",
+        resourceOrdinal: 0, ordinal: 0, text: "旧版本的块", startLocator: locator, endLocator: locator)
+    try await index.replace(blocks: [staleBlock], inResource: "0.xhtml", for: book.id, version: 2)
+    try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: 2, state: .lexicalReady))
+    #expect(try await index.chunks(for: book.id, version: 2).isEmpty) // stale version present
+
+    let block = BookTextBlock(id: .init(rawValue: "v1|\(book.id)|0|0"), bookID: book.id, resourceHref: "0.xhtml",
+        resourceOrdinal: 0, ordinal: 0, text: "可恢复的本地索引文本", startLocator: locator, endLocator: locator)
+    let extractor = InterruptibleExtractor(blocks: [block], shouldFail: false)
+    let pipeline = BookIndexPipeline(extractor: extractor, repository: index, chunker: .init(targetCharacters: 20, maximumCharacters: 40))
+    try await pipeline.index(bookID: book.id) // must NOT throw SQLITE_CONSTRAINT
+
+    #expect(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion)?.state == .lexicalReady)
+    #expect(try await index.job(for: book.id, version: 2) == nil)          // stale job cleared
+    #expect(try await index.chunks(for: book.id, version: 2).isEmpty)      // stale chunks cleared
+    #expect(try await index.chunks(for: book.id, version: BookIndexPipeline.currentVersion).count == 2) // parent + child
+}
+
 @Test func contextBuilderNeverSearchesBeyondCurrentLocatorAndHonorsBudget() async throws {
     let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
     let book = Book(fingerprint: .init(rawValue: "context"), title: "Context", fileName: "context.epub", fileSize: 1)

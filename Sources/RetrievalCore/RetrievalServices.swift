@@ -145,6 +145,11 @@ public struct BookIndexPipeline: Sendable {
 
     public func index(bookID: BookID) async throws {
         guard let extractor else { throw RetrievalError.missingExtractor }
+        // A version bump leaves stale rows (older indexVersions) in the same
+        // tables. Block ids are format-tagged ("v1|…"), not versioned, so stale
+        // bookTextBlocks rows would collide with this version's PRIMARY KEY and
+        // every book fails with SQLITE_CONSTRAINT. Clear all older versions first.
+        try await repository.deleteIndex(below: Self.currentVersion, for: bookID)
         var job = try await repository.job(for: bookID, version: Self.currentVersion)
             ?? BookIndexJob(bookID: bookID, indexVersion: Self.currentVersion)
         job.state = .extracting; job.lastError = nil; job.updatedAt = .init(); try await repository.save(job: job)
