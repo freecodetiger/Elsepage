@@ -123,19 +123,22 @@ public struct ReaderPreferences: Hashable, Codable, Sendable {
     public var lineHeight: Double
     public var pageMargins: Double
     public var readingMode: ReadingMode
+    public var lastUsedHighlightColor: HighlightColor
 
     public init(
         theme: ReaderTheme = .system,
         fontSize: Double = 1.05,
         lineHeight: Double = 1.2,
         pageMargins: Double = 1.1,
-        readingMode: ReadingMode = .paginated
+        readingMode: ReadingMode = .paginated,
+        lastUsedHighlightColor: HighlightColor = .yellow
     ) {
         self.theme = theme
         self.fontSize = fontSize
         self.lineHeight = lineHeight
         self.pageMargins = pageMargins
         self.readingMode = readingMode
+        self.lastUsedHighlightColor = lastUsedHighlightColor
     }
 
     public static let `default` = ReaderPreferences()

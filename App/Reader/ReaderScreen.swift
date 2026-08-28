@@ -42,8 +42,19 @@ struct ReaderScreen: View {
                 readerChrome.transition(.opacity)
             }
 
+            if let pendingSelection = model.pendingSelection {
+                HighlightColorPalette(
+                    selectedColor: model.preferences.lastUsedHighlightColor,
+                    intent: pendingSelection.intent,
+                    onSelect: model.completePendingSelection,
+                    onCancel: model.cancelPendingSelection
+                )
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
+        .animation(ElsepageTheme.Motion.quick, value: model.pendingSelection)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
@@ -197,6 +208,58 @@ struct ReaderScreen: View {
         case .dark: Color(uiColor: .black)
         case .sepia: .elsepageReaderSepia
         }
+    }
+}
+
+private struct HighlightColorPalette: View {
+    let selectedColor: HighlightColor
+    let intent: ReaderSelectionIntent
+    let onSelect: (HighlightColor) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: ElsepageTheme.Spacing.small) {
+                ForEach(HighlightColor.allCases, id: \.self) { color in
+                    Button {
+                        onSelect(color)
+                    } label: {
+                        Circle()
+                            .fill(color.readerColor)
+                            .frame(width: 30, height: 30)
+                            .overlay {
+                                Circle()
+                                    .stroke(.primary.opacity(color == selectedColor ? 0.6 : 0.18), lineWidth: color == selectedColor ? 2 : 1)
+                                if color == selectedColor {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(color.accessibilityLabel)
+                    .accessibilityAddTraits(color == selectedColor ? .isSelected : [])
+                }
+
+                Divider().frame(height: 28)
+
+                Button("取消", action: onCancel)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .padding(.horizontal, ElsepageTheme.Spacing.medium)
+            .padding(.vertical, ElsepageTheme.Spacing.small)
+            .background(.ultraThinMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(intent == .note ? "选择笔记高亮颜色" : "选择高亮颜色")
+            .padding(.bottom, 24)
+        }
+        .padding(.horizontal, ElsepageTheme.Spacing.medium)
     }
 }
 
@@ -603,6 +666,15 @@ private struct ReaderAnnotationDetailSheet: View {
 }
 
 private extension HighlightColor {
+    var accessibilityLabel: String {
+        switch self {
+        case .yellow: "黄色高亮"
+        case .green: "绿色高亮"
+        case .blue: "蓝色高亮"
+        case .pink: "粉色高亮"
+        }
+    }
+
     var readerColor: Color {
         switch self {
         case .yellow: Color(red: 0.96, green: 0.78, blue: 0.24)

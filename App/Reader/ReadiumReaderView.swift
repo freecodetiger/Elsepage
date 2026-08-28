@@ -89,6 +89,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     navigator.didMove(toParent: host)
                     host.navigator = navigator
                     self.navigator = navigator
+                    model.onSelectionFinished = { [weak navigator] in navigator?.clearSelection() }
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
                         self?.model.selectHighlight(id)
@@ -293,19 +294,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
     @objc func highlightSelection() {
         guard let navigator, let selection = navigator.currentSelection,
               let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        if let highlight = model.saveHighlight(locator: anchor) {
-            model.selectHighlight(highlight.id)
-        }
-        navigator.clearSelection()
+        model.beginSelection(at: anchor, intent: .highlight)
     }
 
     @objc func noteSelection() {
         guard let navigator, let selection = navigator.currentSelection,
               let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        if let highlight = model.saveHighlight(locator: anchor) {
-            model.selectHighlight(highlight.id, startNoteEditing: true)
-        }
-        navigator.clearSelection()
+        model.beginSelection(at: anchor, intent: .note)
     }
 
     @objc func reflectOnSelection() {

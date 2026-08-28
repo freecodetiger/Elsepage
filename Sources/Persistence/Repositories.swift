@@ -96,11 +96,13 @@ private struct PreferencesRecord: Codable, FetchableRecord, PersistableRecord {
     var bookID, theme: String
     var fontSize, lineHeight, pageMargins: Double
     var readingMode: String
+    var lastUsedHighlightColor: String
     var updatedAt: Date
     init(bookID: BookID, preferences: ReaderPreferences) {
         self.bookID = bookID.description; theme = preferences.theme.rawValue
         fontSize = preferences.fontSize; lineHeight = preferences.lineHeight; pageMargins = preferences.pageMargins
         readingMode = preferences.readingMode.rawValue; updatedAt = Date()
+        lastUsedHighlightColor = preferences.lastUsedHighlightColor.rawValue
     }
     var domain: ReaderPreferences {
         ReaderPreferences(
@@ -108,7 +110,8 @@ private struct PreferencesRecord: Codable, FetchableRecord, PersistableRecord {
             fontSize: fontSize,
             lineHeight: lineHeight,
             pageMargins: pageMargins,
-            readingMode: ReadingMode(rawValue: readingMode) ?? .paginated
+            readingMode: ReadingMode(rawValue: readingMode) ?? .paginated,
+            lastUsedHighlightColor: HighlightColor(rawValue: lastUsedHighlightColor) ?? .yellow
         )
     }
 }

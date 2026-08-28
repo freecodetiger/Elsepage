@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import ReaderCore
 
 public final class AppDatabase: @unchecked Sendable {
     public let writer: any DatabaseWriter
@@ -407,6 +408,11 @@ public final class AppDatabase: @unchecked Sendable {
                 t.column("unlockedAt", .datetime).notNull()
                 t.column("sourceReflectionID", .text)
                 t.column("bookID", .text)
+            }
+        }
+        migrator.registerMigration("v18_reader_highlight_color_preference") { db in
+            try db.alter(table: "readerPreferences") { t in
+                t.add(column: "lastUsedHighlightColor", .text).notNull().defaults(to: HighlightColor.yellow.rawValue)
             }
         }
         return migrator

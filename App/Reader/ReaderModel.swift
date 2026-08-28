@@ -7,6 +7,16 @@ import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
 
+enum ReaderSelectionIntent: Equatable {
+    case highlight
+    case note
+}
+
+struct PendingReaderSelection: Equatable {
+    let locator: BookLocator
+    let intent: ReaderSelectionIntent
+}
+
 @MainActor @Observable
 final class ReaderModel {
     let book: Book
@@ -36,6 +46,7 @@ final class ReaderModel {
     var jumpTargetJSON: Data?
     var selectedHighlightID: UUID?
     var shouldStartNoteEditing = false
+    var pendingSelection: PendingReaderSelection?
     var contextReflection: SessionReflectionModel?
     private(set) var currentLocator: BookLocator?
     private(set) var canNavigateBack = false
@@ -50,6 +61,7 @@ final class ReaderModel {
     @ObservationIgnored private var locatorHistory = LocatorHistory()
     @ObservationIgnored private var noteSaveTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
+    @ObservationIgnored var onSelectionFinished: (() -> Void)?
 
     init(
         book: Book,
@@ -122,11 +134,11 @@ final class ReaderModel {
         }
     }
     @discardableResult
-    func saveHighlight(locator: BookLocator) -> Highlight? {
+    func saveHighlight(locator: BookLocator, color: HighlightColor) -> Highlight? {
         if let existing = highlights.first(where: { $0.locator.identifiesSameAnchor(as: locator) }) {
             return existing
         }
-        let highlight = Highlight(bookID: book.id, locator: locator)
+        let highlight = Highlight(bookID: book.id, locator: locator, color: color)
         highlights.append(highlight)
         Task {
             do { try await repository.save(highlight: highlight) }
@@ -136,6 +148,28 @@ final class ReaderModel {
             }
         }
         return highlight
+    }
+
+    func beginSelection(at locator: BookLocator, intent: ReaderSelectionIntent) {
+        pendingSelection = .init(locator: locator, intent: intent)
+        showsControls = false
+    }
+
+    func completePendingSelection(with color: HighlightColor) {
+        guard let pendingSelection else { return }
+        self.pendingSelection = nil
+        preferences.lastUsedHighlightColor = color
+        savePreferences()
+        let highlight = saveHighlight(locator: pendingSelection.locator, color: color)
+        onSelectionFinished?()
+        guard let highlight else { return }
+        selectHighlight(highlight.id, startNoteEditing: pendingSelection.intent == .note)
+    }
+
+    func cancelPendingSelection() {
+        guard pendingSelection != nil else { return }
+        pendingSelection = nil
+        onSelectionFinished?()
     }
 
     func selectHighlight(_ id: UUID, startNoteEditing: Bool = false) {

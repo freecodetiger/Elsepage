@@ -59,7 +59,7 @@ import Testing
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
-        "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements"
+        "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference"
     ])
 }
 
@@ -208,7 +208,7 @@ import Testing
     let reading = GRDBReadingRepository(database: database)
     let book = TestFixtures.book(); try await books.insert(book)
     #expect(try await reading.preferences(for: book.id) == .default)
-    let preferences = ReaderPreferences(theme: .dark, fontSize: 1.25, lineHeight: 1.15, pageMargins: 0.75, readingMode: .scroll)
+    let preferences = ReaderPreferences(theme: .dark, fontSize: 1.25, lineHeight: 1.15, pageMargins: 0.75, readingMode: .scroll, lastUsedHighlightColor: .pink)
     try await reading.save(preferences: preferences, for: book.id)
     #expect(try await reading.preferences(for: book.id) == preferences)
 }
