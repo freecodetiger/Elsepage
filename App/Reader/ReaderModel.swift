@@ -35,7 +35,7 @@ final class ReaderModel {
     var showsControls = true
     var jumpTargetJSON: Data?
     var selectedHighlightID: UUID?
-    var noteEditor: ReaderNoteEditorRequest?
+    var shouldStartNoteEditing = false
     var contextReflection: SessionReflectionModel?
     private(set) var currentLocator: BookLocator?
     private(set) var canNavigateBack = false
@@ -121,8 +121,11 @@ final class ReaderModel {
             Task { [weak self] in await self?.startSessionIfNeeded(at: locator) }
         }
     }
-    func saveHighlight(locator: BookLocator) {
-        guard !highlights.containsHighlight(at: locator) else { return }
+    @discardableResult
+    func saveHighlight(locator: BookLocator) -> Highlight? {
+        if let existing = highlights.first(where: { $0.locator.identifiesSameAnchor(as: locator) }) {
+            return existing
+        }
         let highlight = Highlight(bookID: book.id, locator: locator)
         highlights.append(highlight)
         Task {
@@ -130,6 +133,30 @@ final class ReaderModel {
             catch {
                 highlights.removeAll { $0.id == highlight.id }
                 errorMessage = error.localizedDescription
+            }
+        }
+        return highlight
+    }
+
+    func selectHighlight(_ id: UUID, startNoteEditing: Bool = false) {
+        guard highlights.contains(where: { $0.id == id }) else { return }
+        selectedHighlightID = id
+        shouldStartNoteEditing = startNoteEditing
+        showsControls = false
+    }
+
+    func update(highlight: Highlight, color: HighlightColor) {
+        guard let index = highlights.firstIndex(where: { $0.id == highlight.id }) else { return }
+        var updated = highlight
+        updated.color = color
+        highlights[index] = updated
+        Task {
+            do { try await repository.save(highlight: updated) }
+            catch {
+                if let currentIndex = self.highlights.firstIndex(where: { $0.id == highlight.id }) {
+                    self.highlights[currentIndex] = highlight
+                }
+                self.errorMessage = error.localizedDescription
             }
         }
     }
@@ -207,6 +234,11 @@ final class ReaderModel {
             do { try await repository.deleteHighlight(id: highlight.id) }
             catch { await reloadAnnotations(after: error) }
         }
+    }
+
+    func clearSelectedHighlight() {
+        selectedHighlightID = nil
+        shouldStartNoteEditing = false
     }
     func jump(to locator: BookLocator) {
         if let currentLocator, !currentLocator.identifiesSameAnchor(as: locator) {
@@ -403,13 +435,6 @@ final class ReaderModel {
         }
         return candidates.first
     }
-}
-
-struct ReaderNoteEditorRequest: Identifiable {
-    let id = UUID()
-    let locator: BookLocator
-    let note: Note?
-    let highlight: Highlight?
 }
 
 struct ReaderChapter: Identifiable, Hashable {

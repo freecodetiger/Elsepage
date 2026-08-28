@@ -42,6 +42,21 @@ import Testing
     #expect(decorations.map(\.color) == [.yellow, .blue])
 }
 
+@Test func persistedHighlightColorCanBeUpdated() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reading = GRDBReadingRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let original = Highlight(bookID: book.id, locator: try TestFixtures.realisticLocator(), color: .yellow)
+    try await reading.save(highlight: original)
+
+    var updated = original
+    updated.color = .pink
+    try await reading.save(highlight: updated)
+
+    #expect(try await reading.highlights(for: book.id).first?.color == .pink)
+}
+
 @Test func searchResultKeepsStableLocatorAndIdentity() throws {
     let locator = try TestFixtures.realisticLocator()
     let first = ReaderSearchResult(locator: locator, excerpt: "a page")

@@ -42,27 +42,35 @@ struct ReaderScreen: View {
                 readerChrome.transition(.opacity)
             }
 
-            if let highlight = selectedHighlight {
-                highlightContextBar(highlight)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
-        .animation(ElsepageTheme.Motion.quick, value: model.selectedHighlightID)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
         .task { await model.prepare() }
-        .sheet(item: $presentedSheet) { sheet in
+        .onChange(of: model.selectedHighlightID) { _, id in
+            guard let id else { return }
+            presentedSheet = .annotationDetail(.highlight(id, startNoteEditing: model.shouldStartNoteEditing))
+        }
+        .sheet(item: $presentedSheet, onDismiss: {
+            model.clearSelectedHighlight()
+        }) { sheet in
             switch sheet {
             case .contents: ContentsSheet(model: model)
             case .search: ReaderSearchSheet(model: model)
-            case .annotations: ReaderAnnotationsSheet(model: model)
+            case .annotations:
+                ReaderAnnotationsSheet(model: model) { highlight in
+                    model.jump(to: highlight.locator)
+                    if let highlight = highlight.highlight {
+                        model.selectHighlight(highlight.id)
+                    } else if let note = highlight.note {
+                        presentedSheet = .annotationDetail(.note(note.id))
+                    }
+                }
             case .appearance: ReaderAppearanceSheet(model: model)
+            case .annotationDetail(let target):
+                ReaderAnnotationDetailSheet(model: model, target: target)
             }
-        }
-        .sheet(item: $model.noteEditor) { request in
-            ReaderNoteEditorSheet(model: model, request: request)
         }
         .sheet(item: $model.contextReflection) { reflection in
             SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
@@ -98,57 +106,6 @@ struct ReaderScreen: View {
                 await model.flushPosition()
                 await model.flushPreferences()
             }
-        }
-    }
-
-    private var selectedHighlight: Highlight? {
-        guard let id = model.selectedHighlightID else { return nil }
-        return model.highlights.first { $0.id == id }
-    }
-
-    private func highlightContextBar(_ highlight: Highlight) -> some View {
-        VStack {
-            Spacer()
-            HStack(spacing: ElsepageTheme.Spacing.large) {
-                Button {
-                    let note = model.notes.first { $0.highlightID == highlight.id }
-                    model.noteEditor = .init(
-                        locator: note?.locator ?? highlight.locator,
-                        note: note,
-                        highlight: highlight
-                    )
-                    model.selectedHighlightID = nil
-                } label: {
-                    Label(
-                        model.notes.contains { $0.highlightID == highlight.id } ? "编辑笔记" : "添加笔记",
-                        systemImage: "square.and.pencil"
-                    )
-                }
-
-                Divider().frame(height: 20)
-
-                Button(role: .destructive) {
-                    model.delete(highlight: highlight)
-                } label: {
-                    Label("删除", systemImage: "trash")
-                }
-
-                Button {
-                    model.selectedHighlightID = nil
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .accessibilityLabel("关闭高亮操作")
-            }
-            .font(.subheadline.weight(.medium))
-            .buttonStyle(.plain)
-            .padding(.horizontal, ElsepageTheme.Spacing.large)
-            .frame(height: 48)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().stroke(.primary.opacity(0.08)))
-            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
-            .padding(.horizontal, ElsepageTheme.Spacing.medium)
-            .padding(.bottom, ElsepageTheme.Spacing.medium)
         }
     }
 
@@ -243,9 +200,19 @@ struct ReaderScreen: View {
     }
 }
 
-private enum ReaderSheet: String, Identifiable {
+private enum ReaderSheet: Identifiable {
     case contents, search, annotations, appearance
-    var id: String { rawValue }
+    case annotationDetail(ReaderAnnotationTarget)
+
+    var id: String {
+        switch self {
+        case .contents: "contents"
+        case .search: "search"
+        case .annotations: "annotations"
+        case .appearance: "appearance"
+        case .annotationDetail(let target): "annotation-detail-\(target.id.uuidString)"
+        }
+    }
 }
 
 private struct ContentsSheet: View {
@@ -333,6 +300,27 @@ private struct ReaderSearchSheet: View {
 private struct ReaderAnnotationsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: ReaderModel
+    let onSelect: (ReaderAnnotation) -> Void
+
+    private var annotations: [ReaderAnnotation] {
+        let highlighted = model.highlights.map { highlight in
+            ReaderAnnotation(highlight: highlight, note: model.notes.first { $0.highlightID == highlight.id })
+        }
+        let independentNotes = model.notes
+            .filter { $0.highlightID == nil }
+            .map { ReaderAnnotation(highlight: nil, note: $0) }
+        return (highlighted + independentNotes)
+            .sorted { lhs, rhs in
+                if let left = model.annotationSortKey(for: lhs.locator),
+                   let right = model.annotationSortKey(for: rhs.locator),
+                   left != right {
+                    return left < right
+                }
+                let leftDate = lhs.highlight?.createdAt ?? lhs.note!.createdAt
+                let rightDate = rhs.highlight?.createdAt ?? rhs.note!.createdAt
+                return leftDate < rightDate
+            }
+    }
 
     var body: some View {
         NavigationStack {
@@ -340,25 +328,40 @@ private struct ReaderAnnotationsSheet: View {
                 if model.highlights.isEmpty && model.notes.isEmpty {
                     ContentUnavailableView("还没有标注", systemImage: "highlighter", description: Text("选中文字即可添加高亮或批注。"))
                 } else {
-                    List {
-                        if !model.notes.isEmpty {
-                            Section("批注") {
-                                ForEach(model.notes) { note in
-                                    annotationButton(note.body, context: note.locator.textHighlight, locator: note.locator)
+                    List(annotations) { annotation in
+                        Button { onSelect(annotation) } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                if let highlight = annotation.highlight {
+                                    Circle()
+                                        .fill(highlight.color.readerColor)
+                                        .frame(width: 10, height: 10)
+                                        .padding(.top, 5)
+                                } else {
+                                    Image(systemName: "note.text")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.elsepageAccent)
+                                        .frame(width: 10)
+                                        .padding(.top, 5)
                                 }
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(annotation.locator.textHighlight ?? "原文位置")
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(3)
+                                    if let note = annotation.note {
+                                        Text(note.body)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                    Text(model.annotationLocationLabel(for: annotation.locator))
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Spacer(minLength: 0)
                             }
                         }
-                        let standaloneHighlights = model.highlights.filter { highlight in
-                            !model.notes.contains { $0.highlightID == highlight.id }
-                        }
-                        if !standaloneHighlights.isEmpty {
-                            Section("高亮") {
-                                ForEach(standaloneHighlights) { highlight in
-                                    annotationButton(highlight.locator.textHighlight ?? "高亮位置", context: highlight.locator.textBefore, locator: highlight.locator)
-                                }
-                            }
-                        }
-                    }.listStyle(.insetGrouped)
+                    }
+                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("标注")
@@ -367,72 +370,256 @@ private struct ReaderAnnotationsSheet: View {
         }
         .presentationDetents([.medium, .large])
     }
+}
 
-    private func annotationButton(_ title: String, context: String?, locator: BookLocator) -> some View {
-        Button {
-            model.jump(to: locator); dismiss()
-        } label: {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).foregroundStyle(.primary).lineLimit(3)
-                if let context { Text(context).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-            }
-        }
+private struct ReaderAnnotation: Identifiable {
+    let highlight: Highlight?
+    let note: Note?
+    var id: UUID { highlight?.id ?? note!.id }
+    var locator: BookLocator { highlight?.locator ?? note!.locator }
+}
+
+private struct ReaderAnnotationTarget: Hashable {
+    let id: UUID
+    let highlightID: UUID?
+    let noteID: UUID?
+    let startNoteEditing: Bool
+
+    static func highlight(_ id: UUID, startNoteEditing: Bool = false) -> Self {
+        Self(id: id, highlightID: id, noteID: nil, startNoteEditing: startNoteEditing)
+    }
+
+    static func note(_ id: UUID) -> Self {
+        Self(id: id, highlightID: nil, noteID: id, startNoteEditing: false)
     }
 }
 
-private struct ReaderNoteEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let model: ReaderModel
-    let request: ReaderNoteEditorRequest
-    @State private var noteText: String
+private struct AnnotationSortKey: Comparable {
+    let chapterIndex: Int
+    let progression: Double
 
-    init(model: ReaderModel, request: ReaderNoteEditorRequest) {
-        self.model = model
-        self.request = request
-        _noteText = State(initialValue: request.note?.body ?? "")
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        if lhs.chapterIndex != rhs.chapterIndex { return lhs.chapterIndex < rhs.chapterIndex }
+        return lhs.progression < rhs.progression
+    }
+}
+
+private extension ReaderModel {
+    func annotationSortKey(for locator: BookLocator) -> AnnotationSortKey? {
+        let resource = locator.href.split(separator: "#", maxSplits: 1).first.map(String.init) ?? locator.href
+        guard let chapterIndex = chapters.firstIndex(where: { chapter in
+            let chapterResource = chapter.href.split(separator: "#", maxSplits: 1).first.map(String.init) ?? chapter.href
+            return chapterResource == resource
+        }) else { return nil }
+        return AnnotationSortKey(chapterIndex: chapterIndex, progression: locator.progression ?? 0)
     }
 
-    var bodyView: some View {
+    func annotationLocationLabel(for locator: BookLocator) -> String {
+        let chapter = chapters.first { chapter in
+            let chapterResource = chapter.href.split(separator: "#", maxSplits: 1).first.map(String.init) ?? chapter.href
+            let resource = locator.href.split(separator: "#", maxSplits: 1).first.map(String.init) ?? locator.href
+            return chapterResource == resource
+        }?.title
+        let progress = locator.totalProgression ?? locator.progression
+        if let chapter, let progress {
+            return "\(chapter) · \(Int((progress * 100).rounded()))%"
+        }
+        return chapter ?? "原文位置"
+    }
+}
+
+private struct ReaderAnnotationDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var model: ReaderModel
+    let target: ReaderAnnotationTarget
+    @State private var isEditingNote = false
+    @State private var noteText = ""
+
+    private var highlight: Highlight? {
+        guard let highlightID = target.highlightID else { return nil }
+        return model.highlights.first { $0.id == highlightID }
+    }
+
+    private var note: Note? {
+        if let highlightID = target.highlightID {
+            return model.notes.first { $0.highlightID == highlightID }
+        }
+        guard let noteID = target.noteID else { return nil }
+        return model.notes.first { $0.id == noteID }
+    }
+
+    private var locator: BookLocator? {
+        highlight?.locator ?? note?.locator
+    }
+
+    var body: some View {
         NavigationStack {
-            Form {
-                if let quote = request.locator.textHighlight, !quote.isEmpty {
-                    Section("原文") {
-                        Text(quote)
-                            .font(.system(.body, design: .serif))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+            Group {
+                if let highlight {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+                            Text(highlight.locator.textHighlight ?? "高亮位置")
+                                .font(.system(.body, design: .serif))
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Text(model.annotationLocationLabel(for: highlight.locator))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("高亮颜色")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 14) {
+                                    ForEach(HighlightColor.allCases, id: \.self) { color in
+                                        Button {
+                                            model.update(highlight: highlight, color: color)
+                                        } label: {
+                                            Circle()
+                                                .fill(color.readerColor)
+                                                .frame(width: 30, height: 30)
+                                                .overlay(Circle().stroke(.primary.opacity(0.18)))
+                                                .overlay {
+                                                    if highlight.color == color {
+                                                        Image(systemName: "checkmark")
+                                                            .font(.caption.bold())
+                                                            .foregroundStyle(.black.opacity(0.7))
+                                                    }
+                                                }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("\(color.readerName)高亮")
+                                        .accessibilityAddTraits(highlight.color == color ? .isSelected : [])
+                                    }
+                                }
+                            }
+
+                            Divider()
+
+                            noteEditor(note: note, highlight: highlight)
+
+                            Divider()
+
+                            Button(role: .destructive) {
+                                model.delete(highlight: highlight)
+                                dismiss()
+                            } label: {
+                                Label("删除高亮", systemImage: "trash")
+                            }
+                        }
+                        .padding(.horizontal, ElsepageTheme.Spacing.large)
+                        .padding(.vertical, ElsepageTheme.Spacing.medium)
                     }
-                }
-                Section("笔记") {
-                    TextEditor(text: $noteText)
-                        .frame(minHeight: 160)
-                        .accessibilityLabel("笔记内容")
+                } else if let locator, let note {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+                            Text(locator.textHighlight ?? "原文位置")
+                                .font(.system(.body, design: .serif))
+                            Text(model.annotationLocationLabel(for: locator))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Divider()
+                            noteEditor(note: note, highlight: nil)
+                        }
+                        .padding(.horizontal, ElsepageTheme.Spacing.large)
+                        .padding(.vertical, ElsepageTheme.Spacing.medium)
+                    }
+                } else {
+                    ContentUnavailableView("标注已不存在", systemImage: "highlighter")
                 }
             }
-            .navigationTitle(request.note == nil ? "添加笔记" : "编辑笔记")
+            .navigationTitle("这段标注")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        let text = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if let note = request.note {
-                            model.update(note: note, body: text)
-                        } else if let highlight = request.highlight {
-                            model.saveNote(for: highlight, body: text)
-                        } else {
-                            model.saveNote(locator: request.locator, body: text)
-                        }
-                        dismiss()
-                    }
-                    .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("完成") { dismiss() }
                 }
             }
         }
-        .interactiveDismissDisabled(!noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .presentationDetents(isEditingNote ? [.medium, .large] : [.height(250), .medium])
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            noteText = note?.body ?? ""
+            isEditingNote = target.startNoteEditing
+        }
     }
 
-    var body: some View { bodyView }
+    @ViewBuilder
+    private func noteEditor(note: Note?, highlight: Highlight?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("我的笔记")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !isEditingNote {
+                    Button(note == nil ? "添加" : "编辑") {
+                        noteText = note?.body ?? ""
+                        isEditingNote = true
+                    }
+                    .font(.subheadline.weight(.medium))
+                }
+            }
+
+            if isEditingNote {
+                TextEditor(text: $noteText)
+                    .frame(minHeight: 110)
+                    .padding(8)
+                    .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityLabel("笔记内容")
+                HStack {
+                    Button("取消") { isEditingNote = false }
+                        .buttonStyle(.bordered)
+                    Spacer()
+                    Button("保存") { saveNote(note: note, highlight: highlight) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } else if let note {
+                Text(note.body)
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("这段文字还没有笔记。")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func saveNote(note: Note?, highlight: Highlight?) {
+        let text = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let note {
+            model.update(note: note, body: text)
+        } else if let highlight {
+            model.saveNote(for: highlight, body: text)
+        } else {
+            return
+        }
+        isEditingNote = false
+    }
+}
+
+private extension HighlightColor {
+    var readerColor: Color {
+        switch self {
+        case .yellow: Color(red: 0.96, green: 0.78, blue: 0.24)
+        case .green: Color(red: 0.36, green: 0.72, blue: 0.43)
+        case .blue: Color(red: 0.32, green: 0.56, blue: 0.90)
+        case .pink: Color(red: 0.90, green: 0.42, blue: 0.61)
+        }
+    }
+
+    var readerName: String {
+        switch self {
+        case .yellow: "黄色"
+        case .green: "绿色"
+        case .blue: "蓝色"
+        case .pink: "粉色"
+        }
+    }
 }
 
 private struct ReaderAppearanceSheet: View {

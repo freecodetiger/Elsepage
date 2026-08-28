@@ -91,8 +91,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     self.navigator = navigator
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.model.selectedHighlightID = id
-                        self?.model.showsControls = false
+                        self?.model.selectHighlight(id)
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights(model.highlights)
@@ -294,14 +293,18 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
     @objc func highlightSelection() {
         guard let navigator, let selection = navigator.currentSelection,
               let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        model.saveHighlight(locator: anchor)
+        if let highlight = model.saveHighlight(locator: anchor) {
+            model.selectHighlight(highlight.id)
+        }
         navigator.clearSelection()
     }
 
     @objc func noteSelection() {
         guard let navigator, let selection = navigator.currentSelection,
               let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        model.noteEditor = .init(locator: anchor, note: nil, highlight: nil)
+        if let highlight = model.saveHighlight(locator: anchor) {
+            model.selectHighlight(highlight.id, startNoteEditing: true)
+        }
         navigator.clearSelection()
     }
 
