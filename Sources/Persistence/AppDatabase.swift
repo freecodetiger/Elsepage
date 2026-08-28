@@ -418,6 +418,63 @@ public final class AppDatabase: @unchecked Sendable {
         return migrator
     }
 
+    /// Every user-data table in child-before-parent order, so the wipe succeeds
+    /// with or without foreign-key enforcement on the writer. `books` sits last:
+    /// its cascade would reach most tables, but memories (nullable source),
+    /// providerConfigurations and achievements carry no foreign key and are
+    /// therefore listed explicitly. Public so tests can assert the wipe leaves
+    /// zero rows in every table — new user-data tables must be added here.
+    public static let userDataTableOrder: [String] = [
+        "routingTraces",
+        "journalMemoryChanges",
+        "journalThoughts",
+        "agentQuestions",
+        "reflectionCitations",
+        "agentCitations",
+        "agentResponseEvidence",
+        "reflectionMessages",
+        "reflectionHighlights",
+        "reflectionConnections",
+        "reflectionEvidence",
+        "memories",
+        "reflections",
+        "readingSessions",
+        "readingPositions",
+        "readerPreferences",
+        "notes",
+        "highlights",
+        "bookChunkEmbeddings",
+        "bookChunksFTS",
+        "bookChunks",
+        "bookTextBlocks",
+        "bookChapters",
+        "bookSections",
+        "bookIndexJobs",
+        "achievements",
+        "providerConfigurations",
+        "books",
+    ]
+
+    /// "清除所有本地数据" (PRD §13.3): deletes every row of user data — books and
+    /// their EPUB-derived index, reading positions, highlights, notes, sessions,
+    /// reflections (with journal tables, evidence, citations, connections),
+    /// memories, achievements, provider configurations and preferences — in one
+    /// transaction, leaving the schema (and every migration) intact. App
+    /// Keychain secrets and UserDefaults are cleared by the caller, and the
+    /// sandbox container structure itself is untouched.
+    public func wipeAllUserData() async throws {
+        try await writer.write { db in
+            // Children before parents inside bookChunks (self-referencing
+            // parentID): deleting a parent row while its child row still exists
+            // would violate the immediate foreign key.
+            try db.execute(sql: "DELETE FROM bookChunks WHERE parentID IS NOT NULL")
+            for table in Self.userDataTableOrder {
+                // Table names are compile-time literals above, never user input.
+                try db.execute(sql: "DELETE FROM \(table)")
+            }
+        }
+    }
+
     private static func addLocatorColumns(to t: TableDefinition) {
         t.column("locatorJSON", .blob).notNull()
         t.column("href", .text).notNull()
