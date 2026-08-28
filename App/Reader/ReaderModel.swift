@@ -148,7 +148,13 @@ final class ReaderModel {
         }
     }
     func save(locator: BookLocator) {
-        clearTransientAnnotationUI(reason: "locationChange")
+        // Location changes no longer close annotation menus. Readium emits
+        // locationDidChange while the webview's layout settles (compensating
+        // column reflows, image loading) even though the visible page did not
+        // move — on device these landed tens of milliseconds after a menu
+        // opened and flashed it away. Menus close on real navigation instead
+        // (jumps, taps, menu actions, rotation, backgrounding); a menu left
+        // over after a gesture page turn is dismissed by the next content tap.
         currentLocator = locator
         progress = locator.totalProgression ?? progress
         let currentChapter = chapter(for: locator)
@@ -502,6 +508,10 @@ final class ReaderModel {
         }
     }
     func jump(to locator: BookLocator) {
+        // Explicit app navigation (TOC/search/annotation) moves the content
+        // under any open menu — close it here, since location changes no
+        // longer close menus (they carry layout-settle noise).
+        clearTransientAnnotationUI(reason: "jump")
         if let currentLocator, !currentLocator.identifiesSameAnchor(as: locator) {
             locatorHistory.record(currentLocator)
             canNavigateBack = locatorHistory.canGoBack
@@ -518,6 +528,7 @@ final class ReaderModel {
 
     func navigateBack() {
         guard let locator = locatorHistory.pop() else { return }
+        clearTransientAnnotationUI(reason: "navigateBack")
         canNavigateBack = locatorHistory.canGoBack
         jumpTargetJSON = locator.json
         showsControls = false
