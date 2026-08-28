@@ -7,15 +7,47 @@ import ReaderCore
 import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
+import UIKit
 
-enum ReaderSelectionIntent: Equatable {
-    case highlight
-    case note
+/// A live text selection captured from the navigator, plus its on-screen
+/// frame in navigator (full-screen) coordinates. The selection toolbar is
+/// visible exactly while a context is set.
+struct ReaderSelectionContext: Equatable {
+    let locator: BookLocator
+    let text: String
+    let frame: CGRect?
 }
 
-struct PendingReaderSelection: Equatable {
-    let locator: BookLocator
-    let intent: ReaderSelectionIntent
+/// The single in-place annotation surface. Either the toolbar for a fresh
+/// selection or the menu of an existing highlight — never both at once.
+enum ReaderAnnotationMenu: Equatable {
+    case selection(ReaderSelectionContext)
+    case highlight(id: UUID, anchor: CGRect?)
+}
+
+enum ReaderNoteEditorTarget: Hashable, Identifiable {
+    case highlight(UUID)
+    case note(UUID)
+
+    var id: String {
+        switch self {
+        case .highlight(let id): "highlight-\(id.uuidString)"
+        case .note(let id): "note-\(id.uuidString)"
+        }
+    }
+}
+
+/// Short-lived, non-blocking feedback pill. The delete kinds carry the exact
+/// state needed to undo, so nothing is lost while the pill is visible.
+struct ReaderTransientNotice: Equatable, Identifiable {
+    enum Kind: Equatable {
+        case copied
+        case deletedHighlight(Highlight, notes: [Note])
+        case deletedNote(Note)
+    }
+
+    let id = UUID()
+    let kind: Kind
 }
 
 @MainActor @Observable
@@ -45,11 +77,10 @@ final class ReaderModel {
     var progress: Double = 0
     var showsControls = true
     var jumpTargetJSON: Data?
-    var selectedHighlightID: UUID?
-    var selectedHighlightRect: CGRect?
+    var annotationMenu: ReaderAnnotationMenu?
+    var noteEditorTarget: ReaderNoteEditorTarget?
+    var transientNotice: ReaderTransientNotice?
     private var pendingHighlightAfterJumpID: UUID?
-    var shouldStartNoteEditing = false
-    var pendingSelection: PendingReaderSelection?
     var contextReflection: SessionReflectionModel?
     private(set) var currentLocator: BookLocator?
     private(set) var canNavigateBack = false
@@ -63,6 +94,7 @@ final class ReaderModel {
     @ObservationIgnored private var searchState = LatestRequestState()
     @ObservationIgnored private var locatorHistory = LocatorHistory()
     @ObservationIgnored private var noteSaveTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
     @ObservationIgnored var onSelectionFinished: (() -> Void)?
 
@@ -115,7 +147,7 @@ final class ReaderModel {
         }
     }
     func save(locator: BookLocator) {
-        if selectedHighlightID != nil { clearSelectedHighlight() }
+        clearTransientAnnotationUI()
         currentLocator = locator
         progress = locator.totalProgression ?? progress
         let currentChapter = chapter(for: locator)
@@ -140,7 +172,7 @@ final class ReaderModel {
            let highlight = highlights.first(where: { $0.id == pendingHighlightAfterJumpID }),
            highlight.locator.identifiesSameAnchor(as: locator) {
             self.pendingHighlightAfterJumpID = nil
-            selectHighlight(highlight.id)
+            showHighlightMenu(for: highlight.id, anchor: nil)
         }
     }
     @discardableResult
@@ -160,34 +192,181 @@ final class ReaderModel {
         return highlight
     }
 
-    func beginSelection(at locator: BookLocator, intent: ReaderSelectionIntent) {
-        pendingSelection = .init(locator: locator, intent: intent)
+    // MARK: Selection toolbar
+    //
+    // Invariant: the custom selection toolbar is visible exactly while a
+    // selection exists in the navigator. Opening it replaces any highlight
+    // menu; acting on it closes it and clears the navigator selection.
+
+    func showSelectionMenu(locator: BookLocator, text: String, frame: CGRect?) {
+        annotationMenu = .selection(.init(locator: locator, text: text, frame: frame))
         showsControls = false
     }
 
-    func completePendingSelection(with color: HighlightColor) {
-        guard let pendingSelection else { return }
-        self.pendingSelection = nil
+    func dismissSelectionMenu() {
+        guard case .selection = annotationMenu else { return }
+        annotationMenu = nil
+        onSelectionFinished?()
+    }
+
+    func createHighlightFromSelection(with color: HighlightColor) {
+        guard case .selection(let context) = annotationMenu else { return }
+        annotationMenu = nil
+        onSelectionFinished?()
         preferences.lastUsedHighlightColor = color
         savePreferences()
-        let highlight = saveHighlight(locator: pendingSelection.locator, color: color)
-        onSelectionFinished?()
-        guard let highlight else { return }
-        selectHighlight(highlight.id, startNoteEditing: pendingSelection.intent == .note)
+        if let existing = highlights.first(where: { $0.locator.identifiesSameAnchor(as: context.locator) }) {
+            update(highlight: existing, color: color)
+            return
+        }
+        saveHighlight(locator: context.locator, color: color)
+        AnnotationHaptics.highlightCreated()
     }
 
-    func cancelPendingSelection() {
-        guard pendingSelection != nil else { return }
-        pendingSelection = nil
+    func beginNoteFromSelection() {
+        guard case .selection(let context) = annotationMenu else { return }
+        annotationMenu = nil
         onSelectionFinished?()
+        guard let highlight = saveHighlight(locator: context.locator, color: preferences.lastUsedHighlightColor) else { return }
+        noteEditorTarget = .highlight(highlight.id)
     }
 
-    func selectHighlight(_ id: UUID, startNoteEditing: Bool = false, rect: CGRect? = nil) {
+    func copySelection() {
+        guard case .selection(let context) = annotationMenu else { return }
+        UIPasteboard.general.string = context.text
+        annotationMenu = nil
+        onSelectionFinished?()
+        showNotice(.copied)
+    }
+
+    func reflectOnSelection() {
+        guard case .selection(let context) = annotationMenu else { return }
+        annotationMenu = nil
+        onSelectionFinished?()
+        Task { await reflect(on: context.locator) }
+    }
+
+    // MARK: Highlight menu
+
+    func showHighlightMenu(for id: UUID, anchor: CGRect?) {
         guard highlights.contains(where: { $0.id == id }) else { return }
-        selectedHighlightID = id
-        selectedHighlightRect = rect
-        shouldStartNoteEditing = startNoteEditing
+        if case .highlight(let current, _) = annotationMenu, current == id, anchor != nil {
+            annotationMenu = nil
+            return
+        }
+        annotationMenu = .highlight(id: id, anchor: anchor)
         showsControls = false
+    }
+
+    /// Dismisses a visible highlight menu; returns whether one was open so
+    /// content taps can avoid also toggling the reader chrome.
+    @discardableResult
+    func closeHighlightMenu() -> Bool {
+        guard case .highlight = annotationMenu else { return false }
+        annotationMenu = nil
+        return true
+    }
+
+    func changeHighlightColor(_ id: UUID, to color: HighlightColor) {
+        guard let highlight = highlights.first(where: { $0.id == id }) else { return }
+        guard highlight.color != color else { return }
+        preferences.lastUsedHighlightColor = color
+        savePreferences()
+        update(highlight: highlight, color: color)
+    }
+
+    /// Deletes a highlight immediately, keeps its notes as standalone notes
+    /// (persisting the unlink, unlike the old in-memory-only rewrite), and
+    /// offers a one-tap undo before the notice expires.
+    func deleteHighlightWithUndo(_ id: UUID) {
+        guard let highlight = highlights.first(where: { $0.id == id }) else { return }
+        closeHighlightMenu()
+        let linkedNotes = notes.filter { $0.highlightID == id }
+        let unlinkedNotes = linkedNotes.map(\.detachedFromHighlight)
+        highlights.removeAll { $0.id == id }
+        for note in unlinkedNotes {
+            if let index = notes.firstIndex(where: { $0.id == note.id }) {
+                notes[index] = note
+            }
+        }
+        AnnotationHaptics.annotationDeleted()
+        showNotice(.deletedHighlight(highlight, notes: linkedNotes))
+        Task {
+            do {
+                try await repository.deleteHighlight(id: id)
+                for note in unlinkedNotes {
+                    try await repository.save(note: note)
+                }
+            } catch {
+                await reloadAnnotations(after: error)
+            }
+        }
+    }
+
+    // MARK: Transient annotation UI
+
+    /// Closes annotation menus. Called on navigation, rotation, and scene
+    /// changes where stale screen coordinates would anchor UI to nothing.
+    func clearTransientAnnotationUI() {
+        if case .selection = annotationMenu { onSelectionFinished?() }
+        annotationMenu = nil
+    }
+
+    func showNotice(_ kind: ReaderTransientNotice.Kind) {
+        transientNotice = ReaderTransientNotice(kind: kind)
+        noticeTask?.cancel()
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.transientNotice = nil
+        }
+    }
+
+    func clearNotice() {
+        noticeTask?.cancel()
+        noticeTask = nil
+        transientNotice = nil
+    }
+
+    func undoNotice() {        guard let notice = transientNotice else { return }
+        switch notice.kind {
+        case .copied:
+            clearNotice()
+        case .deletedHighlight(let highlight, let removedNotes):
+            clearNotice()
+            guard !highlights.contains(where: { $0.id == highlight.id }) else { return }
+            highlights.append(highlight)
+            let relinkedNotes = removedNotes.map { $0.attached(to: highlight.id) }
+            for note in relinkedNotes {
+                if let index = notes.firstIndex(where: { $0.id == note.id }) {
+                    notes[index] = note
+                } else {
+                    notes.append(note)
+                }
+            }
+            Task {
+                do {
+                    try await repository.save(highlight: highlight)
+                    for note in relinkedNotes {
+                        try await repository.save(note: note)
+                    }
+                } catch {
+                    await reloadAnnotations(after: error)
+                }
+            }
+        case .deletedNote(let note):
+            clearNotice()
+            guard !notes.contains(where: { $0.id == note.id }) else { return }
+            notes.append(note)
+            notes.sort { $0.createdAt < $1.createdAt }
+            Task {
+                do { try await repository.save(note: note) }
+                catch {
+                    notes.removeAll { $0.id == note.id }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func update(highlight: Highlight, color: HighlightColor) {
@@ -202,24 +381,6 @@ final class ReaderModel {
                     self.highlights[currentIndex] = highlight
                 }
                 self.errorMessage = error.localizedDescription
-            }
-        }
-    }
-    func saveNote(locator: BookLocator, body: String) {
-        if let highlight = highlights.first(where: { $0.locator.identifiesSameAnchor(as: locator) }) {
-            saveNote(for: highlight, body: body)
-            return
-        }
-        let highlight = Highlight(bookID: book.id, locator: locator)
-        let note = Note(bookID: book.id, highlightID: highlight.id, locator: locator, body: body)
-        highlights.append(highlight)
-        notes.append(note)
-        Task {
-            do { try await repository.save(highlight: highlight, note: note) }
-            catch {
-                highlights.removeAll { $0.id == highlight.id }
-                notes.removeAll { $0.id == note.id }
-                errorMessage = error.localizedDescription
             }
         }
     }
@@ -261,30 +422,28 @@ final class ReaderModel {
             }
         }
     }
-    func delete(note: Note) {
+    /// Removes a note immediately with a one-tap undo. Used when the user
+    /// clears a note's text entirely — the note is never silently lost.
+    func deleteNoteWithUndo(_ note: Note) {
         notes.removeAll { $0.id == note.id }
+        showNotice(.deletedNote(note))
         Task {
             do { try await repository.deleteNote(id: note.id) }
-            catch { notes.append(note); notes.sort { $0.createdAt < $1.createdAt }; errorMessage = error.localizedDescription }
-        }
-    }
-    func delete(highlight: Highlight) {
-        if selectedHighlightID == highlight.id { clearSelectedHighlight() }
-        highlights.removeAll { $0.id == highlight.id }
-        for index in notes.indices where notes[index].highlightID == highlight.id {
-            let note = notes[index]
-            notes[index] = Note(id: note.id, bookID: note.bookID, locator: note.locator, body: note.body, createdAt: note.createdAt, updatedAt: note.updatedAt)
-        }
-        Task {
-            do { try await repository.deleteHighlight(id: highlight.id) }
-            catch { await reloadAnnotations(after: error) }
+            catch {
+                notes.append(note)
+                notes.sort { $0.createdAt < $1.createdAt }
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
-    func clearSelectedHighlight() {
-        selectedHighlightID = nil
-        selectedHighlightRect = nil
-        shouldStartNoteEditing = false
+    /// Waits for any debounced note writes so dismissal cannot lose the last
+    /// keystrokes. User output is the product's most important data (PRD P2).
+    func flushNoteSaves() async {
+        let tasks = Array(noteSaveTasks.values)
+        for task in tasks {
+            await task.value
+        }
     }
     func jump(to locator: BookLocator) {
         if let currentLocator, !currentLocator.identifiesSameAnchor(as: locator) {
@@ -496,4 +655,28 @@ struct ReaderChapter: Identifiable, Hashable {
     let href: String
     let locatorJSON: Data
     let progression: Double?
+}
+
+extension Note {
+    /// Detaches a note from its highlight so it survives as a standalone note.
+    var detachedFromHighlight: Note {
+        Note(id: id, bookID: bookID, locator: locator, body: body, createdAt: createdAt, updatedAt: updatedAt)
+    }
+
+    /// Re-attaches a detached note to a highlight (undo of a deletion).
+    func attached(to highlightID: UUID) -> Note {
+        Note(id: id, bookID: bookID, highlightID: highlightID, locator: locator, body: body, createdAt: createdAt, updatedAt: updatedAt)
+    }
+}
+
+/// Restrained haptics for annotation moments only (PRD 10.4); page turns and
+/// ordinary reading never vibrate.
+enum AnnotationHaptics {
+    static func highlightCreated() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    static func annotationDeleted() {
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+    }
 }

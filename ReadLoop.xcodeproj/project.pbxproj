@@ -84,12 +84,14 @@
 		A17E67B320C437C4E79FEE2C /* LibraryCore in Frameworks */ = {isa = PBXBuildFile; productRef = C4D1242F687894B1451D7565 /* LibraryCore */; };
 		A409B447F29C532AF154CE4F /* ReadingSessionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0E5D34A20C524BA77AFBBDCC /* ReadingSessionCore */; };
 		A469E33B8988D890B60EAFA6 /* ReadingSessionCore in Frameworks */ = {isa = PBXBuildFile; productRef = B97AA797DAD9344400492B26 /* ReadingSessionCore */; };
+		A538D7CE31833FE26C6D2EC2 /* AnnotationUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410CCE22CD5B9DA33F07EABF /* AnnotationUI.swift */; };
 		A607604868A804CA119B7CC5 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 3A66CADD0591CABD69D3A20B /* README.md */; };
 		AB9362EBC641154698B9D24B /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 303B2BF3C97ADB415239C9F7 /* ReadiumStreamer */; };
 		ACED885380E2BF2375E4DD57 /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = F9602D3B20E48A9F2C4A7A14 /* ReaderAgent */; };
 		AD10D2DEF5F308451D908248 /* ReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4F012576A33D6FA4259AFF97 /* ReaderCore */; };
 		B6E74FAF07E4AEC5D78FA22E /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B8655FAF8076A2B7FD4B64 /* TestFixtures.swift */; };
 		B82D917BBAF1CB3BB783DE77 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A39B871343335FF088DF30A4 /* ReadiumNavigator */; };
+		B97559C8958E8A4CE8D499A0 /* AnnotationMenuPlacerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759084F69F30FCF7BDCF3F83 /* AnnotationMenuPlacerTests.swift */; };
 		BA8826E3EAB6852CB567BDFB /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EAB962598DB0BE4FC8C2560 /* SettingsView.swift */; };
 		BCF12F7BDE014C820B6BBD40 /* ThoughtsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D705601303A87157EE4015 /* ThoughtsView.swift */; };
 		BEF90B351A51F33994324EE0 /* RetrievalChunkingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC5466CD5F18C5F5FFE1CC7 /* RetrievalChunkingTests.swift */; };
@@ -151,6 +153,7 @@
 		3BC5466CD5F18C5F5FFE1CC7 /* RetrievalChunkingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetrievalChunkingTests.swift; sourceTree = "<group>"; };
 		3C6212C1A8AF1BB632CDFAD5 /* RAGSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAGSettingsModel.swift; sourceTree = "<group>"; };
 		3DB660ABDB582C5FFF22452F /* ElsepageTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElsepageTheme.swift; sourceTree = "<group>"; };
+		410CCE22CD5B9DA33F07EABF /* AnnotationUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationUI.swift; sourceTree = "<group>"; };
 		4775351EC3328731E57858C0 /* ReaderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreen.swift; sourceTree = "<group>"; };
 		4DE2F8A71486BBA0DF0D231D /* MemoryApplicationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryApplicationServiceTests.swift; sourceTree = "<group>"; };
 		4FADAA5B8DE1FC390342D187 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
@@ -169,6 +172,7 @@
 		7374A2B8429A778AE5F22ADB /* minimal.epub */ = {isa = PBXFileReference; path = minimal.epub; sourceTree = "<group>"; };
 		73D705601303A87157EE4015 /* ThoughtsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtsView.swift; sourceTree = "<group>"; };
 		747644A932D194CB5263EBFB /* MyMindModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyMindModel.swift; sourceTree = "<group>"; };
+		759084F69F30FCF7BDCF3F83 /* AnnotationMenuPlacerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationMenuPlacerTests.swift; sourceTree = "<group>"; };
 		75A3069ECDB501E8EF30EF58 /* ReadiumServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumServices.swift; sourceTree = "<group>"; };
 		763AB1DDEA8450791C00CCA5 /* ImportHardeningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportHardeningTests.swift; sourceTree = "<group>"; };
 		7B2A42F4617B2CBC1E133B68 /* ReflectionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReflectionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -347,6 +351,7 @@
 		6D7CCBFE126283EA0154C0BB /* Reader */ = {
 			isa = PBXGroup;
 			children = (
+				410CCE22CD5B9DA33F07EABF /* AnnotationUI.swift */,
 				E17217B45491685767A98789 /* ReaderModel.swift */,
 				4775351EC3328731E57858C0 /* ReaderScreen.swift */,
 				0DDCEA9F1C6C8AEE014BF953 /* ReadiumBookIndexer.swift */,
@@ -394,6 +399,7 @@
 				CAE862E3869FBC9B0D5B1FA0 /* Fixtures */,
 				DA92C45D6F2DB0E154BC51F5 /* AchievementTests.swift */,
 				8FBB4E02618581B6372645CE /* AgentCitationPersistenceTests.swift */,
+				759084F69F30FCF7BDCF3F83 /* AnnotationMenuPlacerTests.swift */,
 				B6091F0254AA8FBAD94F5956 /* BookIndexPersistenceTests.swift */,
 				B6766AA682DF76C5C0963332 /* BookIndexStatusTests.swift */,
 				8353073EC8D822339F330EE1 /* CrossBookRetrievalTests.swift */,
@@ -669,6 +675,7 @@
 				D78F722627EEC09BFADAD65D /* AchievementModel.swift in Sources */,
 				0A357A8D95A1A5F001355D65 /* AchievementToast.swift in Sources */,
 				97CCC85608273E7326D3D510 /* AgentMarkdownText.swift in Sources */,
+				A538D7CE31833FE26C6D2EC2 /* AnnotationUI.swift in Sources */,
 				4AE7C3539EEB1E0403A71A2D /* AppModel.swift in Sources */,
 				D9300D54F299A3CC2E338B8E /* AppShell.swift in Sources */,
 				5872F0CE0398C31CF48D5C12 /* DataSettingsModel.swift in Sources */,
@@ -715,6 +722,7 @@
 			files = (
 				277C368660A887E04E3819C7 /* AchievementTests.swift in Sources */,
 				57F84970259B8D55DB7BD69F /* AgentCitationPersistenceTests.swift in Sources */,
+				B97559C8958E8A4CE8D499A0 /* AnnotationMenuPlacerTests.swift in Sources */,
 				C6BC143F6DAB75CAD8D9FBE5 /* BookIndexPersistenceTests.swift in Sources */,
 				10D4D22BB8FCDEE4F56BA777 /* BookIndexStatusTests.swift in Sources */,
 				F9D3999E577D1C15ABCE2750 /* CrossBookRetrievalTests.swift in Sources */,

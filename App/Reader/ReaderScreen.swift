@@ -42,59 +42,36 @@ struct ReaderScreen: View {
                 readerChrome.transition(.opacity)
             }
 
-            if let pendingSelection = model.pendingSelection {
-                HighlightColorPalette(
-                    selectedColor: model.preferences.lastUsedHighlightColor,
-                    intent: pendingSelection.intent,
-                    onSelect: model.completePendingSelection,
-                    onCancel: model.cancelPendingSelection
-                )
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            if model.isPrepared {
+                ReaderAnnotationOverlays(model: model)
             }
-
-            if let highlightID = model.selectedHighlightID,
-               model.pendingSelection == nil {
-                ReaderAnnotationCompactCardOverlay(
-                    model: model,
-                    highlightID: highlightID,
-                    anchorRect: model.selectedHighlightRect,
-                    onEdit: { presentedSheet = .annotationDetail(.highlight(highlightID, startNoteEditing: true)) },
-                    onExpand: { presentedSheet = .annotationDetail(.highlight(highlightID)) }
-                )
-                .transition(.opacity)
-            }
-
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
-        .animation(ElsepageTheme.Motion.quick, value: model.pendingSelection)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
         .task { await model.prepare() }
-        .onChange(of: model.selectedHighlightID) { _, id in
-            guard let id, model.shouldStartNoteEditing else { return }
-            presentedSheet = .annotationDetail(.highlight(id, startNoteEditing: true))
-        }
-        .sheet(item: $presentedSheet, onDismiss: {
-            model.shouldStartNoteEditing = false
-        }) { sheet in
+        .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .contents: ContentsSheet(model: model)
             case .search: ReaderSearchSheet(model: model)
             case .annotations:
-                ReaderAnnotationsSheet(model: model) { highlight in
-                    if let highlight = highlight.highlight {
+                ReaderAnnotationsSheet(model: model) { annotation in
+                    if let highlight = annotation.highlight {
+                        // Menu opens in place once the jump arrives.
                         model.jumpToHighlight(highlight.id)
                         presentedSheet = nil
-                    } else if let note = highlight.note {
+                    } else if let note = annotation.note {
                         model.jump(to: note.locator)
-                        presentedSheet = .annotationDetail(.note(note.id))
+                        presentedSheet = nil
+                        model.noteEditorTarget = .note(note.id)
                     }
                 }
             case .appearance: ReaderAppearanceSheet(model: model)
-            case .annotationDetail(let target):
-                ReaderAnnotationDetailSheet(model: model, target: target)
             }
+        }
+        .sheet(item: $model.noteEditorTarget) { target in
+            NoteEditorSheet(model: model, target: target)
         }
         .sheet(item: $model.contextReflection) { reflection in
             SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
@@ -118,6 +95,9 @@ struct ReaderScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase != .active else { return }
+            // Annotation menu anchors are screen coordinates; drop them while
+            // backgrounded so they cannot reappear stale after relaunch.
+            model.clearTransientAnnotationUI()
             model.savePreferences()
             Task {
                 await model.flushPosition()
@@ -224,61 +204,8 @@ struct ReaderScreen: View {
     }
 }
 
-private struct HighlightColorPalette: View {
-    let selectedColor: HighlightColor
-    let intent: ReaderSelectionIntent
-    let onSelect: (HighlightColor) -> Void
-    let onCancel: () -> Void
-
-    var body: some View {
-        VStack {
-            Spacer()
-            HStack(spacing: ElsepageTheme.Spacing.small) {
-                ForEach(HighlightColor.allCases, id: \.self) { color in
-                    Button {
-                        onSelect(color)
-                    } label: {
-                        Circle()
-                            .fill(color.readerColor)
-                            .frame(width: 30, height: 30)
-                            .overlay {
-                                Circle()
-                                    .stroke(.primary.opacity(color == selectedColor ? 0.6 : 0.18), lineWidth: color == selectedColor ? 2 : 1)
-                                if color == selectedColor {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(color.accessibilityLabel)
-                    .accessibilityAddTraits(color == selectedColor ? .isSelected : [])
-                }
-
-                Divider().frame(height: 28)
-
-                Button("取消", action: onCancel)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 44, minHeight: 44)
-            }
-            .padding(.horizontal, ElsepageTheme.Spacing.medium)
-            .padding(.vertical, ElsepageTheme.Spacing.small)
-            .background(.ultraThinMaterial, in: Capsule())
-            .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(intent == .note ? "选择笔记高亮颜色" : "选择高亮颜色")
-            .padding(.bottom, 24)
-        }
-        .padding(.horizontal, ElsepageTheme.Spacing.medium)
-    }
-}
-
 private enum ReaderSheet: Identifiable {
     case contents, search, annotations, appearance
-    case annotationDetail(ReaderAnnotationTarget)
 
     var id: String {
         switch self {
@@ -286,7 +213,6 @@ private enum ReaderSheet: Identifiable {
         case .search: "search"
         case .annotations: "annotations"
         case .appearance: "appearance"
-        case .annotationDetail(let target): "annotation-detail-\(target.id.uuidString)"
         }
     }
 }
@@ -409,7 +335,7 @@ private struct ReaderAnnotationsSheet: View {
                             HStack(alignment: .top, spacing: 10) {
                                 if let highlight = annotation.highlight {
                                     Circle()
-                                        .fill(highlight.color.readerColor)
+                                        .fill(highlight.color.annotationColor)
                                         .frame(width: 10, height: 10)
                                         .padding(.top, 5)
                                 } else {
@@ -455,136 +381,6 @@ private struct ReaderAnnotation: Identifiable {
     var locator: BookLocator { highlight?.locator ?? note!.locator }
 }
 
-private struct ReaderAnnotationCompactCardOverlay: View {
-    @Bindable var model: ReaderModel
-    let highlightID: UUID
-    let anchorRect: CGRect?
-    let onEdit: () -> Void
-    let onExpand: () -> Void
-
-    private var highlight: Highlight? {
-        model.highlights.first { $0.id == highlightID }
-    }
-
-    private var note: Note? {
-        model.notes.first { $0.highlightID == highlightID }
-    }
-
-    var body: some View {
-        GeometryReader { proxy in
-            if let highlight {
-                let width = min(proxy.size.width - 24, 360)
-                ReaderAnnotationCompactCard(
-                    highlight: highlight,
-                    note: note,
-                    onChangeColor: { model.update(highlight: highlight, color: $0) },
-                    onEdit: onEdit,
-                    onExpand: onExpand
-                )
-                .frame(width: width)
-                .position(
-                    Self.position(
-                        for: anchorRect,
-                        in: proxy.size,
-                        safeAreaInsets: proxy.safeAreaInsets,
-                        cardSize: .init(width: width, height: 164)
-                    )
-                )
-            }
-        }
-        .onChange(of: highlight) { _, value in
-            if value == nil { model.clearSelectedHighlight() }
-        }
-    }
-
-    private static func position(for rect: CGRect?, in size: CGSize, safeAreaInsets: EdgeInsets, cardSize: CGSize) -> CGPoint {
-        let horizontalPadding: CGFloat = 12
-        let verticalPadding: CGFloat = 12
-        let lowerBound = safeAreaInsets.top + verticalPadding + cardSize.height / 2
-        let upperBound = size.height - safeAreaInsets.bottom - verticalPadding - cardSize.height / 2
-        let fallbackY = upperBound
-        guard let rect else {
-            return .init(x: size.width / 2, y: fallbackY)
-        }
-        let below = rect.maxY + verticalPadding + cardSize.height / 2
-        let above = rect.minY - verticalPadding - cardSize.height / 2
-        let y = below <= upperBound ? below : max(lowerBound, above)
-        let x = min(max(rect.midX, horizontalPadding + cardSize.width / 2), size.width - horizontalPadding - cardSize.width / 2)
-        return .init(x: x, y: y)
-    }
-}
-
-private struct ReaderAnnotationCompactCard: View {
-    let highlight: Highlight
-    let note: Note?
-    let onChangeColor: (HighlightColor) -> Void
-    let onEdit: () -> Void
-    let onExpand: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(highlight.locator.textHighlight ?? "高亮位置")
-                .font(.system(.subheadline, design: .serif, weight: .semibold))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Circle().fill(highlight.color.readerColor).frame(width: 9, height: 9)
-                Text(note?.body ?? "添加笔记")
-                    .font(.subheadline)
-                    .foregroundStyle(note == nil ? .secondary : .primary)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: ElsepageTheme.Spacing.small) {
-                Menu {
-                    ForEach(HighlightColor.allCases, id: \.self) { color in
-                        Button {
-                            onChangeColor(color)
-                        } label: {
-                            Label(color.readerName, systemImage: highlight.color == color ? "checkmark.circle.fill" : "circle.fill")
-                        }
-                    }
-                } label: {
-                    Label("颜色", systemImage: "paintpalette")
-                }
-
-                Spacer()
-
-                Button(note == nil ? "添加笔记" : "编辑", action: onEdit)
-                Button("展开", action: onExpand)
-            }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.borderless)
-        }
-        .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.primary.opacity(0.08))
-        }
-        .shadow(color: .black.opacity(0.14), radius: 16, y: 7)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("高亮批注")
-    }
-}
-
-private struct ReaderAnnotationTarget: Hashable {
-    let id: UUID
-    let highlightID: UUID?
-    let noteID: UUID?
-    let startNoteEditing: Bool
-
-    static func highlight(_ id: UUID, startNoteEditing: Bool = false) -> Self {
-        Self(id: id, highlightID: id, noteID: nil, startNoteEditing: startNoteEditing)
-    }
-
-    static func note(_ id: UUID) -> Self {
-        Self(id: id, highlightID: nil, noteID: id, startNoteEditing: false)
-    }
-}
-
 private struct AnnotationSortKey: Comparable {
     let chapterIndex: Int
     let progression: Double
@@ -616,209 +412,6 @@ private extension ReaderModel {
             return "\(chapter) · \(Int((progress * 100).rounded()))%"
         }
         return chapter ?? "原文位置"
-    }
-}
-
-private struct ReaderAnnotationDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Bindable var model: ReaderModel
-    let target: ReaderAnnotationTarget
-    @State private var isEditingNote = false
-    @State private var noteText = ""
-
-    private var highlight: Highlight? {
-        guard let highlightID = target.highlightID else { return nil }
-        return model.highlights.first { $0.id == highlightID }
-    }
-
-    private var note: Note? {
-        if let highlightID = target.highlightID {
-            return model.notes.first { $0.highlightID == highlightID }
-        }
-        guard let noteID = target.noteID else { return nil }
-        return model.notes.first { $0.id == noteID }
-    }
-
-    private var locator: BookLocator? {
-        highlight?.locator ?? note?.locator
-    }
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if let highlight {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
-                            Text(highlight.locator.textHighlight ?? "高亮位置")
-                                .font(.system(.body, design: .serif))
-                                .foregroundStyle(.primary)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            Text(model.annotationLocationLabel(for: highlight.locator))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Divider()
-
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("高亮颜色")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                HStack(spacing: 14) {
-                                    ForEach(HighlightColor.allCases, id: \.self) { color in
-                                        Button {
-                                            model.update(highlight: highlight, color: color)
-                                        } label: {
-                                            Circle()
-                                                .fill(color.readerColor)
-                                                .frame(width: 30, height: 30)
-                                                .overlay(Circle().stroke(.primary.opacity(0.18)))
-                                                .overlay {
-                                                    if highlight.color == color {
-                                                        Image(systemName: "checkmark")
-                                                            .font(.caption.bold())
-                                                            .foregroundStyle(.black.opacity(0.7))
-                                                    }
-                                                }
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityLabel("\(color.readerName)高亮")
-                                        .accessibilityAddTraits(highlight.color == color ? .isSelected : [])
-                                    }
-                                }
-                            }
-
-                            Divider()
-
-                            noteEditor(note: note, highlight: highlight)
-
-                            Divider()
-
-                            Button(role: .destructive) {
-                                model.delete(highlight: highlight)
-                                dismiss()
-                            } label: {
-                                Label("删除高亮", systemImage: "trash")
-                            }
-                        }
-                        .padding(.horizontal, ElsepageTheme.Spacing.large)
-                        .padding(.vertical, ElsepageTheme.Spacing.medium)
-                    }
-                } else if let locator, let note {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
-                            Text(locator.textHighlight ?? "原文位置")
-                                .font(.system(.body, design: .serif))
-                            Text(model.annotationLocationLabel(for: locator))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Divider()
-                            noteEditor(note: note, highlight: nil)
-                        }
-                        .padding(.horizontal, ElsepageTheme.Spacing.large)
-                        .padding(.vertical, ElsepageTheme.Spacing.medium)
-                    }
-                } else {
-                    ContentUnavailableView("标注已不存在", systemImage: "highlighter")
-                }
-            }
-            .navigationTitle("这段标注")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents(isEditingNote ? [.medium, .large] : [.height(250), .medium])
-        .presentationDragIndicator(.visible)
-        .onAppear {
-            noteText = note?.body ?? ""
-            isEditingNote = target.startNoteEditing
-        }
-    }
-
-    @ViewBuilder
-    private func noteEditor(note: Note?, highlight: Highlight?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("我的笔记")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if !isEditingNote {
-                    Button(note == nil ? "添加" : "编辑") {
-                        noteText = note?.body ?? ""
-                        isEditingNote = true
-                    }
-                    .font(.subheadline.weight(.medium))
-                }
-            }
-
-            if isEditingNote {
-                TextEditor(text: $noteText)
-                    .frame(minHeight: 110)
-                    .padding(8)
-                    .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .accessibilityLabel("笔记内容")
-                HStack {
-                    Button("取消") { isEditingNote = false }
-                        .buttonStyle(.bordered)
-                    Spacer()
-                    Button("保存") { saveNote(note: note, highlight: highlight) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            } else if let note {
-                Text(note.body)
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("这段文字还没有笔记。")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func saveNote(note: Note?, highlight: Highlight?) {
-        let text = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let note {
-            model.update(note: note, body: text)
-        } else if let highlight {
-            model.saveNote(for: highlight, body: text)
-        } else {
-            return
-        }
-        isEditingNote = false
-    }
-}
-
-private extension HighlightColor {
-    var accessibilityLabel: String {
-        switch self {
-        case .yellow: "黄色高亮"
-        case .green: "绿色高亮"
-        case .blue: "蓝色高亮"
-        case .pink: "粉色高亮"
-        }
-    }
-
-    var readerColor: Color {
-        switch self {
-        case .yellow: Color(red: 0.96, green: 0.78, blue: 0.24)
-        case .green: Color(red: 0.36, green: 0.72, blue: 0.43)
-        case .blue: Color(red: 0.32, green: 0.56, blue: 0.90)
-        case .pink: Color(red: 0.90, green: 0.42, blue: 0.61)
-        }
-    }
-
-    var readerName: String {
-        switch self {
-        case .yellow: "黄色"
-        case .green: "绿色"
-        case .blue: "蓝色"
-        case .pink: "粉色"
-        }
     }
 }
 

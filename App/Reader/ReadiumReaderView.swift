@@ -50,12 +50,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     }
                     model.chapters = Self.chapters(from: publication.manifest.tableOfContents)
                     let initial = try model.initialLocatorJSON.flatMap(Self.readiumLocator(from:))
-                    let actions = [
-                        EditingAction(title: "高亮", action: #selector(ReaderHostViewController.highlightSelection)),
-                        EditingAction(title: "笔记", action: #selector(ReaderHostViewController.noteSelection)),
-                        EditingAction(title: "聊聊这句", action: #selector(ReaderHostViewController.reflectOnSelection)),
-                        .copy,
-                    ]
+                    // The system selection menu is suppressed in favor of the
+                    // app's own in-place toolbar (shouldShowMenuForSelection).
+                    // Copy remains for hardware keyboards and system affordances.
+                    let actions = [EditingAction.copy]
                     let navigator = try EPUBNavigatorViewController(
                         publication: publication,
                         initialLocation: initial,
@@ -92,7 +90,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     model.onSelectionFinished = { [weak navigator] in navigator?.clearSelection() }
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.model.selectHighlight(id, rect: event.rect)
+                        self?.model.showHighlightMenu(for: id, anchor: event.rect)
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights(model.highlights)
@@ -129,11 +127,20 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
             guard self.navigator?.currentSelection == nil else { return }
-            if model.selectedHighlightID != nil {
-                model.clearSelectedHighlight()
-                return
-            }
+            // One tap, one change: a tap on content dismisses an open
+            // highlight menu instead of also toggling the reader chrome.
+            guard !model.closeHighlightMenu() else { return }
             model.toggleControls()
+        }
+
+        func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
+            guard let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return true }
+            model.showSelectionMenu(
+                locator: anchor,
+                text: selection.locator.text.highlight ?? "",
+                frame: selection.frame
+            )
+            return false
         }
 
         func update(
@@ -290,27 +297,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
+        // Anchors are screen coordinates of the previous layout.
+        model.clearTransientAnnotationUI()
         flushPosition()
     }
 
     @objc private func flushPosition() { Task { await model.flushPosition() } }
-
-    @objc func highlightSelection() {
-        guard let navigator, let selection = navigator.currentSelection,
-              let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        model.beginSelection(at: anchor, intent: .highlight)
-    }
-
-    @objc func noteSelection() {
-        guard let navigator, let selection = navigator.currentSelection,
-              let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        model.beginSelection(at: anchor, intent: .note)
-    }
-
-    @objc func reflectOnSelection() {
-        guard let navigator, let selection = navigator.currentSelection,
-              let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return }
-        navigator.clearSelection()
-        Task { await model.reflect(on: anchor) }
-    }
 }
