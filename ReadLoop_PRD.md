@@ -3,12 +3,12 @@
 > 工程代号：**ReadLoop**  
 > 正式产品名：**待定**（当前候选：余思 / 页外；正式命名前不要在代码中硬编码品牌名）  
 > 产品定位：**以阅读为入口的 Personal Thinking Agent / Agent-native iOS Reader**  
-> 文档版本：v0.2  
+> 文档版本：v0.3  
 > 状态：长期主文档（Source of Truth）  
 > 首发平台：iOS / iPhone  
 > 首发内容格式：用户自导入的非 DRM EPUB  
 > 核心 AI 形态：**BYOK（Bring Your Own Key）云端模型 + 本地 Agent Runtime**  
-> 最后更新：2026-08-24
+> 最后更新：2026-08-29
 
 ---
 
@@ -1527,3 +1527,44 @@ ReadLoop 最终不是要证明：
 如果用户愿意一直读，却不愿意在这里表达和思考，ReadLoop 只是一个 Reader。
 
 如果用户愿意持续 Reflection，并开始因为 Agent 记得“过去的自己”而回来，产品才真正成立。
+
+---
+
+# 21. 实现偏差与豁免记录（v0.3）
+
+以下偏差已在实现评审中接受并豁免。按 §0 约定先记录于本节，再做对应代码改动。每条包含偏差内容与豁免理由；后续版本如推翻某条豁免，应先修订本节再改代码。
+
+## 21.1 ASR 仅 Apple 系统转写
+
+- 偏差：§14 列出「云端 ASR（如果当前 Transcription Provider 是云端）」的条件分支；V1 没有云端 ASR Provider，语音输入只使用 Apple 系统 SFSpeechRecognizer。
+- 豁免理由：首发闭环够用，系统转写本地优先，与 §13 隐私默认一致。云端 ASR Provider 可选化移至 v2。
+
+## 21.2 Journal 为 Agent 派生结构
+
+- 偏差：F9 的 Journal 中 What I think 当前由 Agent 结构化整理（JournalStructuredParser）派生，实现尚无用户编辑入口。
+- 修订（F9 语义澄清）：What I think 由 Agent 起草、用户可改，用户编辑优先。用户编辑入口（含 userEdited 标记与防静默覆盖）在 v0.5 交付；What I said 原始表达始终不可被 Agent 覆盖。
+
+## 21.3 移除 Streaming 开关
+
+- 偏差：§12 设置项中的「Streaming 开关（调试/兼容）」不再提供。
+- 豁免理由：流式非核心循环，回应长度由系统提示词约束；保留一个模拟流式的开关只会给用户错误预期。真流式输出（SSE）移至 v2。
+
+## 21.4 Model ID 手填而非拉取模型列表
+
+- 偏差：Provider 设置不拉取服务商模型列表，由用户按服务商控制台手填 Model ID。
+- 豁免理由：与 §12「做好而不是全兼容」一致；手填已可用，列表拉取属于接口兼容性投入，暂无必要。
+
+## 21.5 Reading Session 行为记录最小化
+
+- 偏差：Reading Session 不记录 agentDiscussionCount 之外的精细行为（滚动、选中、检索触发等）。
+- 豁免理由：精细行为采集暂无对应产品决策，不做无用途的数据积累。agentDiscussionCount 自 v0.5 起真实累计（用户主动发起 Agent 讨论的次数）。
+
+## 21.6 书架级搜索仅书名/作者
+
+- 偏差：书架级搜索仅匹配书名与作者，不做书架级全文搜索；书内全文搜索已支持。
+- 豁免理由：书架级全文搜索与书内搜索能力重复且成本高，不进首发。
+
+## 21.7 语音转写润色为默认增强
+
+- 偏差：语音 Reflection 的转写润色（TranscriptPolishService）作为默认可用的增强提供；原始转写文本永久保留、优先展示，且可随时切换回原始版本。
+- 豁免理由：与 P2「User output before AI output」一致——originalText 是唯一事实源，润色只是不覆盖原文的展示层。

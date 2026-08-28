@@ -50,7 +50,10 @@ import Testing
     try await reflections.saveConnection(.init(reflectionID: first.id, sourceReflectionID: second.id, relevance: 0.8))
     try await journal.saveThought(.init(reflectionID: first.id, messageID: agentMessage.id, thought: "我想记住这句话"))
 
-    let exporter = PersonalDataExporter(books: books, reading: reading, sessions: sessions, reflections: reflections, journal: journal)
+    let exporter = PersonalDataExporter(
+        books: books, reading: reading, sessions: sessions, reflections: reflections,
+        journal: journal, memories: GRDBMemoryRepository(database: database)
+    )
     let data = try await exporter.export()
 
     let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
@@ -100,4 +103,100 @@ import Testing
     #expect(try await books.book(id: book.id) == nil)
     #expect(try await index.job(for: book.id, version: BookIndexPipeline.currentVersion) == nil)
     #expect(!FileManager.default.fileExists(atPath: store.url(for: book.id).path))
+}
+
+@Test func exportIncludesMemoriesAndReaderProfileProjection() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reading = GRDBReadingRepository(database: database)
+    let sessions = GRDBReadingSessionRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let journal = GRDBJournalRepository(database: database)
+    let memories = GRDBMemoryRepository(database: database)
+
+    let book = TestFixtures.book(fingerprint: "export-memories")
+    try await books.insert(book)
+
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let trait = ReaderMemory(
+        kind: .profileTrait, claim: "读者常在深夜阅读", confidence: 0.9, status: .active,
+        evidenceIDs: ["refl:e1"], createdAt: now, updatedAt: now.addingTimeInterval(30)
+    )
+    let edited = ReaderMemory(
+        kind: .semantic, claim: "用户自己修正过的理解", confidence: 0.7, status: .provisional,
+        userEdited: true, evidenceIDs: ["refl:e1", "msg:e2"], createdAt: now, updatedAt: now.addingTimeInterval(20)
+    )
+    let superseded = ReaderMemory(
+        kind: .preference, claim: "已被否定的偏好", confidence: 0.4, status: .superseded,
+        createdAt: now, updatedAt: now.addingTimeInterval(10)
+    )
+    let episodic = ReaderMemory(
+        kind: .episodic, claim: "正在读的一本书", confidence: 0.5,
+        createdAt: now, updatedAt: now
+    )
+    for memory in [trait, edited, superseded, episodic] {
+        try await memories.save(memory)
+    }
+
+    let exporter = PersonalDataExporter(
+        books: books, reading: reading, sessions: sessions, reflections: reflections,
+        journal: journal, memories: memories
+    )
+    let data = try await exporter.export()
+
+    // Round-trip: every exported memory equals its stored value, all fields included.
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(PersonalDataArchive.self, from: data)
+    let stored = try await memories.memories()
+    #expect(archive.books.count == 1)
+    #expect(archive.memories.count == 4)
+    #expect(archive.memories.sorted { $0.id.uuidString < $1.id.uuidString } == stored.sorted { $0.id.uuidString < $1.id.uuidString })
+
+    // The Reader Profile section is exactly the projection My Mind renders.
+    let projection = ReaderProfileProjection(memories: stored)
+    #expect(archive.readerProfile.profileTraits.map(\.id) == projection.profileTraits.map(\.id))
+    #expect(archive.readerProfile.activeMemories.map(\.id) == projection.activeMemories.map(\.id))
+    #expect(archive.readerProfile.supersededMemories.map(\.id) == projection.supersededMemories.map(\.id))
+    #expect(archive.readerProfile.profileTraits.map(\.claim).sorted() == ["读者常在深夜阅读", "用户自己修正过的理解"].sorted())
+    #expect(archive.readerProfile.supersededMemories.map(\.claim) == ["已被否定的偏好"])
+
+    // My Mind-visible fields appear in the JSON; secrets never do.
+    let text = String(decoding: data, as: UTF8.self)
+    #expect(text.contains("userEdited"))
+    #expect(text.contains("evidenceIDs"))
+    #expect(text.contains("confidence"))
+    #expect(text.contains("readerProfile"))
+    #expect(!text.contains("secretReference"))
+    #expect(!text.contains("apiKey"))
+}
+
+@Test func wipedStoreExportsEmptyButValidArchive() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reading = GRDBReadingRepository(database: database)
+    let sessions = GRDBReadingSessionRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let journal = GRDBJournalRepository(database: database)
+    let memories = GRDBMemoryRepository(database: database)
+
+    let book = TestFixtures.book(fingerprint: "wipe-then-export")
+    try await books.insert(book)
+    try await memories.save(ReaderMemory(kind: .semantic, claim: "擦除前的记忆", confidence: 0.5))
+
+    try await database.wipeAllUserData()
+
+    let exporter = PersonalDataExporter(
+        books: books, reading: reading, sessions: sessions, reflections: reflections,
+        journal: journal, memories: memories
+    )
+    let data = try await exporter.export()
+
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(PersonalDataArchive.self, from: data)
+    #expect(archive.books.isEmpty)
+    #expect(archive.memories.isEmpty)
+    #expect(archive.readerProfile.profileTraits.isEmpty)
+    #expect(archive.readerProfile.activeMemories.isEmpty)
+    #expect(archive.readerProfile.supersededMemories.isEmpty)
+    #expect(archive.exportedAt <= Date())
 }

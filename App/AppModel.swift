@@ -129,12 +129,17 @@ final class AppModel {
                     reading: reading,
                     sessions: sessions,
                     reflections: reflections,
-                    journal: journal
+                    journal: journal,
+                    memories: memories
                 ),
                 indexCoordinator: indexCoordinator,
+                wipeService: LocalDataWipeService(database: database, secrets: secrets),
                 onDataDeleted: { [weak self] in
                     await self?.library?.reload()
                     await self?.thoughts?.reload()
+                },
+                onAllDataWiped: { [weak self] in
+                    await self?.rebuildAfterWipe()
                 }
             )
             settings = SettingsRootModel(
@@ -184,6 +189,20 @@ final class AppModel {
     func handleIncoming(_ url: URL) async {
         pendingImportURL = url
         await importPendingIfReady()
+    }
+
+    /// Full reset after 清除所有本地数据: drops the whole object graph (models hold
+    /// caches — books, memories, provider state, reader sessions) and rebuilds
+    /// it from the wiped stores, so the app lands on the Today empty state in
+    /// the same session without a relaunch.
+    func rebuildAfterWipe() async {
+        library = nil
+        thoughts = nil
+        myMind = nil
+        settings = nil
+        achievements = nil
+        startupError = nil
+        await start()
     }
 
     private func importPendingIfReady() async {

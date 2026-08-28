@@ -76,6 +76,22 @@ public struct BookFileStore: BookFileManaging, Sendable {
         try? FileManager.default.removeItem(at: trashed.url)
     }
 
+    /// Removes every book artifact (EPUBs, staged and trashed leftovers) while
+    /// keeping the store's own directory structure — used by 清除所有本地数据 after
+    /// the database wipe so orphaned files from interrupted imports cannot
+    /// outlive it. The container itself is never deleted.
+    public func removeAllBookFiles() {
+        let directories = [directory, stagingDirectory, trashDirectory]
+        for directory in directories {
+            let contents = (try? FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil
+            )) ?? []
+            for item in contents where item.pathExtension == "epub" || item.pathExtension == "partial" {
+                try? FileManager.default.removeItem(at: item)
+            }
+        }
+    }
+
     /// Repairs an interrupted two-phase deletion. A book still present in the
     /// database gets its EPUB restored; an orphaned trash entry is safe to drop.
     public func reconcilePendingDeletions(existingBookIDs: [BookID]) throws {

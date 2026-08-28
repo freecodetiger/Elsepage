@@ -56,7 +56,7 @@ struct SettingsView: View {
                     NavigationLink {
                         DataSettingsView(model: model.data)
                     } label: {
-                        statusRow(title: "数据与导出", status: "导出 / 删除书籍与索引", muted: false, icon: "internaldrive")
+                        statusRow(title: "数据与导出", status: "导出 / 清除本地数据", muted: false, icon: "internaldrive")
                     }
                 }
             }
@@ -398,6 +398,8 @@ struct DiagnosticsView: View {
 struct DataSettingsView: View {
     @Bindable var model: DataSettingsModel
     @State private var showsDeleteAllConfirmation = false
+    @State private var showsWipeList = false
+    @State private var showsWipeConfirmation = false
 
     var body: some View {
         Form {
@@ -409,7 +411,7 @@ struct DataSettingsView: View {
                     }
                 }
             } footer: {
-                Text("导出包含你的书籍、阅读位置、高亮、笔记、反思与记录，不含 Provider 配置或 API Key。")
+                Text("导出包含你的书籍、阅读位置、高亮、笔记、反思、长期记忆与「AI 眼中的我」档案，不含 Provider 配置或 API Key。")
             }
 
             Section {
@@ -420,6 +422,8 @@ struct DataSettingsView: View {
             } footer: {
                 Text("删除书籍会一并移除数据库记录与沙盒文件（含索引），且不可撤销；Provider 配置和 Keychain 不受影响。")
             }
+
+            wipeSection
         }
         .navigationTitle("数据与隐私")
         .navigationBarTitleDisplayMode(.inline)
@@ -435,5 +439,54 @@ struct DataSettingsView: View {
         } message: {
             Text("将删除书库中全部书籍的数据库记录与沙盒文件（含阅读位置、高亮、笔记、反思、会话与索引）。此操作不可撤销。Provider 配置和 API Key 不受影响。")
         }
+        .alert("清除所有本地数据？", isPresented: $showsWipeConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("清除所有数据", role: .destructive) {
+                Task { await model.wipeAllLocalData() }
+            }
+        } message: {
+            Text("以上列出的全部内容将被永久删除，应用会回到首次启动状态。此操作不可撤销。")
+        }
     }
+
+    /// Stage one of the destructive confirmation: the first tap only reveals
+    /// what exactly will be deleted; the red confirm button inside opens the
+    /// final system alert that performs the wipe.
+    @ViewBuilder private var wipeSection: some View {
+        Section {
+            if !showsWipeList {
+                Button("清除所有本地数据", role: .destructive) {
+                    showsWipeList = true
+                }
+                .disabled(model.isWipingAllData)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("将删除以下全部内容：")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(Self.wipeScope, id: \.self) { item in
+                        Label(item, systemImage: "minus")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+                Button("确认清除所有数据", role: .destructive) {
+                    showsWipeConfirmation = true
+                }
+                .disabled(model.isWipingAllData)
+            }
+        } footer: {
+            Text("清除后应用回到首次启动状态：需要重新配置 Provider 并重新导入书籍。此操作不可撤销。")
+        }
+    }
+
+    private static let wipeScope = [
+        "全部书籍与其 EPUB 文件",
+        "全文与向量索引",
+        "阅读位置、高亮与笔记",
+        "阅读会话与反思（含思想、提问、引用与依据）",
+        "长期记忆与成就",
+        "Provider 配置与 API Key（Keychain）",
+        "全部本地偏好设置",
+    ]
 }
