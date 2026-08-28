@@ -90,6 +90,8 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     model.onSelectionFinished = { [weak navigator] in navigator?.clearSelection() }
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
+                        let point = event.point.map { AnnotationLog.rect(CGRect(origin: $0, size: .zero)) } ?? "nil"
+                        AnnotationLog.event("decoration.activated id=\(AnnotationLog.id(id)) rect=\(AnnotationLog.rect(event.rect)) point=\(point)")
                         self?.model.showHighlightMenu(for: id, anchor: event.rect)
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
@@ -113,6 +115,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
             do {
                 let anchor = try Self.anchor(from: locator)
+                AnnotationLog.event("locationChange href=\(locator.href) progression=\(locator.locations.progression ?? -1)")
                 model.save(locator: anchor)
                 model.currentChapterTitle = locator.title ?? model.currentChapterTitle
                 model.hideControls()
@@ -126,19 +129,28 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         }
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
-            guard self.navigator?.currentSelection == nil else { return }
+            let selectionActive = self.navigator?.currentSelection != nil
+            guard !selectionActive else {
+                AnnotationLog.event("didTapAt point=\(AnnotationLog.rect(CGRect(origin: point, size: .zero))) → ignored (selection active)")
+                return
+            }
             // One tap, one change: a tap on content dismisses an open
             // highlight menu instead of also toggling the reader chrome. A
             // tap inside the menu's grace window is swallowed entirely — it
             // is a stray event from the very tap that opened the menu.
             switch model.closeHighlightMenu() {
             case .closed, .deferred: return
-            case .absent: model.toggleControls()
+            case .absent:
+                AnnotationLog.event("didTapAt point=\(AnnotationLog.rect(CGRect(origin: point, size: .zero))) → chrome toggle")
+                model.toggleControls()
             }
         }
 
         func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
-            guard let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else { return true }
+            guard let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else {
+                AnnotationLog.event("selection.callback → fallback to system menu (anchor conversion failed)")
+                return true
+            }
             model.showSelectionMenu(
                 locator: anchor,
                 text: selection.locator.text.highlight ?? "",
@@ -196,6 +208,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         private func applyHighlights(_ highlights: [Highlight]) {
             guard let navigator else { return }
             guard highlights != lastHighlights else { return }
+            AnnotationLog.event("decorations.reapply count=\(highlights.count)")
             lastHighlights = highlights
             let decorations = highlights.compactMap { highlight -> Decoration? in
                 guard let locator = try? Self.readiumLocator(from: highlight.locator.json) else { return nil }
@@ -302,7 +315,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
         // Anchors are screen coordinates of the previous layout.
-        model.clearTransientAnnotationUI()
+        model.clearTransientAnnotationUI(reason: "rotation")
         flushPosition()
     }
 

@@ -102,6 +102,7 @@
 		C6BC143F6DAB75CAD8D9FBE5 /* BookIndexPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6091F0254AA8FBAD94F5956 /* BookIndexPersistenceTests.swift */; };
 		CA1CBECBFE0693EA2499D9D0 /* ReaderAgent in Frameworks */ = {isa = PBXBuildFile; productRef = 6F921148D5F8EDA27439F5AE /* ReaderAgent */; };
 		CA3EFC2A30136CE9B551DBC0 /* ReadiumPublicationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 071CD8577B634BCCA3B9B3A5 /* ReadiumPublicationIntegrationTests.swift */; };
+		CE4506DA1FB28713071F3376 /* AnnotationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E7C5405A6DC1ACEAD2282 /* AnnotationLog.swift */; };
 		CFB6ECB328C361B1DCAF2CE2 /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05A33B98BD21AF7593C5D6EF /* LibraryModel.swift */; };
 		D212B53D304B5A5C369D0E37 /* AgentRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 90714C30F7492E2D43B30D14 /* AgentRuntime */; };
 		D71C869DDC4716F8C3FBD66D /* ReadiumServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A3069ECDB501E8EF30EF58 /* ReadiumServices.swift */; };
@@ -194,6 +195,7 @@
 		B6091F0254AA8FBAD94F5956 /* BookIndexPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookIndexPersistenceTests.swift; sourceTree = "<group>"; };
 		B6766AA682DF76C5C0963332 /* BookIndexStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookIndexStatusTests.swift; sourceTree = "<group>"; };
 		B9D511F1C39D1392E27F83BE /* SessionReflectionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReflectionSheet.swift; sourceTree = "<group>"; };
+		BB7E7C5405A6DC1ACEAD2282 /* AnnotationLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationLog.swift; sourceTree = "<group>"; };
 		C74DA42FD6542F0E48B90A18 /* OpenAICompatibleEmbeddingProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleEmbeddingProviderTests.swift; sourceTree = "<group>"; };
 		CF4F7D643BE30C426EADB07F /* RoutingTracePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTracePersistenceTests.swift; sourceTree = "<group>"; };
 		D36E449C5A23178A792E7E8E /* VoiceReflectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceReflectionTests.swift; sourceTree = "<group>"; };
@@ -351,6 +353,7 @@
 		6D7CCBFE126283EA0154C0BB /* Reader */ = {
 			isa = PBXGroup;
 			children = (
+				BB7E7C5405A6DC1ACEAD2282 /* AnnotationLog.swift */,
 				410CCE22CD5B9DA33F07EABF /* AnnotationUI.swift */,
 				E17217B45491685767A98789 /* ReaderModel.swift */,
 				4775351EC3328731E57858C0 /* ReaderScreen.swift */,
@@ -675,6 +678,7 @@
 				D78F722627EEC09BFADAD65D /* AchievementModel.swift in Sources */,
 				0A357A8D95A1A5F001355D65 /* AchievementToast.swift in Sources */,
 				97CCC85608273E7326D3D510 /* AgentMarkdownText.swift in Sources */,
+				CE4506DA1FB28713071F3376 /* AnnotationLog.swift in Sources */,
 				A538D7CE31833FE26C6D2EC2 /* AnnotationUI.swift in Sources */,
 				4AE7C3539EEB1E0403A71A2D /* AppModel.swift in Sources */,
 				D9300D54F299A3CC2E338B8E /* AppShell.swift in Sources */,

@@ -148,7 +148,7 @@ final class ReaderModel {
         }
     }
     func save(locator: BookLocator) {
-        clearTransientAnnotationUI()
+        clearTransientAnnotationUI(reason: "locationChange")
         currentLocator = locator
         progress = locator.totalProgression ?? progress
         let currentChapter = chapter(for: locator)
@@ -200,14 +200,17 @@ final class ReaderModel {
     // menu; acting on it closes it and clears the navigator selection.
 
     func showSelectionMenu(locator: BookLocator, text: String, frame: CGRect?) {
+        let replacedMenu = annotationMenu != nil
         annotationMenu = .selection(.init(locator: locator, text: text, frame: frame))
         showsControls = false
+        AnnotationLog.event("selection.show frame=\(AnnotationLog.rect(frame)) replacedMenu=\(replacedMenu) text=\"\(text.prefix(24))\"")
     }
 
     func dismissSelectionMenu() {
         guard case .selection = annotationMenu else { return }
         annotationMenu = nil
         onSelectionFinished?()
+        AnnotationLog.event("selection.dismiss (catcher tap)")
     }
 
     func createHighlightFromSelection(with color: HighlightColor) {
@@ -262,15 +265,27 @@ final class ReaderModel {
     @ObservationIgnored private var highlightMenuOpenedAt: TimeInterval = 0
 
     func showHighlightMenu(for id: UUID, anchor: CGRect?) {
-        guard highlights.contains(where: { $0.id == id }) else { return }
+        guard highlights.contains(where: { $0.id == id }) else {
+            AnnotationLog.event("menu.show id=\(AnnotationLog.id(id)) anchor=\(AnnotationLog.rect(anchor)) → rejected: highlight missing")
+            return
+        }
         if case .highlight(let current, _) = annotationMenu, current == id, anchor != nil {
-            guard CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt > Self.highlightMenuGraceInterval else { return }
+            let sinceOpen = CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt
+            let since = String(format: "%.3f", sinceOpen)
+            if sinceOpen <= Self.highlightMenuGraceInterval {
+                AnnotationLog.event("menu.reactivate id=\(AnnotationLog.id(id)) sinceOpen=\(since) → ignored (grace)")
+                return
+            }
+            AnnotationLog.event("menu.reactivate id=\(AnnotationLog.id(id)) sinceOpen=\(since) → toggled closed")
             annotationMenu = nil
             return
         }
+        let replacedSelection: Bool
+        if case .selection = annotationMenu { replacedSelection = true } else { replacedSelection = false }
         annotationMenu = .highlight(id: id, anchor: anchor)
         highlightMenuOpenedAt = CFAbsoluteTimeGetCurrent()
         showsControls = false
+        AnnotationLog.event("menu.open id=\(AnnotationLog.id(id)) anchor=\(AnnotationLog.rect(anchor)) replacedSelection=\(replacedSelection)")
     }
 
     /// Outcome of a tap-driven close attempt: the menu was dismissed, the tap
@@ -285,16 +300,23 @@ final class ReaderModel {
     /// Dismisses a visible highlight menu on a content tap; the result tells
     /// the caller whether the same tap may still toggle the reader chrome.
     func closeHighlightMenu() -> HighlightMenuClose {
-        guard case .highlight = annotationMenu else { return .absent }
-        guard CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt > Self.highlightMenuGraceInterval else { return .deferred }
+        guard case .highlight(let current, _) = annotationMenu else { return .absent }
+        let sinceOpen = CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt
+        let since = String(format: "%.3f", sinceOpen)
+        guard sinceOpen > Self.highlightMenuGraceInterval else {
+            AnnotationLog.event("menu.tapClose id=\(AnnotationLog.id(current)) sinceOpen=\(since) → deferred (grace)")
+            return .deferred
+        }
         annotationMenu = nil
+        AnnotationLog.event("menu.tapClose id=\(AnnotationLog.id(current)) sinceOpen=\(since) → closed")
         return .closed
     }
 
     /// Immediate programmatic dismissal (menu buttons, deletion) — no grace.
     func dismissHighlightMenu() {
-        guard case .highlight = annotationMenu else { return }
+        guard case .highlight(let current, _) = annotationMenu else { return }
         annotationMenu = nil
+        AnnotationLog.event("menu.dismiss id=\(AnnotationLog.id(current)) (programmatic)")
     }
 
     func changeHighlightColor(_ id: UUID, to color: HighlightColor) {
@@ -337,9 +359,13 @@ final class ReaderModel {
 
     /// Closes annotation menus. Called on navigation, rotation, and scene
     /// changes where stale screen coordinates would anchor UI to nothing.
-    func clearTransientAnnotationUI() {
+    func clearTransientAnnotationUI(reason: String) {
         if case .selection = annotationMenu { onSelectionFinished?() }
+        let hadMenu = annotationMenu != nil
         annotationMenu = nil
+        if hadMenu {
+            AnnotationLog.event("menu.clear reason=\(reason)")
+        }
     }
 
     func showNotice(_ kind: ReaderTransientNotice.Kind) {

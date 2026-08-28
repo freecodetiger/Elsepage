@@ -101,7 +101,7 @@ struct ReaderScreen: View {
             guard phase != .active else { return }
             // Annotation menu anchors are screen coordinates; drop them while
             // backgrounded so they cannot reappear stale after relaunch.
-            model.clearTransientAnnotationUI()
+            model.clearTransientAnnotationUI(reason: "background")
             model.savePreferences()
             Task {
                 await model.flushPosition()
