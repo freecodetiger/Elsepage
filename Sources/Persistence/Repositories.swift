@@ -13,6 +13,51 @@ public final class GRDBBookRepository: BookRepository, @unchecked Sendable {
     public func insert(_ book: Book) async throws { try await db.writer.write { db in try BookRecord(book).insert(db) } }
     public func markOpened(_ id: BookID, at date: Date) async throws { try await db.writer.write { db in try db.execute(sql: "UPDATE books SET lastOpenedAt = ? WHERE id = ?", arguments: [date, id.description]) } }
     public func delete(_ id: BookID) async throws { _ = try await db.writer.write { db in try BookRecord.deleteOne(db, key: id.description) } }
+    /// One grouped statement for the whole library grid: session duration,
+    /// highlight and reflection counts join per book, so loading stats for
+    /// dozens of books costs a single query instead of three per book.
+    public func libraryStats(for bookIDs: [BookID]) async throws -> [BookID: BookLibraryStats] {
+        guard !bookIDs.isEmpty else { return [:] }
+        let ids = bookIDs.map(\.description)
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        return try await db.writer.read { db in
+            // Dates are stored as ISO-like text, so duration must go through
+            // julianday(): the difference in days times 86400 gives seconds.
+            // Unfinished sessions (endedAt IS NULL) contribute no reading time.
+            let rows = try BookLibraryStatsRow.fetchAll(db, sql: """
+                SELECT books.id AS bookID,
+                       COALESCE(s.readingSeconds, 0) AS readingSeconds,
+                       COALESCE(h.highlightCount, 0) AS highlightCount,
+                       COALESCE(r.reflectionCount, 0) AS reflectionCount
+                FROM books
+                LEFT JOIN (
+                    SELECT bookID, ROUND(SUM(julianday(endedAt) - julianday(startedAt)) * 86400) AS readingSeconds
+                    FROM readingSessions WHERE endedAt IS NOT NULL GROUP BY bookID
+                ) s ON s.bookID = books.id
+                LEFT JOIN (SELECT bookID, COUNT(*) AS highlightCount FROM highlights GROUP BY bookID) h ON h.bookID = books.id
+                LEFT JOIN (SELECT bookID, COUNT(*) AS reflectionCount FROM reflections GROUP BY bookID) r ON r.bookID = books.id
+                WHERE books.id IN (\(placeholders))
+                """, arguments: StatementArguments(ids))
+            var stats: [BookID: BookLibraryStats] = [:]
+            stats.reserveCapacity(rows.count)
+            for row in rows {
+                guard let uuid = UUID(uuidString: row.bookID) else {
+                    throw PersistenceError.corruptRecord(table: "books", recordID: row.bookID, field: "id")
+                }
+                let bookStats = BookLibraryStats(
+                    readingSeconds: max(0, row.readingSeconds),
+                    highlightCount: row.highlightCount,
+                    reflectionCount: row.reflectionCount
+                )
+                // Books without any accumulated data stay absent, so cards can
+                // omit the whole metadata line.
+                if bookStats != BookLibraryStats() {
+                    stats[BookID(rawValue: uuid)] = bookStats
+                }
+            }
+            return stats
+        }
+    }
 }
 
 public final class GRDBReadingRepository: ReadingRepository, @unchecked Sendable {
@@ -60,6 +105,15 @@ public enum PersistenceError: Error {
     case inconsistentReflectionContext
     case missingReadingSession
     case corruptRecord(table: String, recordID: String, field: String)
+}
+
+/// Row projection for the library-stats aggregate; columns come from the
+/// custom grouped SELECT in `GRDBBookRepository.libraryStats`, not a table.
+private struct BookLibraryStatsRow: Codable, FetchableRecord {
+    var bookID: String
+    var readingSeconds: Double
+    var highlightCount: Int
+    var reflectionCount: Int
 }
 
 private struct BookRecord: Codable, FetchableRecord, PersistableRecord {

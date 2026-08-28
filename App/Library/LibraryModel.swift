@@ -26,6 +26,9 @@ final class LibraryModel {
 
     private(set) var books: [Book] = []
     private(set) var readingProgress: [BookID: Double] = [:]
+    /// Card statistics (阅读时长 / 划线 / 想法), loaded once per reload in a
+    /// single grouped query — never re-queried while search filters the grid.
+    private(set) var bookStats: [BookID: BookLibraryStats] = [:]
     private(set) var covers: [BookID: UIImage] = [:]
     private(set) var isImporting = false
     private(set) var deletingBookID: BookID?
@@ -68,6 +71,12 @@ final class LibraryModel {
             }
         }
         catch { errorMessage = error.localizedDescription }
+        // Card statistics are optional presentation data (like covers): a
+        // failed stats load keeps the previous values instead of failing the
+        // whole reload.
+        if let stats = try? await booksRepository.libraryStats(for: books.map(\.id)) {
+            bookStats = stats
+        }
     }
 
     func importBook(_ url: URL) async {
@@ -127,6 +136,12 @@ final class LibraryModel {
         readingProgress[book.id]
     }
 
+    /// Quiet per-card metadata line ("读过 24 分钟 · 划线 3 · 想法 2"), or nil
+    /// when nothing has accumulated yet so fresh books stay uncluttered.
+    func statsLine(for book: Book) -> String? {
+        bookStats[book.id]?.metadataDescription
+    }
+
     func cover(for book: Book) -> UIImage? {
         covers[book.id]
     }
@@ -163,6 +178,7 @@ final class LibraryModel {
             files.commitDeletion(trashed)
             books.removeAll { $0.id == book.id }
             readingProgress[book.id] = nil
+            bookStats[book.id] = nil
             covers[book.id] = nil
         } catch is CancellationError {
             return

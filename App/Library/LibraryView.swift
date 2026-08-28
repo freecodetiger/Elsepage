@@ -167,6 +167,14 @@ struct LibraryView: View {
                                 .font(ElsepageTheme.Typography.metadata)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                            // Quiet card statistics (PRD §6.2): omitted entirely
+                            // until a book has reading time or annotations.
+                            if let statsLine = model.statsLine(for: book) {
+                                Text(statsLine)
+                                    .font(ElsepageTheme.Typography.metadata)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                            }
                             if let progress = model.progress(for: book) {
                                 ProgressView(value: progress)
                                     .tint(.elsepageAccent)
@@ -201,6 +209,9 @@ struct LibraryView: View {
     }
 
     private func accessibilityLabel(for book: Book) -> String {
-        "\(book.title)，\(metadata(for: book))"
+        if let statsLine = model.statsLine(for: book) {
+            return "\(book.title)，\(metadata(for: book))，\(statsLine)"
+        }
+        return "\(book.title)，\(metadata(for: book))"
     }
 }
