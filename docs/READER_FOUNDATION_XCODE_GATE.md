@@ -2,16 +2,15 @@
 
 Reader Foundation is not release-ready until this checklist passes with a full Xcode installation, installed iOS platform, and simulator runtime. Portable `swift test` results do not satisfy this gate.
 
-## Current implementation status (2026-08-25)
+## Current implementation status (2026-08-28)
 
-The Reader Experience pass is code-complete and has passed portable Swift tests, an unsigned generic-device build, and the automated iOS simulator suites. It has **not** been manually exercised on a simulator or physical iPhone.
+The Reader Experience pass (annotation interaction v2, rebuilt in place) is code-complete and has passed portable Swift tests and an iOS simulator build. It has **not** been manually exercised on a physical iPhone.
 
 Verified environment:
 
 - Xcode 17 / iOS 26.5 SDK;
-- `swift test`: 65 tests passed;
-- unsigned `generic/platform=iOS` build: succeeded;
-- `xcodebuild ... -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test`: 50 core tests and 2 Readium publication integration tests passed;
+- `swift test`: 215 tests passed (including 12 new `AnnotationMenuPlacerTests`);
+- `xcodebuild -project ReadLoop.xcodeproj -scheme ReadLoop -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build`: succeeded.
 - Xcode test host and direct GRDB test dependency are explicitly generated from `project.yml`.
 
 The hosted simulator integration target currently logs duplicate Objective-C class warnings for Swift package modules linked into both the host app and test bundle. Tests pass, and the warning is confined to the hosted test process, but the package/linkage layout should be revisited if it causes casting failures or test instability. It must not be mistaken for physical-device Reader verification.
@@ -24,9 +23,9 @@ Implemented and covered where deterministic:
 - paginated and vertical-scroll modes;
 - bounded, deduplicated return history for TOC/search/annotation jumps;
 - persisted highlight decoration restoration and duplicate-anchor prevention;
-- one-action selection highlighting;
-- native SwiftUI multi-line note editor, including adding a note to an existing highlight;
-- deletion semantics that preserve independent Note content;
+- one-tap selection highlighting via the custom in-place selection toolbar (system edit menu suppressed, Readium `Selection.frame` anchoring — annotation interaction v2, see `docs/READER_EXPERIENCE_OPTIMIZATION_PLAN.md`);
+- live-saving note editor sheet, including adding a note to an existing highlight;
+- deletion semantics that preserve Note content (note unlink persisted; one-tap undo while the notice pill is visible);
 - debounced/cancellable search with stale-result rejection;
 - content-first chrome that hides after reading movement and ignores taps while text is selected.
 
@@ -55,7 +54,8 @@ The following remain device verification gates rather than claims:
 - Confirm corrupt, unsupported, and DRM-protected files produce an error and no Library entry or permanent EPUB.
 - Open an imported EPUB, page forward and backward, use chapter navigation, and confirm layout remains readable.
 - Terminate and relaunch the app; confirm the exact last Readium Locator is restored.
-- Select text and verify the 高亮 and 批注 actions appear and complete successfully.
+- Select text and verify the custom selection toolbar appears in place (color dots, 笔记, 聊聊, 复制) and a color dot creates the highlight in one tap; verify handle adjustment re-anchors the toolbar.
+- Tap an existing highlight and verify the highlight menu (recolor, 笔记, 删除 with undo pill) opens anchored to it.
 - Create a note and verify its original selected-text Locator remains navigable.
 - Reopen the publication and verify every persisted highlight is rendered in the expected color.
 - Navigate from a persisted highlight back to its Locator.
