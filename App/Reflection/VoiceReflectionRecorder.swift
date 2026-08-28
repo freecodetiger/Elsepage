@@ -7,6 +7,7 @@ import UIKit
 final class VoiceReflectionRecorder {
     private let provider: any LiveTranscriptionProvider
     private var streamTask: Task<Void, Never>?
+    private var pendingStartID: UUID?
 
     private(set) var state = VoiceReflectionState()
 
@@ -22,11 +23,20 @@ final class VoiceReflectionRecorder {
     }
 
     func start() async {
-        guard !isRecording else { return }
+        guard state.phase == .idle || state.phase == .cancelled || state.phase == .failed || state.phase == .transcriptReady else { return }
+        let startID = UUID()
+        pendingStartID = startID
+        defer {
+            if pendingStartID == startID { pendingStartID = nil }
+        }
         state.apply(.requestRecording)
         let permission = provider.authorizationStatus == .notDetermined
             ? await provider.requestAuthorization()
             : provider.authorizationStatus
+        guard pendingStartID == startID, state.phase == .requestingPermission else {
+            provider.cancel()
+            return
+        }
         state.apply(.permissionResolved(permission))
         guard permission == .authorized else { return }
         guard provider.isAvailable else {
@@ -72,6 +82,7 @@ final class VoiceReflectionRecorder {
     }
 
     func cancel() {
+        pendingStartID = nil
         streamTask?.cancel()
         streamTask = nil
         provider.cancel()
@@ -99,9 +110,18 @@ final class VoiceReflectionRecorder {
     }
 }
 
+enum VoiceReflectionControlStyle: Equatable {
+    case fullDraft
+    case compactComposer
+}
+
 struct VoiceReflectionControls: View {
     @Binding var editableText: String
     @Binding var audioFileName: String?
+    /// Conversation follow-ups use speech as an input method only. They do not
+    /// expose or persist a message-level audio file.
+    var allowsAudioSaving = true
+    var style: VoiceReflectionControlStyle = .fullDraft
     var canPolish = false
     var onPolish: (() async -> Void)? = nil
     /// Fired once per recording completion so the model can auto-optimize the
@@ -109,6 +129,8 @@ struct VoiceReflectionControls: View {
     /// a no-op after the first per-draft optimization.
     var onAutoPolish: (() async -> Void)? = nil
     var onVoiceTranscript: () -> Void = {}
+    var onRecordingStateChange: (Bool) -> Void = { _ in }
+    var onFailureMessageChange: (String?) -> Void = { _ in }
     @State private var recorder = VoiceReflectionRecorder()
     @State private var textBeforeRecording = ""
     @State private var pressTask: Task<Void, Never>?
@@ -117,38 +139,44 @@ struct VoiceReflectionControls: View {
 
     var body: some View {
         VStack(spacing: ElsepageTheme.Spacing.medium) {
-            statusLine
-            micButton
-            HStack(spacing: 12) {
-                Toggle("保存音频", isOn: Binding(
-                    get: { recorder.saveAudio },
-                    set: { recorder.saveAudio = $0 }
-                ))
-                .font(.caption)
-                .toggleStyle(.switch)
-                .accessibilityLabel("保存这段音频")
-                Spacer()
-                if canPolish, !editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button {
-                        Task {
-                            isPolishing = true
-                            await onPolish?()
-                            isPolishing = false
-                        }
-                    } label: {
-                        if isPolishing {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Label("优化", systemImage: "wand.and.stars")
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isPolishing)
-                }
+            if style == .fullDraft {
+                statusLine
             }
-            .disabled(recorder.state.phase == .requestingPermission)
+            micButton
+            if style == .fullDraft, allowsAudioSaving || canPolish {
+                HStack(spacing: 12) {
+                    if allowsAudioSaving {
+                        Toggle("保存音频", isOn: Binding(
+                            get: { recorder.saveAudio },
+                            set: { recorder.saveAudio = $0 }
+                        ))
+                        .font(.caption)
+                        .toggleStyle(.switch)
+                        .accessibilityLabel("保存这段音频")
+                    }
+                    Spacer()
+                    if canPolish, !editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button {
+                            Task {
+                                isPolishing = true
+                                await onPolish?()
+                                isPolishing = false
+                            }
+                        } label: {
+                            if isPolishing {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label("优化", systemImage: "wand.and.stars")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isPolishing)
+                    }
+                }
+                .disabled(recorder.state.phase == .requestingPermission)
+            }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: style == .fullDraft ? .infinity : nil)
         .onChange(of: recorder.latestTranscript) { _, transcript in
             let prefix = textBeforeRecording.trimmingCharacters(in: .whitespacesAndNewlines)
             editableText = transcript.isEmpty ? textBeforeRecording : [prefix, transcript].filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -157,14 +185,29 @@ struct VoiceReflectionControls: View {
             }
         }
         .onChange(of: recorder.state.audioFileName) { _, name in
-            audioFileName = name
+            audioFileName = allowsAudioSaving ? name : nil
+        }
+        .onChange(of: recorder.state.failureMessage) { _, message in
+            onFailureMessageChange(message)
         }
         .onChange(of: recorder.state.phase) { _, phase in
+            onRecordingStateChange(
+                phase == .requestingPermission || phase == .recording || phase == .stopping
+            )
             if phase == .transcriptReady {
                 Task { await onAutoPolish?() }
             }
         }
-        .onDisappear { recorder.cancel() }
+        .onAppear {
+            if !allowsAudioSaving {
+                recorder.saveAudio = false
+                audioFileName = nil
+            }
+        }
+        .onDisappear {
+            recorder.cancel()
+            onRecordingStateChange(false)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("语音感想")
     }
@@ -180,7 +223,7 @@ struct VoiceReflectionControls: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } else if recorder.state.hasTranscript {
-            Text("已转写，可继续编辑或润色")
+            Text("已转写，可继续编辑或续录")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -189,15 +232,17 @@ struct VoiceReflectionControls: View {
     /// Prominent bottom-center mic button. Both default interactions work:
     /// tap to start / tap to stop, and hold to start / release to stop.
     private var micButton: some View {
-        ZStack {
+        let size: CGFloat = style == .compactComposer ? 40 : 76
+        let iconSize: CGFloat = style == .compactComposer ? 17 : 30
+        return ZStack {
             Circle()
                 .fill(recorder.isRecording ? Color.red.opacity(0.12) : Color.elsepageAccent.opacity(0.10))
-                .frame(width: 76, height: 76)
+                .frame(width: size, height: size)
                 .overlay(
                     Circle().strokeBorder(recorder.isRecording ? Color.red : Color.elsepageAccent, lineWidth: 2)
                 )
             Image(systemName: recorder.isRecording ? "stop.fill" : "mic.fill")
-                .font(.system(size: 30))
+                .font(.system(size: iconSize))
                 .foregroundStyle(recorder.isRecording ? Color.red : Color.elsepageAccent)
         }
         .scaleEffect(recorder.isRecording ? 1.1 : 1.0)
@@ -244,6 +289,10 @@ struct VoiceReflectionControls: View {
     }
 
     private func beginRecording() {
+        if !allowsAudioSaving {
+            recorder.saveAudio = false
+            audioFileName = nil
+        }
         textBeforeRecording = editableText
         Task { await recorder.start() }
     }

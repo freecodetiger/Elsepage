@@ -1,4 +1,5 @@
 import AchievementCore
+import AgentRuntime
 import ContextRouting
 import Foundation
 import LibraryCore
@@ -19,6 +20,7 @@ final class ThoughtsModel {
     private let readerAgent: ReaderAgent
     private let traceRepository: (any RoutingTraceRepository)?
     private let reflections: any ReflectionRepository
+    private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     let achievements: AchievementModel?
 
     private(set) var entries: [ReflectionArchiveEntry] = []
@@ -37,6 +39,7 @@ final class ThoughtsModel {
         index: any BookIndexRepository,
         journal: any JournalRepository,
         readerAgent: ReaderAgent,
+        makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
         memoryRepository: (any MemoryRepository)? = nil,
         achievements: AchievementModel? = nil
@@ -49,6 +52,7 @@ final class ThoughtsModel {
         )
         self.reflections = reflections
         self.readerAgent = readerAgent
+        self.makePolishService = makePolishService
         self.traceRepository = traceRepository
         self.achievements = achievements
     }
@@ -100,6 +104,16 @@ final class ThoughtsModel {
                 break
             }
         }
+    }
+
+    func makeConversation(for reflection: Reflection) -> ReflectionConversationModel {
+        ReflectionConversationModel(
+            reflection: reflection,
+            repository: reflections,
+            readerAgent: readerAgent,
+            makePolishService: makePolishService,
+            achievements: achievements
+        )
     }
 
     private static func message(for failure: ReaderAgentFailure) -> String {

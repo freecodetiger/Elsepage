@@ -12,6 +12,7 @@ struct ThoughtsView: View {
     @State private var viewMode: ThoughtsViewMode = .timeline
     @State private var filter: ThoughtsArchiveFilter = .all
     @State private var expandedEntryID: ReflectionID?
+    @State private var selectedConversation: ReflectionConversationModel?
     let openSource: (Book, BookLocator) -> Void
 
     private var visibleEntries: [ReflectionArchiveEntry] {
@@ -55,6 +56,32 @@ struct ThoughtsView: View {
             .task { await model.reload() }
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)
+            }
+            .sheet(item: $selectedConversation) { conversation in
+                NavigationStack {
+                    ReflectionConversationView(
+                        model: conversation,
+                        openCitation: { evidence in
+                            guard let entry = model.entries.first(where: {
+                                $0.reflection.id == conversation.reflection.id
+                            }), evidence.bookID == entry.book.id,
+                                  let locator = evidence.locator else { return }
+                            openSource(entry.book, locator)
+                        },
+                        onConversationDeleted: {
+                            selectedConversation = nil
+                            Task { await model.reload() }
+                        }
+                    )
+                    .navigationTitle("会话")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { selectedConversation = nil }
+                        }
+                    }
+                }
+                .presentationBackground(Color.elsepageBackground)
             }
             .achievementToast(model.achievements)
             .alert("暂时无法完成操作", isPresented: Binding(
@@ -158,7 +185,13 @@ struct ThoughtsView: View {
     private var journalSections: some View {
         LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             ForEach(visibleJournalEntries) { entry in
-                JournalEntryCard(entry: entry, openSource: openSource)
+                JournalEntryCard(
+                    entry: entry,
+                    openConversation: {
+                        selectedConversation = model.makeConversation(for: entry.reflection)
+                    },
+                    openSource: openSource
+                )
             }
         }
     }
@@ -198,6 +231,9 @@ struct ThoughtsView: View {
                     } else {
                         showsSettings = true
                     }
+                },
+                openConversation: {
+                    selectedConversation = model.makeConversation(for: entry.reflection)
                 },
                 openSource: openSource
             )
@@ -245,6 +281,7 @@ private struct ThoughtEntryCard: View {
     var contextTrace: ContextPlanTrace?
     let toggleExpanded: () -> Void
     let requestReply: () -> Void
+    let openConversation: () -> Void
     let openSource: (Book, BookLocator) -> Void
 
     var body: some View {
@@ -312,6 +349,11 @@ private struct ThoughtEntryCard: View {
     }
 
     @ViewBuilder private var expandedContent: some View {
+        Button(action: openConversation) {
+            Label("打开会话", systemImage: "bubble.left.and.bubble.right")
+        }
+        .buttonStyle(.borderedProminent)
+
         if let response = entry.derivedAgentResponse {
             Divider()
             responseBlock(title: "回应", message: response)

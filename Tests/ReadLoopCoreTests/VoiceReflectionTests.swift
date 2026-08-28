@@ -21,6 +21,22 @@ import Testing
     #expect(state.hasTranscript)
 }
 
+@Test func voiceStateCanResumeRecordingAfterACompletedTranscript() {
+    var state = VoiceReflectionState()
+    state.apply(.requestRecording)
+    state.apply(.permissionResolved(.authorized))
+    state.apply(.recordingStarted)
+    state.apply(.transcription(.final("第一段")))
+    #expect(state.phase == .transcriptReady)
+
+    state.apply(.requestRecording)
+    state.apply(.permissionResolved(.authorized))
+    state.apply(.recordingStarted)
+    state.apply(.transcription(.final("第二段")))
+    #expect(state.phase == .transcriptReady)
+    #expect(state.transcript == "第二段")
+}
+
 @Test func deniedRestrictedUnavailableAndEmptyRecognitionAreRecoverableStates() {
     var denied = VoiceReflectionState()
     denied.apply(.requestRecording)

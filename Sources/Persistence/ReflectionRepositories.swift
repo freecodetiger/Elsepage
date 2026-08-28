@@ -235,6 +235,41 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
         }
     }
 
+    public func deleteLatestUserTurn(
+        in reflectionID: ReflectionID
+    ) async throws -> ReflectionConversationDeletionResult {
+        try await db.writer.write { db in
+            guard try ReflectionRecord.fetchOne(db, key: reflectionID.description) != nil else {
+                throw ReflectionConversationDeletionError.missingReflection
+            }
+            let records = try ReflectionMessageRecord
+                .filter(Column("reflectionID") == reflectionID.description)
+                .order(Column("createdAt"), Column("id"))
+                .fetchAll(db)
+
+            guard let userIndex = try records.lastIndex(where: { try $0.domain().author == .user }) else {
+                _ = try ReflectionRecord.deleteOne(db, key: reflectionID.description)
+                return .deletedConversation
+            }
+
+            let userMessage = try records[userIndex].domain()
+            for record in records[userIndex...] {
+                let messageID = record.id
+                // Journal rows intentionally have no message foreign key. Keep
+                // their derived projection consistent with the deleted turn.
+                try db.execute(sql: "DELETE FROM journalThoughts WHERE messageID = ?", arguments: [messageID])
+                try db.execute(sql: "DELETE FROM reflectionCitations WHERE messageID = ?", arguments: [messageID])
+                try db.execute(sql: "DELETE FROM agentQuestions WHERE messageID = ?", arguments: [messageID])
+                try db.execute(
+                    sql: "UPDATE agentQuestions SET status = 'open', answeredByMessageID = NULL WHERE answeredByMessageID = ?",
+                    arguments: [messageID]
+                )
+                _ = try ReflectionMessageRecord.deleteOne(db, key: messageID)
+            }
+            return .deletedFollowUp(userMessage.id)
+        }
+    }
+
     public func delete(id: ReflectionID) async throws {
         _ = try await db.writer.write { db in try ReflectionRecord.deleteOne(db, key: id.description) }
     }

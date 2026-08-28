@@ -181,6 +181,23 @@ public enum ReflectionValidationError: Error, Equatable {
     case missingEvidenceProvenance
 }
 
+public enum ReflectionConversationDeletionResult: Equatable, Sendable {
+    case deletedFollowUp(UUID)
+    case deletedConversation
+}
+
+public enum ReflectionConversationDeletionError: LocalizedError, Equatable, Sendable {
+    case missingReflection
+    case unsupportedRepository
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingReflection: "找不到这条 Reflection 会话。"
+        case .unsupportedRepository: "当前存储不支持删除 Reflection 会话。"
+        }
+    }
+}
+
 public protocol ReflectionRepository: Sendable {
     func reflection(id: ReflectionID) async throws -> Reflection?
     func reflections(for bookID: BookID) async throws -> [Reflection]
@@ -204,9 +221,16 @@ public protocol ReflectionRepository: Sendable {
     func saveConnection(_ connection: ReflectionConnection) async throws
     func evidence(for reflectionID: ReflectionID) async throws -> [ReflectionEvidence]
     func appendEvidence(_ evidence: ReflectionEvidence) async throws
+    /// Deletes exactly one user-owned turn using stack semantics. When follow-ups
+    /// exist, deletes only the newest user message and every derived Agent message
+    /// after it. Otherwise deletes the root Reflection and its entire conversation.
+    func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult
     func delete(id: ReflectionID) async throws
 }
 
 public extension ReflectionRepository {
     func allReflections() async throws -> [Reflection] { [] }
+    func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult {
+        throw ReflectionConversationDeletionError.unsupportedRepository
+    }
 }

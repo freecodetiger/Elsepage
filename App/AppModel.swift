@@ -158,6 +158,7 @@ final class AppModel {
                 index: bookIndex,
                 journal: journal,
                 readerAgent: readerAgent,
+                makePolishService: makePolishService,
                 traceRepository: routingTraces,
                 memoryRepository: memories,
                 achievements: achievements

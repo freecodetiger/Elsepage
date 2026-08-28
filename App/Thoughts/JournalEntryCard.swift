@@ -9,6 +9,7 @@ import SwiftUI
 /// the source, and Memory-change snapshots.
 struct JournalEntryCard: View {
     let entry: JournalEntry
+    let openConversation: () -> Void
     let openSource: (Book, BookLocator) -> Void
 
     @State private var isExpanded = false
@@ -78,6 +79,11 @@ struct JournalEntryCard: View {
     }
 
     @ViewBuilder private var expandedContent: some View {
+        Button(action: openConversation) {
+            Label("打开会话", systemImage: "bubble.left.and.bubble.right")
+        }
+        .buttonStyle(.borderedProminent)
+
         if let session = entry.session, session.duration != nil {
             Divider()
             row(title: "本次阅读", systemImage: "clock", value: sessionLine(session))

@@ -52,7 +52,7 @@ public struct VoiceReflectionState: Equatable, Sendable {
 
     public mutating func apply(_ action: VoiceReflectionAction) {
         switch action {
-        case .requestRecording where phase == .idle || phase == .cancelled || phase == .failed:
+        case .requestRecording where phase == .idle || phase == .cancelled || phase == .failed || phase == .transcriptReady:
             phase = .requestingPermission
             failureMessage = nil
         case .permissionResolved(.authorized) where phase == .requestingPermission:

@@ -108,6 +108,46 @@ import Testing
     #expect(try await reading.highlights(for: book.id).map(\.id) == [highlight.id])
 }
 
+@Test func deletingConversationTurnsIsStrictlyNewestFirstAndFinallyDeletesRoot() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book(); try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(bookID: book.id, originalText: "最初的想法", inputKind: .text)
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [])
+
+    let initialAgent = try ReflectionMessage(
+        reflectionID: reflection.id, author: .agent, source: .agentGenerated,
+        content: "第一次回应", createdAt: Date(timeIntervalSince1970: 1)
+    )
+    let firstFollowUp = try ReflectionMessage(
+        reflectionID: reflection.id, author: .user, source: .userInput,
+        content: "第一次追加", createdAt: Date(timeIntervalSince1970: 2)
+    )
+    let firstReply = try ReflectionMessage(
+        reflectionID: reflection.id, author: .agent, source: .agentGenerated,
+        content: "对第一次追加的回应", createdAt: Date(timeIntervalSince1970: 3)
+    )
+    let latestFollowUp = try ReflectionMessage(
+        reflectionID: reflection.id, author: .user, source: .userInput,
+        content: "最新追加", createdAt: Date(timeIntervalSince1970: 4)
+    )
+    let latestReply = try ReflectionMessage(
+        reflectionID: reflection.id, author: .agent, source: .agentGenerated,
+        content: "对最新追加的回应", createdAt: Date(timeIntervalSince1970: 5)
+    )
+    for message in [initialAgent, firstFollowUp, firstReply, latestFollowUp, latestReply] {
+        try await repository.appendMessage(message)
+    }
+
+    #expect(try await repository.deleteLatestUserTurn(in: reflection.id) == .deletedFollowUp(latestFollowUp.id))
+    #expect(try await repository.messages(for: reflection.id).map(\.id) == [initialAgent.id, firstFollowUp.id, firstReply.id])
+    #expect(try await repository.deleteLatestUserTurn(in: reflection.id) == .deletedFollowUp(firstFollowUp.id))
+    #expect(try await repository.messages(for: reflection.id).map(\.id) == [initialAgent.id])
+    #expect(try await repository.deleteLatestUserTurn(in: reflection.id) == .deletedConversation)
+    #expect(try await repository.reflection(id: reflection.id) == nil)
+    #expect(try await repository.messages(for: reflection.id).isEmpty)
+}
+
 @Test func deletingBookCascadesSessionsAndReflections() async throws {
     let database = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: database)

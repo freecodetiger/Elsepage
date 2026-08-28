@@ -3,6 +3,7 @@ import AVFAudio
 import AVFoundation
 import CoreMedia
 import Foundation
+import OSLog
 import Speech
 
 /// Apple system Speech adapter. Streams audio to Speech and, when requested via
@@ -10,10 +11,18 @@ import Speech
 /// file (MP3 on real devices, AAC on the simulator which has no MP3 encoder).
 @MainActor
 public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider {
-    private let audioEngine = AVAudioEngine()
+    private nonisolated static let defaultLocaleIdentifier = "zh-CN"
+    private nonisolated static let permissionTimeout: Duration = .seconds(8)
+    private nonisolated static let permissionLogger = Logger(subsystem: "com.readloop.reader", category: "SpeechPermission")
+
+    // AVAudioEngine can retain an empty graph after an audio route changes.
+    // Recreate it for every recording so a stopped engine is never reused.
+    private var audioEngine: AVAudioEngine?
+    private var inputTapInstalled = false
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
+    private var activeRecordingID: UUID?
 
     private var audioDestination: URL?
     private var extAudioFile: ExtAudioFileRef?
@@ -26,27 +35,80 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
     public var authorizationStatus: SpeechAuthorization {
         let speech = Self.map(SFSpeechRecognizer.authorizationStatus())
         let microphone = AVAudioSession.sharedInstance().recordPermission
+        // Speech and microphone are independent permissions. Treat an
+        // undetermined microphone permission as undetermined even when Speech
+        // is already authorized, so start() waits for the mic prompt to finish
+        // before touching AVAudioEngine.
         if microphone == .denied { return .denied }
+        if microphone == .undetermined { return .notDetermined }
         return speech
     }
 
     public var isAvailable: Bool {
-        SFSpeechRecognizer()?.isAvailable == true
+        SFSpeechRecognizer(locale: Locale(identifier: Self.defaultLocaleIdentifier))?.isAvailable == true
     }
 
     public func requestAuthorization() async -> SpeechAuthorization {
-        let speech = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: Self.map(status))
+        Self.permissionLogger.info("[VOICE_PERMISSION] request started")
+        let speech: SpeechAuthorization
+        if Self.map(SFSpeechRecognizer.authorizationStatus()) == .notDetermined {
+            guard let resolved = await awaitPermission(kind: "speech") else {
+                Self.permissionLogger.error("[VOICE_PERMISSION] speech request timed out")
+                return .denied
             }
+            speech = resolved
+        } else {
+            speech = Self.map(SFSpeechRecognizer.authorizationStatus())
+            Self.permissionLogger.info("[VOICE_PERMISSION] speech already resolved: \(String(describing: speech), privacy: .public)")
         }
-        guard speech == .authorized else { return speech }
-        let microphone = await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                continuation.resume(returning: granted)
+        guard speech == .authorized else {
+            Self.permissionLogger.info("[VOICE_PERMISSION] finished: speech=\(String(describing: speech), privacy: .public)")
+            return speech
+        }
+        let microphone: Bool
+        if AVAudioSession.sharedInstance().recordPermission == .undetermined {
+            guard let resolved = await awaitPermission(kind: "microphone") else {
+                Self.permissionLogger.error("[VOICE_PERMISSION] microphone request timed out")
+                return .denied
             }
+            microphone = resolved == .authorized
+        } else {
+            microphone = AVAudioSession.sharedInstance().recordPermission == .granted
+            Self.permissionLogger.info("[VOICE_PERMISSION] microphone already resolved: \(microphone, privacy: .public)")
         }
-        return microphone ? .authorized : .denied
+        let result: SpeechAuthorization = microphone ? .authorized : .denied
+        Self.permissionLogger.info("[VOICE_PERMISSION] finished: speech=authorized microphone=\(microphone, privacy: .public) result=\(String(describing: result), privacy: .public)")
+        return result
+    }
+
+    private nonisolated func awaitPermission(kind: String) async -> SpeechAuthorization? {
+        await withTaskGroup(of: SpeechAuthorization?.self, returning: SpeechAuthorization?.self) { group in
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    Self.permissionLogger.info("[VOICE_PERMISSION] \(kind, privacy: .public) request dispatched")
+                    if kind == "speech" {
+                        SFSpeechRecognizer.requestAuthorization { status in
+                            let resolved = Self.map(status)
+                            Self.permissionLogger.info("[VOICE_PERMISSION] speech callback: \(String(describing: resolved), privacy: .public)")
+                            continuation.resume(returning: resolved)
+                        }
+                    } else {
+                        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                            Self.permissionLogger.info("[VOICE_PERMISSION] microphone callback: \(granted, privacy: .public)")
+                            continuation.resume(returning: granted ? .authorized : .denied)
+                        }
+                    }
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: Self.permissionTimeout)
+                Self.permissionLogger.error("[VOICE_PERMISSION] \(kind, privacy: .public) timeout after 8s")
+                return nil
+            }
+            let result = await group.next() ?? nil
+            group.cancelAll()
+            return result
+        }
     }
 
     public func prepareAudioRecording(at url: URL?) throws {
@@ -56,65 +118,84 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
 
     public func start(localeIdentifier: String?) throws -> AsyncThrowingStream<TranscriptionEvent, Error> {
         cancel()
-        let recognizer = localeIdentifier.map { SFSpeechRecognizer(locale: Locale(identifier: $0)) } ?? SFSpeechRecognizer()
+        let locale = Locale(identifier: localeIdentifier ?? Self.defaultLocaleIdentifier)
+        let recognizer = SFSpeechRecognizer(locale: locale)
         guard let recognizer, recognizer.isAvailable else { throw SpeechProviderError.recognitionUnavailable }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
+        request.addsPunctuation = true
 
-        // Configure and activate the audio session BEFORE touching the engine's
-        // input node. On a real device the input format is not determined until
-        // the session is active; calling `outputFormat(forBus:)`/`installTap`
-        // first yields a zero-rate format and crashes with EXC_BAD_ACCESS
-        // (simulator is lenient, which is why this only reproduced on-device).
+        // Configure and activate the audio session before creating the engine.
+        // On a real device the input route may be absent even when permission is
+        // authorized. AVAudioEngine.prepare() raises an uncaught NSException
+        // when its graph has neither an input nor an output node, so this must be
+        // checked before touching the engine.
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
-            audioEngine.prepare()
         } catch {
+            finishAudio()
             throw SpeechProviderError.recordingCouldNotStart(error.localizedDescription)
         }
 
-        let inputNode = audioEngine.inputNode
+        guard session.isInputAvailable,
+              session.inputNumberOfChannels > 0,
+              !session.currentRoute.inputs.isEmpty else {
+            finishAudio()
+            throw SpeechProviderError.recordingCouldNotStart("麦克风输入路由不可用，请检查麦克风权限或音频设备后重试")
+        }
+
+        let engine = AVAudioEngine()
+        audioEngine = engine
+        // AVAudioEngine creates its singleton nodes lazily when they are first
+        // accessed. Access the input node before prepare(), otherwise a record-
+        // only engine has an empty graph and prepare() raises an NSException.
+        let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
+            finishAudio()
             throw SpeechProviderError.recordingCouldNotStart("麦克风输入格式不可用")
         }
+        engine.prepare()
         if let destination = audioDestination {
             extAudioFile = makeExtAudioFile(at: destination, inputFormat: format)
         }
-        let writer = extAudioFile
-        inputNode.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
-            request.append(buffer)
-            // Best-effort audio persistence; failure never blocks transcription.
-            if let writer { ExtAudioFileWriteAsync(writer, buffer.frameLength, buffer.audioBufferList) }
-        }
+        inputNode.installTap(
+            onBus: 0,
+            bufferSize: 1_024,
+            format: format,
+            block: Self.makeInputTap(request: request, writer: extAudioFile)
+        )
+        inputTapInstalled = true
 
         do {
-            try audioEngine.start()
+            try engine.start()
         } catch {
-            inputNode.removeTap(onBus: 0)
-            finishAudioWriter()
+            finishAudio()
             throw SpeechProviderError.recordingCouldNotStart(error.localizedDescription)
         }
 
         self.recognizer = recognizer
         recognitionRequest = request
+        let recordingID = UUID()
+        activeRecordingID = recordingID
         return AsyncThrowingStream { continuation in
             recognitionTask = recognizer.recognitionTask(with: request) { result, error in
                 let text = result?.bestTranscription.formattedString
                 let isFinal = result?.isFinal == true
                 let failure = error?.localizedDescription
                 Task { @MainActor [weak self] in
+                    guard let self, self.activeRecordingID == recordingID else { return }
                     if let text {
                         continuation.yield(isFinal ? .final(text) : .partial(text))
                     }
                     if isFinal {
-                        self?.finishAudio()
+                        self.finishAudio()
                         continuation.finish()
                     } else if let failure {
-                        self?.finishAudio()
+                        self.finishAudio()
                         continuation.finish(throwing: SpeechProviderError.recordingCouldNotStart(failure))
                     }
                 }
@@ -126,29 +207,55 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
     }
 
     public func stop() {
-        guard audioEngine.isRunning else { return }
+        guard let audioEngine, audioEngine.isRunning else { return }
         audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        removeInputTap(from: audioEngine)
         recognitionRequest?.endAudio()
         finishAudioWriter()
     }
 
     public func cancel() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
-        }
+        stopAudioEngine()
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         finishAudio()
     }
 
     private func finishAudio() {
+        stopAudioEngine()
         finishAudioWriter()
         recognitionTask = nil
         recognitionRequest = nil
         recognizer = nil
+        activeRecordingID = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func stopAudioEngine() {
+        guard let audioEngine else { return }
+        if audioEngine.isRunning { audioEngine.stop() }
+        removeInputTap(from: audioEngine)
+        self.audioEngine = nil
+    }
+
+    private func removeInputTap(from audioEngine: AVAudioEngine) {
+        guard inputTapInstalled else { return }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        inputTapInstalled = false
+    }
+
+    /// AVAudioNode invokes taps on its realtime audio queue, not on MainActor.
+    /// Keep this factory nonisolated so Swift does not insert an executor check
+    /// into the callback created by the MainActor-isolated provider.
+    private nonisolated static func makeInputTap(
+        request: SFSpeechAudioBufferRecognitionRequest,
+        writer: ExtAudioFileRef?
+    ) -> AVAudioNodeTapBlock {
+        { buffer, _ in
+            request.append(buffer)
+            // Best-effort audio persistence; failure never blocks transcription.
+            if let writer { ExtAudioFileWriteAsync(writer, buffer.frameLength, buffer.audioBufferList) }
+        }
     }
 
     private func finishAudioWriter() {
