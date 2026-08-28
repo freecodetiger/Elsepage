@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-08-29)
 
 ## Current Position
 
-Phase: 1 of 11 (信任基线)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-08-29 — 项目初始化:双里程碑路线图与多 worktree 并发协议确立,15 个旧 worktree 已清理
+Phase: 1 of 11 (信任基线) — 并行推进中
+Plan: Phase 2 已合并; Phase 1/3 执行中; 4/5 排队
+Status: In progress
+Last activity: 2026-08-29 — Phase 2 (Library/Today 补全) 合并进 main,232 tests 全绿
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 9% (2/22 plans)
 
 Milestone: v0.5 TestFlight 就绪 (Phases 1-6)
 Next milestone: v1.0 App Store 首发 (Phases 7-11)

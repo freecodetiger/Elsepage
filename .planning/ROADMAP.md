@@ -181,8 +181,8 @@ v1.0: 7 ‖ 8(并行)+ 9(依赖 5)→ 10 → 11
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. 信任基线 | v0.5 | 0/2 | Not started | - |
-| 2. Library/Today 补全 | v0.5 | 0/2 | Not started | - |
+| 1. 信任基线 | v0.5 | 0/2 | In progress | - |
+| 2. Library/Today 补全 | v0.5 | 2/2 | Complete | 2026-08-29 |
 | 3. Journal 用户主权 | v0.5 | 0/1 | Not started | - |
 | 4. Onboarding 三步引导 | v0.5 | 0/2 | Not started | - |
 | 5. ReaderAgentBench 最小可用 | v0.5 | 0/2 | Not started | - |
