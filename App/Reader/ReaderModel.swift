@@ -25,16 +25,17 @@ enum ReaderAnnotationMenu: Equatable {
     case highlight(id: UUID, anchor: CGRect?)
 }
 
-enum ReaderNoteEditorTarget: Hashable, Identifiable {
+enum ReaderNoteEditorTarget: Hashable {
     case highlight(UUID)
     case note(UUID)
+}
 
-    var id: String {
-        switch self {
-        case .highlight(let id): "highlight-\(id.uuidString)"
-        case .note(let id): "note-\(id.uuidString)"
-        }
-    }
+/// One note-editor presentation. Carries a fresh id per request so the
+/// item-based sheet always re-presents, even for the same note opened twice
+/// in a row.
+struct ReaderNoteEditorRequest: Identifiable, Equatable {
+    let id = UUID()
+    let target: ReaderNoteEditorTarget
 }
 
 /// Short-lived, non-blocking feedback pill. The delete kinds carry the exact
@@ -78,7 +79,7 @@ final class ReaderModel {
     var showsControls = true
     var jumpTargetJSON: Data?
     var annotationMenu: ReaderAnnotationMenu?
-    var noteEditorTarget: ReaderNoteEditorTarget?
+    var noteEditorRequest: ReaderNoteEditorRequest?
     var transientNotice: ReaderTransientNotice?
     private var pendingHighlightAfterJumpID: UUID?
     var contextReflection: SessionReflectionModel?
@@ -228,7 +229,12 @@ final class ReaderModel {
         annotationMenu = nil
         onSelectionFinished?()
         guard let highlight = saveHighlight(locator: context.locator, color: preferences.lastUsedHighlightColor) else { return }
-        noteEditorTarget = .highlight(highlight.id)
+        openNoteEditor(.highlight(highlight.id))
+    }
+
+    /// Opens the note editor for a highlight's note or a standalone note.
+    func openNoteEditor(_ target: ReaderNoteEditorTarget) {
+        noteEditorRequest = ReaderNoteEditorRequest(target: target)
     }
 
     func copySelection() {

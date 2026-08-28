@@ -1,5 +1,6 @@
 import ReaderCore
 import SwiftUI
+import UIKit
 
 // MARK: - Shared color mapping
 
@@ -44,22 +45,34 @@ extension HighlightColor {
 /// participates in the reader's layout (zero layout shift).
 struct ReaderAnnotationOverlays: View {
     let model: ReaderModel
-    fileprivate static let margin: CGFloat = 12
+    private static let margin: CGFloat = 12
     fileprivate static let gap: CGFloat = 10
     fileprivate static let menuSizeEstimate = CGSize(width: 320, height: 50)
 
+    /// Safe-area insets from the key window. The overlay's GeometryReader
+    /// ignores the safe area so its coordinates match the navigator's
+    /// full-screen frames 1:1 — which also means the insets it would report
+    /// itself are zero, so the authoritative values come from UIKit.
+    private static var windowInsets: EdgeInsets {
+        let insets = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
+        return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            let insets = proxy.safeAreaInsets
-            let fullSize = CGSize(
-                width: proxy.size.width + insets.leading + insets.trailing,
-                height: proxy.size.height + insets.top + insets.bottom
-            )
+            let insets = Self.windowInsets
+            let fullSize = proxy.size
             let fullContainer = CGRect(origin: .zero, size: fullSize)
             // Clamping bounds keep menus inside the safe area plus a margin.
-            let safeBounds = fullContainer.insetBy(
-                dx: insets.leading + Self.margin,
-                dy: insets.top + Self.margin
+            let safeBounds = CGRect(
+                x: insets.leading + Self.margin,
+                y: insets.top + Self.margin,
+                width: max(0, fullSize.width - insets.leading - insets.trailing - Self.margin * 2),
+                height: max(0, fullSize.height - insets.top - insets.bottom - Self.margin * 2)
             )
 
             ZStack {
@@ -91,7 +104,7 @@ struct ReaderAnnotationOverlays: View {
                             onSelectColor: { model.changeHighlightColor(id, to: $0) },
                             onNote: {
                                 model.closeHighlightMenu()
-                                model.noteEditorTarget = .highlight(id)
+                                model.openNoteEditor(.highlight(id))
                             },
                             onDelete: { model.deleteHighlightWithUndo(id) }
                         )
@@ -103,7 +116,7 @@ struct ReaderAnnotationOverlays: View {
                 if let notice = model.transientNotice {
                     TransientNoticePill(notice: notice, onUndo: { model.undoNotice() })
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 14)
+                        .padding(.bottom, insets.bottom + 14)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
@@ -112,6 +125,7 @@ struct ReaderAnnotationOverlays: View {
             .animation(ElsepageTheme.Motion.quick, value: model.annotationMenu)
             .animation(ElsepageTheme.Motion.quick, value: model.transientNotice)
         }
+        .ignoresSafeArea()
     }
 }
 

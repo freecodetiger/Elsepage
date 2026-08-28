@@ -64,14 +64,18 @@ struct ReaderScreen: View {
                     } else if let note = annotation.note {
                         model.jump(to: note.locator)
                         presentedSheet = nil
-                        model.noteEditorTarget = .note(note.id)
+                        model.openNoteEditor(.note(note.id))
                     }
                 }
             case .appearance: ReaderAppearanceSheet(model: model)
             }
         }
-        .sheet(item: $model.noteEditorTarget) { target in
-            NoteEditorSheet(model: model, target: target)
+        .sheet(item: $model.noteEditorRequest, onDismiss: {
+            // Reset explicitly so a later request with the same note always
+            // re-presents, whatever the automatic dismissal path did.
+            model.noteEditorRequest = nil
+        }) { request in
+            NoteEditorSheet(model: model, target: request.target)
         }
         .sheet(item: $model.contextReflection) { reflection in
             SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in

@@ -66,6 +66,8 @@ v1 方案中「创建前必须先选色」的产品结论自 v2 起废除：创�
 - 无锚点（如标注列表跳转到达）时停靠屏幕底部。
 - `selectionHandleZones` 给出选择手柄穿透区域（起点上、终点下），供捕获层挖孔。
 
+坐标系规则（真机验收修正，2026-08-28）：覆盖容器必须 `.ignoresSafeArea()`，使其局部坐标与 Readium navigator 的全屏 frame **1:1** 对齐；安全区数值从 key window（UIKit）读取——GeometryReader 在安全区内报告的 insets 为零，直接使用会把所有锚点下移一个状态栏高度、让菜单压住高亮。
+
 ### 1.5 状态模型
 
 ```swift
@@ -73,7 +75,7 @@ enum ReaderAnnotationMenu: Equatable {
     case selection(ReaderSelectionContext)        // locator + text + frame
     case highlight(id: UUID, anchor: CGRect?)     // anchor nil → 底部停靠
 }
-var noteEditorTarget: ReaderNoteEditorTarget?     // .highlight(UUID) / .note(UUID)
+var noteEditorRequest: ReaderNoteEditorRequest?   // 每次呈现携带新 UUID（同一条笔记二次打开也必然重新呈现）；onDismiss 显式复位
 var transientNotice: ReaderTransientNotice?       // copied / deletedHighlight(+undo 数据) / deletedNote
 ```
 
