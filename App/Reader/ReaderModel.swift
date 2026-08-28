@@ -254,23 +254,47 @@ final class ReaderModel {
 
     // MARK: Highlight menu
 
+    /// Stray events from the very tap that opened the menu (a pointer-derived
+    /// `didTapAt` or a duplicated decoration activation can race the menu
+    /// opening when the webview's decoration layout settles mid-tap) must not
+    /// close it again. Human re-taps always land later than this window.
+    static let highlightMenuGraceInterval: TimeInterval = 0.35
+    @ObservationIgnored private var highlightMenuOpenedAt: TimeInterval = 0
+
     func showHighlightMenu(for id: UUID, anchor: CGRect?) {
         guard highlights.contains(where: { $0.id == id }) else { return }
         if case .highlight(let current, _) = annotationMenu, current == id, anchor != nil {
+            guard CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt > Self.highlightMenuGraceInterval else { return }
             annotationMenu = nil
             return
         }
         annotationMenu = .highlight(id: id, anchor: anchor)
+        highlightMenuOpenedAt = CFAbsoluteTimeGetCurrent()
         showsControls = false
     }
 
-    /// Dismisses a visible highlight menu; returns whether one was open so
-    /// content taps can avoid also toggling the reader chrome.
-    @discardableResult
-    func closeHighlightMenu() -> Bool {
-        guard case .highlight = annotationMenu else { return false }
+    /// Outcome of a tap-driven close attempt: the menu was dismissed, the tap
+    /// fell inside the grace window (swallow it, do not toggle the chrome
+    /// either), or there was no menu at all.
+    enum HighlightMenuClose {
+        case closed
+        case deferred
+        case absent
+    }
+
+    /// Dismisses a visible highlight menu on a content tap; the result tells
+    /// the caller whether the same tap may still toggle the reader chrome.
+    func closeHighlightMenu() -> HighlightMenuClose {
+        guard case .highlight = annotationMenu else { return .absent }
+        guard CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt > Self.highlightMenuGraceInterval else { return .deferred }
         annotationMenu = nil
-        return true
+        return .closed
+    }
+
+    /// Immediate programmatic dismissal (menu buttons, deletion) — no grace.
+    func dismissHighlightMenu() {
+        guard case .highlight = annotationMenu else { return }
+        annotationMenu = nil
     }
 
     func changeHighlightColor(_ id: UUID, to color: HighlightColor) {
@@ -286,7 +310,7 @@ final class ReaderModel {
     /// offers a one-tap undo before the notice expires.
     func deleteHighlightWithUndo(_ id: UUID) {
         guard let highlight = highlights.first(where: { $0.id == id }) else { return }
-        closeHighlightMenu()
+        dismissHighlightMenu()
         let linkedNotes = notes.filter { $0.highlightID == id }
         let unlinkedNotes = linkedNotes.map(\.detachedFromHighlight)
         highlights.removeAll { $0.id == id }

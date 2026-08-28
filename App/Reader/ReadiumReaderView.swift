@@ -128,9 +128,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
             guard self.navigator?.currentSelection == nil else { return }
             // One tap, one change: a tap on content dismisses an open
-            // highlight menu instead of also toggling the reader chrome.
-            guard !model.closeHighlightMenu() else { return }
-            model.toggleControls()
+            // highlight menu instead of also toggling the reader chrome. A
+            // tap inside the menu's grace window is swallowed entirely — it
+            // is a stray event from the very tap that opened the menu.
+            switch model.closeHighlightMenu() {
+            case .closed, .deferred: return
+            case .absent: model.toggleControls()
+            }
         }
 
         func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
