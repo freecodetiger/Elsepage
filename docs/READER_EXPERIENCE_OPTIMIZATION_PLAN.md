@@ -1,8 +1,8 @@
 # Reader 阅读高亮与批注体验优化执行方案
 
-> 状态：待执行  
-> 更新日期：2026-08-28  
-> 适用范围：iPhone Reader；高亮创建、颜色选择、既有高亮查看、笔记编辑  
+> 状态：阶段 0–3 已完成代码落地；阶段 4 的人工 iPhone 验收待执行
+> 更新日期：2026-08-28
+> 适用范围：iPhone Reader；高亮创建、颜色选择、既有高亮查看、笔记编辑
 > 当前实现基线：`40295f4 feat(reader): add contextual annotation drawer and highlight colors`
 
 ## 1. 文档用途
@@ -189,12 +189,12 @@ enum AnnotationAnchor: Equatable {
 
 ## 6. 技术方案与边界
 
-### 6.1 当前实现事实
+### 6.1 当前实现事实（2026-08-28）
 
-- `ReaderScreen` 当前通过 `.sheet(item:)` 把 `selectedHighlightID` 映射到 `ReaderAnnotationDetailSheet`。
+- `ReaderScreen` 使用全屏 `ZStack`，在 Reader 之上呈现临时色板和紧凑批注卡；二者均不参与 Reader 的布局计算。
 - `ReadiumReaderView` 全屏并 `.ignoresSafeArea()`；这一点应保持，以确保 Reader frame 稳定。
-- `ReaderHostViewController.highlightSelection()` 当前先用默认色保存，再清除 selection；此顺序需要调整。
-- Readium decoration 点击已通过 `observeDecorationInteractions(inGroup:)` 返回事件；需先确认该事件在当前 Readium 3.3.0 中是否携带可转换的点击坐标或元素 rect。
+- `ReaderHostViewController.highlightSelection()` 与 `noteSelection()` 已先保存待选 Locator，用户点选颜色后才持久化。
+- Readium 3.3.0 的 `OnDecorationActivatedEvent` 已确认提供 `rect` 和 `point`，且坐标属于 navigator view；紧凑卡优先使用 `rect` 锚定。
 - `ReaderModel.update(highlight:color:)` 已具备乐观更新和失败回滚能力，应复用。
 
 ### 6.2 呈现层建议
@@ -230,7 +230,7 @@ enum AnnotationAnchor: Equatable {
 
 ## 7. 分阶段执行计划
 
-### 阶段 0：建立基线与能力探针
+### 阶段 0：建立基线与能力探针（完成）
 
 任务：
 
@@ -239,9 +239,9 @@ enum AnnotationAnchor: Equatable {
 3. 检查 Readium 3.3.0 的 selection/decorations API，完成第 6.3 节探针。
 4. 给零布局位移建立可检查的调试证据：记录 Reader frame、当前 Locator，以及分页/滚动位置变化。
 
-完成标准：基线测试结果已记录；锚点策略已基于真实 API 选定；没有产品代码行为变化。
+完成结果：Readium 3.3.0 的公开 `OnDecorationActivatedEvent` 提供 navigator view 坐标系中的 `rect` 与 `point`；实现采用 `rect` 就近锚定、无 rect 时底部悬浮 fallback。核心测试与 iPhone 17 Pro 模拟器构建通过。
 
-### 阶段 1：颜色前置与待提交选择
+### 阶段 1：颜色前置与待提交选择（完成）
 
 任务：
 
@@ -254,9 +254,9 @@ enum AnnotationAnchor: Equatable {
 
 完成标准：任一新高亮都由本次选色动作产生；取消不写数据库；重复 Locator 不新增记录；四种颜色重启后正确恢复。
 
-建议独立提交：`feat(reader): choose color before creating highlights`
+完成提交：`43d5259 feat(reader): choose color before creating highlights`
 
-### 阶段 2：紧凑信息卡替代默认详情 Sheet
+### 阶段 2：紧凑信息卡替代默认详情 Sheet（完成）
 
 任务：
 
@@ -268,9 +268,9 @@ enum AnnotationAnchor: Equatable {
 
 完成标准：点击高亮只出现紧凑卡；Reader frame 与位置不变；长笔记不会把卡片扩展为大面板；卡片不会遮住被点击高亮（fallback 场景除外，但仍保持原文位置）。
 
-建议独立提交：`feat(reader): show compact contextual annotation cards`
+完成提交：`bf51f4d feat(reader): show compact contextual annotation cards`
 
-### 阶段 3：编辑与完整详情渐进披露
+### 阶段 3：编辑与完整详情渐进披露（完成）
 
 任务：
 
@@ -282,7 +282,7 @@ enum AnnotationAnchor: Equatable {
 
 完成标准：普通点击不打开键盘或大 Sheet；编辑与详情均由明确动作触发；保存、取消、删除后状态一致且无孤立 UI。
 
-建议独立提交：`refactor(reader): progressively disclose annotation details`
+完成结果：紧凑卡只提供笔记预览、颜色、编辑和展开；完整原文、完整笔记、位置和删除继续在用户主动展开的详情 Sheet 中呈现。笔记创建入口会在选色完成后直接进入编辑。
 
 ### 阶段 4：iPhone 体验与无障碍验证
 
@@ -389,4 +389,3 @@ Agent 应从仓库配置读取准确命令，至少完成：
 - 自动测试和 iOS 构建通过；
 - `docs/READER_FOUNDATION_XCODE_GATE.md` 已同步真实验证结果；
 - 工作区不包含无关格式化、依赖 hash 漂移或其他噪声修改。
-
