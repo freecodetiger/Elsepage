@@ -59,4 +59,14 @@ public protocol BookRepository: Sendable {
     func insert(_ book: Book) async throws
     func markOpened(_ id: BookID, at date: Date) async throws
     func delete(_ id: BookID) async throws
+    /// Library-card statistics for the given books, aggregated in one grouped
+    /// query over existing tables (session durations, highlights, reflections).
+    /// Books without any accumulated data are simply absent from the result.
+    func libraryStats(for bookIDs: [BookID]) async throws -> [BookID: BookLibraryStats]
+}
+
+public extension BookRepository {
+    /// Fakes inherit an empty default; the GRDB implementation runs the real
+    /// aggregate query.
+    func libraryStats(for bookIDs: [BookID]) async throws -> [BookID: BookLibraryStats] { [:] }
 }

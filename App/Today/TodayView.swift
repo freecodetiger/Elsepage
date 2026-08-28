@@ -12,8 +12,13 @@ final class TodayModel {
     private(set) var readingStreak = ReadingStreak(days: 0)
     private(set) var thinkingStreak = ThinkingStreak(days: 0)
     private(set) var isLoading = false
+    /// Remembers "今天先不了" per session so the 补写 card stays quiet afterwards.
+    private let dismissals: ReflectionPromptDismissalStore
 
-    init(library: LibraryModel) { self.library = library }
+    init(library: LibraryModel, dismissals: ReflectionPromptDismissalStore = ReflectionPromptDismissalStore()) {
+        self.library = library
+        self.dismissals = dismissals
+    }
 
     func reload() async {
         guard !isLoading else { return }
@@ -30,7 +35,8 @@ final class TodayModel {
             state = TodayProductStateResolver.resolve(
                 currentBook: book,
                 sessions: sessions,
-                reflections: reflections
+                reflections: reflections,
+                dismissedSessionIDs: dismissals.dismissedSessionIDs()
             )
             await refreshStreaks()
         } catch is CancellationError {
@@ -38,6 +44,12 @@ final class TodayModel {
         } catch {
             state = .continueReading(book)
         }
+    }
+
+    /// Persists an explicit "今天先不了" for this session; completing a reflection
+    /// needs no flag because it is derived from the reflections table.
+    func dismissReflectionPrompt(for sessionID: ReadingSessionID) {
+        dismissals.dismiss(sessionID)
     }
 
     /// Streaks are GLOBAL: derived from every book's sessions/reflections.
@@ -68,6 +80,10 @@ final class TodayModel {
 struct TodayView: View {
     @State private var model: TodayModel
     @State private var reflection: SessionReflectionModel?
+    /// The session whose 补写 sheet is currently presented, so a close without
+    /// saving can be recorded as an explicit "今天先不了" for exactly that session.
+    @State private var presentedReflectionSessionID: ReadingSessionID?
+    @State private var didSaveReflectionInSheet = false
     let openBook: (Book) -> Void
     let openLibrary: () -> Void
     let achievements: AchievementModel?
@@ -97,6 +113,19 @@ struct TodayView: View {
             .task { await model.reload() }
             .sheet(item: $reflection) { reflection in
                 SessionReflectionSheet(model: reflection) { _ in
+                    didSaveReflectionInSheet = true
+                    Task { await model.reload() }
+                }
+            }
+            .onChange(of: reflection?.id) { _, currentID in
+                guard currentID == nil, let sessionID = presentedReflectionSessionID else { return }
+                presentedReflectionSessionID = nil
+                defer { didSaveReflectionInSheet = false }
+                // Closing without saving counts as "今天先不了": the card stays
+                // quiet for this session. Saving (or deleting afterwards) keeps
+                // being derived from the reflections table, not this flag.
+                if !didSaveReflectionInSheet {
+                    model.dismissReflectionPrompt(for: sessionID)
                     Task { await model.reload() }
                 }
             }
@@ -110,8 +139,12 @@ struct TodayView: View {
         case .continueReading(let book):
             todayCard(book: book, title: "今天，读一点就好。", action: "继续阅读") { openBook(book) }
         case .offerReflection(let book, let session):
-            todayCard(book: book, title: "刚才有什么东西，还留在脑子里吗？", action: "留下一点想法") {
+            // 补写入口（PRD §6.1 未完成的 Reflection）：上一段有意义的阅读还没有
+            // 留下想法。语气克制，不制造负罪感（PRD F4）。
+            todayCard(book: book, title: "刚才读的，还没有留下想法。", action: "补写想法") {
                 guard let locator = session.endLocator else { return }
+                didSaveReflectionInSheet = false
+                presentedReflectionSessionID = session.id
                 reflection = SessionReflectionModel(
                     book: book,
                     summary: SessionEndingSummary(session: session),
