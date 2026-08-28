@@ -42,6 +42,18 @@ public struct GRDBRoutingTraceRepository: RoutingTraceRepository, @unchecked Sen
             return RoutingTraceDiagnostics(traces: traces)
         }
     }
+
+    public func recentTraces(limit: Int) async throws -> [ContextPlanTrace] {
+        try await db.writer.read { db in
+            try RoutingTraceRecord
+                .order(Column("createdAt").desc, Column("id").desc)
+                .limit(max(0, limit))
+                .fetchAll(db)
+                .compactMap { record in
+                    try? JSONDecoder().decode(ContextPlanTrace.self, from: record.traceJSON)
+                }
+        }
+    }
 }
 
 private struct RoutingTraceRecord: Codable, FetchableRecord, PersistableRecord {

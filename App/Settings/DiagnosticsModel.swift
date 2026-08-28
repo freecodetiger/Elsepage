@@ -2,12 +2,16 @@ import ContextRouting
 import Observation
 
 /// Developer-facing routing observability: aggregates stored routing traces
-/// (fallback counts, average durations). Owned separately so the Settings
-/// diagnostics page is its own concern rather than a slice of the provider model.
+/// (fallback counts, average durations) plus the per-trace list that surfaces
+/// individual failures — fallback reason/detail only exist on each stored
+/// trace, so "why did that one route fail" needs the raw rows, not the totals.
+/// Owned separately so the Settings diagnostics page is its own concern rather
+/// than a slice of the provider model.
 @MainActor @Observable
 final class DiagnosticsModel {
     private let traceRepository: (any RoutingTraceRepository)?
     private(set) var routingDiagnostics: RoutingTraceDiagnostics?
+    private(set) var recentTraces: [ContextPlanTrace] = []
 
     init(traceRepository: (any RoutingTraceRepository)? = nil) {
         self.traceRepository = traceRepository
@@ -16,5 +20,6 @@ final class DiagnosticsModel {
     func reload() async {
         guard let traceRepository else { return }
         routingDiagnostics = try? await traceRepository.diagnostics()
+        recentTraces = (try? await traceRepository.recentTraces(limit: 30)) ?? []
     }
 }

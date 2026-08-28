@@ -405,4 +405,7 @@ public protocol RoutingTraceRepository: Sendable {
     func save(_ trace: ContextPlanTrace) async throws
     func latestTrace(for reflectionID: String) async throws -> ContextPlanTrace?
     func diagnostics() async throws -> RoutingTraceDiagnostics
+    /// Most recent traces, newest first. Powers the per-route diagnostics list
+    /// (fallback reason/detail are only persisted per trace, never aggregated).
+    func recentTraces(limit: Int) async throws -> [ContextPlanTrace]
 }

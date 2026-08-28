@@ -295,6 +295,41 @@ struct DiagnosticsView: View {
                 } footer: {
                     Text("记录每次 Agent 回应使用的上下文与耗时，仅存本机摘要，不保存原文。")
                 }
+
+                Section {
+                    ForEach(model.recentTraces, id: \.id) { trace in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(Self.timeText(trace.createdAt))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                if trace.usedFallback {
+                                    Text(Self.fallbackText(trace))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.red)
+                                } else {
+                                    Text("正常")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if trace.usedFallback {
+                                Text(Self.fallbackDetailText(trace))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(Self.metricsText(trace))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("最近路由")
+                } footer: {
+                    Text("回退原因里 invalidStructuredOutput 表示模型返回的计划无法解析，modelFailure 表示模型请求本身失败（细因为具体错误）。")
+                }
             } else {
                 Section { Text("暂无诊断数据") }
             }
@@ -304,11 +339,54 @@ struct DiagnosticsView: View {
         .task { await model.reload() }
     }
 
+    private static func timeText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .standard)
+    }
+
+    private static func fallbackText(_ trace: ContextPlanTrace) -> String {
+        if let detail = trace.fallbackDetail, !detail.isEmpty {
+            return "\(trace.fallbackReason?.rawValue ?? "unknown") · \(detail)"
+        }
+        return trace.fallbackReason?.rawValue ?? "unknown"
+    }
+
+    private static func fallbackDetailText(_ trace: ContextPlanTrace) -> String {
+        let detail = trace.fallbackDetail ?? ""
+        let reason = trace.fallbackReason?.rawValue ?? "unknown"
+        return detail.isEmpty ? reason : "\(reason)：\(detail)"
+    }
+
+    private static func metricsText(_ trace: ContextPlanTrace) -> String {
+        var parts = [
+            "路由\(Self.secondsText(trace.routingDuration))",
+            "检索\(Self.secondsText(trace.retrievalDuration))",
+            "回应\(Self.secondsText(trace.replyDuration))",
+        ]
+        if let metrics = trace.pipelineMetrics {
+            var evidence: [String] = []
+            if let book = metrics.expandedEvidenceCount { evidence.append("书\(book)") }
+            if let thought = metrics.reflectionEvidenceCount { evidence.append("思\(thought)") }
+            if let memory = metrics.memoryEvidenceCount { evidence.append("记\(memory)") }
+            if !evidence.isEmpty { parts.append("证据 " + evidence.joined(separator: "/")) }
+            if let tokens = trace.replyTokenUsage, let total = tokens.totalTokens {
+                parts.append("回应 tokens \(total)")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func secondsText(_ duration: Duration) -> String {
+        String(format: "%.2fs", secondsValue(duration))
+    }
+
     private static func durationText(_ duration: Duration?) -> String {
         guard let duration else { return "—" }
+        return String(format: "%.2f 秒", secondsValue(duration))
+    }
+
+    private static func secondsValue(_ duration: Duration) -> Double {
         let components = duration.components
-        let seconds = Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
-        return String(format: "%.2f 秒", seconds)
+        return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
     }
 }
 

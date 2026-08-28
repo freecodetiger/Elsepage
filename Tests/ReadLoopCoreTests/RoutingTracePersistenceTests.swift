@@ -66,6 +66,29 @@ import Testing
     #expect(abs(durationSeconds(routing) - 0.3) < 0.001)
 }
 
+@Test func recentTracesReturnsNewestFirstAndRespectsLimit() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "recent ones", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+
+    let repository = GRDBRoutingTraceRepository(database: database)
+    let reflectionID = reflection.id.description
+    try await repository.save(makeTrace(reflectionID: reflectionID, detail: "network", seconds: [0.1, 0.1, 0.1], createdAt: Date(timeIntervalSince1970: 1000)))
+    try await repository.save(makeTrace(reflectionID: reflectionID, detail: nil, seconds: [0.1, 0.1, 0.1], createdAt: Date(timeIntervalSince1970: 2000)))
+    try await repository.save(makeTrace(reflectionID: reflectionID, detail: "rateLimited", seconds: [0.1, 0.1, 0.1], createdAt: Date(timeIntervalSince1970: 3000)))
+
+    let recent = try await repository.recentTraces(limit: 2)
+    #expect(recent.count == 2)
+    #expect(recent.first?.fallbackDetail == "rateLimited")
+    #expect(recent.last?.fallbackDetail == nil)
+
+    let limited = try await repository.recentTraces(limit: 0)
+    #expect(limited.isEmpty)
+}
+
 @Test func routingTracePersistsWithoutRawUserText() async throws {
     let database = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: database)
