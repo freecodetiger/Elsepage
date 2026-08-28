@@ -9,6 +9,11 @@ import ReadingSessionCore
 public struct PersonalDataArchive: Codable, Sendable {
     public var exportedAt: Date
     public var books: [BookEntry]
+    /// Every long-term memory with all of its fields (claim, confidence,
+    /// evidence IDs, status, userEdited), matching My Mind's data source.
+    public var memories: [ReaderMemory]
+    /// The "AI 眼中的我" projection exactly as My Mind renders it.
+    public var readerProfile: ReaderProfileEntry
 
     public struct BookEntry: Codable, Sendable {
         public var book: Book
@@ -69,9 +74,30 @@ public struct PersonalDataArchive: Codable, Sendable {
         }
     }
 
-    public init(exportedAt: Date, books: [BookEntry]) {
+    public init(exportedAt: Date, books: [BookEntry], memories: [ReaderMemory], readerProfile: ReaderProfileEntry) {
         self.exportedAt = exportedAt
         self.books = books
+        self.memories = memories
+        self.readerProfile = readerProfile
+    }
+}
+
+/// The Reader Profile projection over the memory store — the same deterministic
+/// groupings My Mind ("AI 眼中的我") displays, so the export and the UI can never
+/// drift apart.
+public struct ReaderProfileEntry: Codable, Sendable {
+    /// Active profileTrait / preference / semantic memories, most recently updated first.
+    public var profileTraits: [ReaderMemory]
+    /// Every memory that has not been superseded (the "记忆" list).
+    public var activeMemories: [ReaderMemory]
+    /// Memories the user marked 不准确, newest first.
+    public var supersededMemories: [ReaderMemory]
+
+    public init(memories: [ReaderMemory]) {
+        let projection = ReaderProfileProjection(memories: memories)
+        profileTraits = projection.profileTraits
+        activeMemories = projection.activeMemories
+        supersededMemories = projection.supersededMemories
     }
 }
 
@@ -84,19 +110,22 @@ public struct PersonalDataExporter: Sendable {
     private let sessions: any ReadingSessionRepository
     private let reflections: any ReflectionRepository
     private let journal: any JournalRepository
+    private let memories: any MemoryRepository
 
     public init(
         books: any BookRepository,
         reading: any ReadingRepository,
         sessions: any ReadingSessionRepository,
         reflections: any ReflectionRepository,
-        journal: any JournalRepository
+        journal: any JournalRepository,
+        memories: any MemoryRepository
     ) {
         self.books = books
         self.reading = reading
         self.sessions = sessions
         self.reflections = reflections
         self.journal = journal
+        self.memories = memories
     }
 
     public func export() async throws -> Data {
@@ -140,6 +169,12 @@ public struct PersonalDataExporter: Sendable {
                 reflections: reflectionEntries
             ))
         }
-        return PersonalDataArchive(exportedAt: Date(), books: entries)
+        let memories = try await self.memories.memories()
+        return PersonalDataArchive(
+            exportedAt: Date(),
+            books: entries,
+            memories: memories,
+            readerProfile: ReaderProfileEntry(memories: memories)
+        )
     }
 }
