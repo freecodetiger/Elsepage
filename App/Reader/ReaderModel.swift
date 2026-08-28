@@ -1,4 +1,5 @@
 import AgentRuntime
+import CoreGraphics
 import Foundation
 import LibraryCore
 import Observation
@@ -45,6 +46,8 @@ final class ReaderModel {
     var showsControls = true
     var jumpTargetJSON: Data?
     var selectedHighlightID: UUID?
+    var selectedHighlightRect: CGRect?
+    private var pendingHighlightAfterJumpID: UUID?
     var shouldStartNoteEditing = false
     var pendingSelection: PendingReaderSelection?
     var contextReflection: SessionReflectionModel?
@@ -112,6 +115,7 @@ final class ReaderModel {
         }
     }
     func save(locator: BookLocator) {
+        if selectedHighlightID != nil { clearSelectedHighlight() }
         currentLocator = locator
         progress = locator.totalProgression ?? progress
         let currentChapter = chapter(for: locator)
@@ -131,6 +135,12 @@ final class ReaderModel {
         }
         if activeSession == nil {
             Task { [weak self] in await self?.startSessionIfNeeded(at: locator) }
+        }
+        if let pendingHighlightAfterJumpID,
+           let highlight = highlights.first(where: { $0.id == pendingHighlightAfterJumpID }),
+           highlight.locator.identifiesSameAnchor(as: locator) {
+            self.pendingHighlightAfterJumpID = nil
+            selectHighlight(highlight.id)
         }
     }
     @discardableResult
@@ -172,9 +182,10 @@ final class ReaderModel {
         onSelectionFinished?()
     }
 
-    func selectHighlight(_ id: UUID, startNoteEditing: Bool = false) {
+    func selectHighlight(_ id: UUID, startNoteEditing: Bool = false, rect: CGRect? = nil) {
         guard highlights.contains(where: { $0.id == id }) else { return }
         selectedHighlightID = id
+        selectedHighlightRect = rect
         shouldStartNoteEditing = startNoteEditing
         showsControls = false
     }
@@ -258,7 +269,7 @@ final class ReaderModel {
         }
     }
     func delete(highlight: Highlight) {
-        if selectedHighlightID == highlight.id { selectedHighlightID = nil }
+        if selectedHighlightID == highlight.id { clearSelectedHighlight() }
         highlights.removeAll { $0.id == highlight.id }
         for index in notes.indices where notes[index].highlightID == highlight.id {
             let note = notes[index]
@@ -272,6 +283,7 @@ final class ReaderModel {
 
     func clearSelectedHighlight() {
         selectedHighlightID = nil
+        selectedHighlightRect = nil
         shouldStartNoteEditing = false
     }
     func jump(to locator: BookLocator) {
@@ -281,6 +293,12 @@ final class ReaderModel {
         }
         jumpTargetJSON = locator.json
         showsControls = false
+    }
+
+    func jumpToHighlight(_ id: UUID) {
+        guard let highlight = highlights.first(where: { $0.id == id }) else { return }
+        pendingHighlightAfterJumpID = id
+        jump(to: highlight.locator)
     }
 
     func navigateBack() {

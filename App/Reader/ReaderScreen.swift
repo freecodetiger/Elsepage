@@ -52,6 +52,18 @@ struct ReaderScreen: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
+            if let highlightID = model.selectedHighlightID,
+               model.pendingSelection == nil {
+                ReaderAnnotationCompactCardOverlay(
+                    model: model,
+                    highlightID: highlightID,
+                    anchorRect: model.selectedHighlightRect,
+                    onEdit: { presentedSheet = .annotationDetail(.highlight(highlightID, startNoteEditing: true)) },
+                    onExpand: { presentedSheet = .annotationDetail(.highlight(highlightID)) }
+                )
+                .transition(.opacity)
+            }
+
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
         .animation(ElsepageTheme.Motion.quick, value: model.pendingSelection)
@@ -60,21 +72,22 @@ struct ReaderScreen: View {
         .statusBarHidden(model.isPrepared && !model.showsControls)
         .task { await model.prepare() }
         .onChange(of: model.selectedHighlightID) { _, id in
-            guard let id else { return }
-            presentedSheet = .annotationDetail(.highlight(id, startNoteEditing: model.shouldStartNoteEditing))
+            guard let id, model.shouldStartNoteEditing else { return }
+            presentedSheet = .annotationDetail(.highlight(id, startNoteEditing: true))
         }
         .sheet(item: $presentedSheet, onDismiss: {
-            model.clearSelectedHighlight()
+            model.shouldStartNoteEditing = false
         }) { sheet in
             switch sheet {
             case .contents: ContentsSheet(model: model)
             case .search: ReaderSearchSheet(model: model)
             case .annotations:
                 ReaderAnnotationsSheet(model: model) { highlight in
-                    model.jump(to: highlight.locator)
                     if let highlight = highlight.highlight {
-                        model.selectHighlight(highlight.id)
+                        model.jumpToHighlight(highlight.id)
+                        presentedSheet = nil
                     } else if let note = highlight.note {
+                        model.jump(to: note.locator)
                         presentedSheet = .annotationDetail(.note(note.id))
                     }
                 }
@@ -440,6 +453,121 @@ private struct ReaderAnnotation: Identifiable {
     let note: Note?
     var id: UUID { highlight?.id ?? note!.id }
     var locator: BookLocator { highlight?.locator ?? note!.locator }
+}
+
+private struct ReaderAnnotationCompactCardOverlay: View {
+    @Bindable var model: ReaderModel
+    let highlightID: UUID
+    let anchorRect: CGRect?
+    let onEdit: () -> Void
+    let onExpand: () -> Void
+
+    private var highlight: Highlight? {
+        model.highlights.first { $0.id == highlightID }
+    }
+
+    private var note: Note? {
+        model.notes.first { $0.highlightID == highlightID }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let highlight {
+                let width = min(proxy.size.width - 24, 360)
+                ReaderAnnotationCompactCard(
+                    highlight: highlight,
+                    note: note,
+                    onChangeColor: { model.update(highlight: highlight, color: $0) },
+                    onEdit: onEdit,
+                    onExpand: onExpand
+                )
+                .frame(width: width)
+                .position(
+                    Self.position(
+                        for: anchorRect,
+                        in: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets,
+                        cardSize: .init(width: width, height: 164)
+                    )
+                )
+            }
+        }
+        .onChange(of: highlight) { _, value in
+            if value == nil { model.clearSelectedHighlight() }
+        }
+    }
+
+    private static func position(for rect: CGRect?, in size: CGSize, safeAreaInsets: EdgeInsets, cardSize: CGSize) -> CGPoint {
+        let horizontalPadding: CGFloat = 12
+        let verticalPadding: CGFloat = 12
+        let lowerBound = safeAreaInsets.top + verticalPadding + cardSize.height / 2
+        let upperBound = size.height - safeAreaInsets.bottom - verticalPadding - cardSize.height / 2
+        let fallbackY = upperBound
+        guard let rect else {
+            return .init(x: size.width / 2, y: fallbackY)
+        }
+        let below = rect.maxY + verticalPadding + cardSize.height / 2
+        let above = rect.minY - verticalPadding - cardSize.height / 2
+        let y = below <= upperBound ? below : max(lowerBound, above)
+        let x = min(max(rect.midX, horizontalPadding + cardSize.width / 2), size.width - horizontalPadding - cardSize.width / 2)
+        return .init(x: x, y: y)
+    }
+}
+
+private struct ReaderAnnotationCompactCard: View {
+    let highlight: Highlight
+    let note: Note?
+    let onChangeColor: (HighlightColor) -> Void
+    let onEdit: () -> Void
+    let onExpand: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(highlight.locator.textHighlight ?? "高亮位置")
+                .font(.system(.subheadline, design: .serif, weight: .semibold))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Circle().fill(highlight.color.readerColor).frame(width: 9, height: 9)
+                Text(note?.body ?? "添加笔记")
+                    .font(.subheadline)
+                    .foregroundStyle(note == nil ? .secondary : .primary)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: ElsepageTheme.Spacing.small) {
+                Menu {
+                    ForEach(HighlightColor.allCases, id: \.self) { color in
+                        Button {
+                            onChangeColor(color)
+                        } label: {
+                            Label(color.readerName, systemImage: highlight.color == color ? "checkmark.circle.fill" : "circle.fill")
+                        }
+                    }
+                } label: {
+                    Label("颜色", systemImage: "paintpalette")
+                }
+
+                Spacer()
+
+                Button(note == nil ? "添加笔记" : "编辑", action: onEdit)
+                Button("展开", action: onExpand)
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.borderless)
+        }
+        .padding(14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.primary.opacity(0.08))
+        }
+        .shadow(color: .black.opacity(0.14), radius: 16, y: 7)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("高亮批注")
+    }
 }
 
 private struct ReaderAnnotationTarget: Hashable {

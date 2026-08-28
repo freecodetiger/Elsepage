@@ -92,7 +92,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     model.onSelectionFinished = { [weak navigator] in navigator?.clearSelection() }
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.model.selectHighlight(id)
+                        self?.model.selectHighlight(id, rect: event.rect)
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights(model.highlights)
@@ -129,6 +129,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
             guard self.navigator?.currentSelection == nil else { return }
+            if model.selectedHighlightID != nil {
+                model.clearSelectedHighlight()
+                return
+            }
             model.toggleControls()
         }
 
