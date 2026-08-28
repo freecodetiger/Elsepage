@@ -368,9 +368,12 @@ struct DiagnosticsView: View {
             if let thought = metrics.reflectionEvidenceCount { evidence.append("思\(thought)") }
             if let memory = metrics.memoryEvidenceCount { evidence.append("记\(memory)") }
             if !evidence.isEmpty { parts.append("证据 " + evidence.joined(separator: "/")) }
-            if let tokens = trace.replyTokenUsage, let total = tokens.totalTokens {
-                parts.append("回应 tokens \(total)")
-            }
+        }
+        if let routingTokens = trace.routingTokenUsage?.totalTokens {
+            parts.append("路由 tokens \(routingTokens)")
+        }
+        if let replyTokens = trace.replyTokenUsage?.totalTokens {
+            parts.append("回应 tokens \(replyTokens)")
         }
         return parts.joined(separator: " · ")
     }
