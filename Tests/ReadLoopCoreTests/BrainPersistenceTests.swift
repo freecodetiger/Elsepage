@@ -1,9 +1,13 @@
+import AgentRuntime
 import BrainCore
 import ContextEngineering
+import ContextRouting
 import Foundation
 import GRDB
 import LibraryCore
 import Persistence
+import ReaderCore
+import ReaderAgent
 import ReflectionCore
 import RetrievalCore
 import Testing
@@ -481,4 +485,207 @@ private final class CountingEmbeddingProvider: EmbeddingProvider, @unchecked Sen
     #expect(try await repository.evidence(for: a.id).isEmpty)
     #expect(try await repository.relations(of: a.id).isEmpty)
     #expect(try await repository.items().isEmpty)
+}
+
+// MARK: - Agent Bridge (phase 16)
+
+private func makeLocator(_ progression: Double) throws -> BookLocator {
+    let data = try JSONSerialization.data(withJSONObject: ["href": "0.xhtml", "locations": ["progression": progression]])
+    return try BookLocator(json: data, href: "0.xhtml", progression: progression)
+}
+
+@Test func brainBridgeProviderMapsCandidatesAndPins() throws {
+    let thought = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-bridge"), title: "自由意味着责任",
+        statement: "自由的核心是承担选择。", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+
+    let bridged = try #require(BrainContextProvider.candidate(
+        from: BrainCandidate(item: thought, lexicalScore: 0.4, semanticScore: nil)
+    ))
+    #expect(bridged.source == .brain)
+    #expect(bridged.relevance == 0.4)
+    #expect(bridged.metadata["brainKind"] == "thought")
+    #expect(bridged.metadata["brainTitle"] == "自由意味着责任")
+    #expect(bridged.content == "自由的核心是承担选择。")
+
+    let pinned = BrainContextProvider.pinnedCandidate(for: thought)
+    #expect(pinned.source == .pinnedBrain)
+    #expect(pinned.relevance == 1.0)
+    #expect(pinned.id == thought.id.rawValue)
+}
+
+@Test func brainBridgeAssemblerKeepsPinnedAheadAndSeparatesBrainFromEvidence() throws {
+    let evidenceLocator = try makeLocator(0.5)
+    let budget = ContextBudget(
+        totalCharacters: 6_000, nearbyCharacters: 1_200, bookEvidenceCharacters: 2_200,
+        pastThoughtCharacters: 800, conversationCharacters: 1_400
+    )
+    let pinned = BrainContextProvider.pinnedCandidate(for: .thought(Thought(
+        id: BrainItemID(rawValue: "t-pin"), title: "置顶想法", statement: "置顶内容",
+        stage: .evolving, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: Date(), updatedAt: Date()
+    )))
+    let book = BookEvidence(
+        id: .init(rawValue: "chunk-1"), bookID: BookID(), chapterTitle: "第一章",
+        excerpt: String(repeating: "书", count: 500), locator: evidenceLocator, score: 0.9
+    )
+
+    let result = ContextAssembler().assemble(
+        nearby: NearbyPassageCandidate(text: String(repeating: "近", count: 300), sourceID: "nearby", locator: evidenceLocator),
+        bookEvidence: [book], previousReflection: nil, memories: [],
+        reflectionBookID: BookID(), budget: budget,
+        brainCandidates: [pinned]
+    )
+
+    #expect(result.brainCandidates.map(\.source) == [.pinnedBrain])
+    #expect(result.brainCandidates.first?.content == "置顶内容")
+    #expect(result.evidence.isEmpty == false)
+    #expect(result.evidence.contains { $0.kind == .nearbyPassage })
+    // Brain items never become [E]-citable evidence rows.
+    #expect(!result.evidence.contains { $0.excerpt == "置顶内容" })
+}
+
+@Test func brainBridgeValidatorGatesAndCompilerEmitsBrainPolicy() throws {
+    func plan(withBrain: Bool) -> SemanticContextPlan {
+        var requests: [ContextRequest] = []
+        if withBrain {
+            requests.append(.brain(BrainContextRequest(query: "  自由与责任  ")))
+        }
+        return SemanticContextPlan(
+            intent: .conceptualQuestion, requests: requests,
+            response: SemanticResponsePlan(length: .short, posture: .respondOnly)
+        )
+    }
+    func input(hasBrain: Bool) -> ContextRoutingInput {
+        ContextRoutingInput(
+            interactionMode: .reflection,
+            currentReflection: "我一直在想自由与责任",
+            recentConversation: [],
+            currentReading: nil,
+            availableSources: .init(
+                hasNearbyPassage: false, hasBookIndex: false, hasPastThoughts: false,
+                hasSessionHighlight: nil, hasSessionNote: nil, hasBookReflections: nil,
+                hasBrainItems: hasBrain
+            ),
+            previousAgentAskedQuestion: false
+        )
+    }
+
+    // Gate: lane unavailable → request dropped with a correction.
+    let gated = SemanticPlanValidator().validate(plan(withBrain: true), input: input(hasBrain: false))
+    #expect(gated.plan.brainRequest == nil)
+    #expect(gated.corrections.contains { $0.contains("brain lane unavailable") })
+
+    // Lane available → kept (trimmed), compiled into policy.
+    let kept = SemanticPlanValidator().validate(plan(withBrain: true), input: input(hasBrain: true))
+    #expect(kept.plan.brainRequest?.query == "自由与责任")
+    #expect(kept.corrections.isEmpty)
+    let execution = ContextPolicyCompiler().compile(kept.plan, input: input(hasBrain: true))
+    let policy = try #require(execution.brain)
+    #expect(policy.query == "自由与责任")
+    #expect(policy.limit == BrainRetrievalPolicy.defaultLimit)
+
+    // No request → no policy.
+    let empty = ContextPolicyCompiler().compile(plan(withBrain: false), input: input(hasBrain: true))
+    #expect(empty.brain == nil)
+}
+
+@Test func brainBridgeReaderAgentSurfacesPlanRequestedAndPinnedBrainContext() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let brainRepo = GRDBBrainRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "我又想到了自由", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    try await brainRepo.save(.thought(Thought(
+        id: BrainItemID(rawValue: "t-e2e"), title: "自由意味着责任",
+        statement: "自由的选择带来不可转嫁的责任", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
+
+    // Call 1 = router plan (requests brain retrieval); call 2 = reply.
+    let planJSON = """
+    {"intent":"conceptualQuestion","nearbyPassage":"omit","bookRetrieval":null,"pastThoughtRetrieval":null,"brainRetrieval":{"query":"自由与责任"},"response":{"length":"short","posture":"respondOnly"}}
+    """
+    let client = BrainBridgeScriptedClient(responses: [planJSON, "自由确实意味着承担选择的后果。"])
+    let retriever = BrainRetriever(items: brainRepo)
+    let agent = ReaderAgent(
+        reflections: reflections, models: BrainBridgeClientFactory(client: client),
+        brainRetriever: retriever
+    )
+
+    var sawCompleted = false
+    for await event in agent.respond(to: reflection.id) {
+        if case .completed = event { sawCompleted = true }
+        if case .failed(let failure) = event { Issue.record("unexpected failure: \(failure)") }
+    }
+    #expect(sawCompleted)
+
+    let replyRequest = try #require(client.requests.count >= 2 ? client.requests[1] : nil)
+    let promptText = replyRequest.messages.map(\.content).joined(separator: "\n")
+    #expect(promptText.contains("自由的选择带来不可转嫁的责任"), "plan-requested brain item reaches the prompt")
+    #expect(promptText.contains("已成形想法与问题"))
+
+    // Pinned context reaches the prompt even when the plan does NOT request it.
+    let noBrainPlanJSON = """
+    {"intent":"passageObservation","nearbyPassage":"omit","bookRetrieval":null,"pastThoughtRetrieval":null,"response":{"length":"short","posture":"respondOnly"}}
+    """
+    // A fresh reflection: replying to the same one would hit the designed
+    // idempotent-retry path (existing agent reply returned directly).
+    let secondReflection = Reflection(bookID: book.id, originalText: "再想想人与他人", inputKind: .text)
+    try await reflections.insert(secondReflection, linkedHighlightIDs: [], evidence: [])
+    let pinnedClient = BrainBridgeScriptedClient(responses: [noBrainPlanJSON, "好。"])
+    let pinnedAgent = ReaderAgent(
+        reflections: reflections, models: BrainBridgeClientFactory(client: pinnedClient),
+        brainRetriever: retriever
+    )
+    let pinnedItem = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-pin-e2e"), title: "置顶讨论",
+        statement: "人与他人的距离", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    for await event in pinnedAgent.respond(to: secondReflection.id, activeBrain: pinnedItem) {
+        if case .failed(let failure) = event { Issue.record("unexpected failure: \(failure)") }
+    }
+    let pinnedPrompt = try #require(pinnedClient.requests.count >= 2 ? pinnedClient.requests[1] : nil)
+        .messages.map(\.content).joined(separator: "\n")
+    #expect(pinnedPrompt.contains("人与他人的距离"), "pinned context is never planner-vetoed")
+}
+
+private final class BrainBridgeScriptedClient: ModelClient, @unchecked Sendable {
+    let descriptor = ModelDescriptor(provider: "fake", model: "scripted", capabilities: .init(supportsStreaming: true))
+    private let responses: [String]
+    private let lock = NSLock()
+    private var callCount = 0
+    private var recorded: [ModelRequest] = []
+
+    init(responses: [String]) { self.responses = responses }
+
+    /// Recorded requests, in call order. Lock use is confined to sync contexts.
+    var requests: [ModelRequest] {
+        lock.lock(); defer { lock.unlock() }
+        return recorded
+    }
+
+    func stream(request: ModelRequest) -> AsyncThrowingStream<ModelEvent, Error> {
+        lock.lock()
+        let index = min(callCount, responses.count - 1)
+        let content = responses[index]
+        callCount += 1
+        recorded.append(request)
+        lock.unlock()
+        return AsyncThrowingStream { continuation in
+            continuation.yield(.started)
+            continuation.yield(.completed(ModelResponse(content: content)))
+            continuation.finish()
+        }
+    }
+}
+
+private struct BrainBridgeClientFactory: ModelClientFactory {
+    let client: any ModelClient
+    func makeClient() async throws -> any ModelClient { client }
 }

@@ -115,12 +115,14 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
       scope: currentSection | currentChapter | readSoFar
     pastThoughtRetrieval: null 或 {query, purpose}
       purpose: findContinuation | findChange | findContradiction | findRecurringQuestion
+    brainRetrieval: null 或 {query}
     response: {length, posture}
       length: short | medium | long
       posture: respondOnly | mayAskQuestion
 
     语义说明：
     - denseQuery：把当前诉求改写成表述完整的一句话，用于语义召回；lexicalTerms：人物名、术语、实体、原句关键词（空格分隔），用于词法召回；省略时都回退 query。
+    - brainRetrieval：仅当用户明确提及过去的想法、问题或之前想过什么时才请求，query 指向当时的主题；默认 null。
     - posture=mayAskQuestion 表示本轮允许提出问题；respondOnly 表示回应、整理或连接之后自然结束。
     - 取多少证据、候选数、是否重排、扩展方式与上下文预算由系统按 intent 与 purpose 决定，不在你的输出里。
 

@@ -1,4 +1,5 @@
 import AgentRuntime
+import BrainCore
 import ContextEngineering
 import ContextRouting
 import Foundation
@@ -80,6 +81,9 @@ public struct ReaderAgent: Sendable {
     private let contextRouter: any ReaderContextRouting
     private let planValidator: SemanticPlanValidator
     private let policyCompiler: ContextPolicyCompiler
+    /// Brain lane (phase 16): nil → the brain request face stays off and the
+    /// validator drops any planned brain retrieval.
+    private let brainRetriever: BrainRetriever?
     private let traceRepository: (any RoutingTraceRepository)?
     private let memories: (any MemoryRepository)?
     /// Optional semantic recall lane for reflection/memory retrieval (Phase 5).
@@ -96,6 +100,7 @@ public struct ReaderAgent: Sendable {
         contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
         planValidator: SemanticPlanValidator = .init(),
         policyCompiler: ContextPolicyCompiler = .init(),
+        brainRetriever: BrainRetriever? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
         memories: (any MemoryRepository)? = nil,
         semanticRanking: (any SemanticRanking)? = nil
@@ -109,13 +114,14 @@ public struct ReaderAgent: Sendable {
         self.contextRouter = contextRouter
         self.planValidator = planValidator
         self.policyCompiler = policyCompiler
+        self.brainRetriever = brainRetriever
         self.traceRepository = traceRepository
         self.memories = memories
         self.semanticRanking = semanticRanking
     }
 
-    public func respond(to reflectionID: ReflectionID) -> AsyncStream<ReaderAgentEvent> {
-        run(reflectionID: reflectionID, followUp: nil)
+    public func respond(to reflectionID: ReflectionID, activeBrain: BrainItem? = nil) -> AsyncStream<ReaderAgentEvent> {
+        run(reflectionID: reflectionID, followUp: nil, activeBrain: activeBrain)
     }
 
     /// Persists the user's continuation before making an optional model request.
@@ -123,14 +129,16 @@ public struct ReaderAgent: Sendable {
     public func continueDiscussion(
         on reflectionID: ReflectionID,
         messageID: UUID,
-        text: String
+        text: String,
+        activeBrain: BrainItem? = nil
     ) -> AsyncStream<ReaderAgentEvent> {
-        run(reflectionID: reflectionID, followUp: (messageID, text))
+        run(reflectionID: reflectionID, followUp: (messageID, text), activeBrain: activeBrain)
     }
 
     private func run(
         reflectionID: ReflectionID,
-        followUp: (id: UUID, text: String)?
+        followUp: (id: UUID, text: String)?,
+        activeBrain: BrainItem? = nil
     ) -> AsyncStream<ReaderAgentEvent> {
         AsyncStream { continuation in
             let task = Task {
@@ -212,7 +220,8 @@ public struct ReaderAgent: Sendable {
                             hasPastThoughts: !allCandidates.isEmpty,
                             hasSessionHighlight: sessionContext.hasSessionHighlight,
                             hasSessionNote: sessionContext.hasSessionNote,
-                            hasBookReflections: !sameBookCandidates.isEmpty
+                            hasBookReflections: !sameBookCandidates.isEmpty,
+                            hasBrainItems: brainRetriever != nil
                         ),
                         previousAgentAskedQuestion: Self.previousAgentAskedQuestion(in: messages)
                     )
@@ -276,13 +285,24 @@ public struct ReaderAgent: Sendable {
                         nearbyCandidate = nil
                     }
                     let assemblyStart = clock.now
+                    // Brain bridge (phase 16): plan-requested retrieval plus the
+                    // user's explicitly active item (pinned — never planner-vetoed).
+                    var brainCandidates: [ContextCandidate] = []
+                    if let brainPolicy = executionPlan.brain, let brainRetriever {
+                        let provider = BrainContextProvider(retriever: brainRetriever)
+                        brainCandidates = await provider.candidates(query: brainPolicy.query, limit: brainPolicy.limit)
+                    }
+                    if let activeBrain {
+                        brainCandidates.insert(BrainContextProvider.pinnedCandidate(for: activeBrain), at: 0)
+                    }
                     let assembly = ContextAssembler().assemble(
                         nearby: nearbyCandidate,
                         bookEvidence: bookContext?.evidence ?? [],
                         previousReflection: prior,
                         memories: matchedMemories,
                         reflectionBookID: reflection.bookID,
-                        budget: executionPlan.budget
+                        budget: executionPlan.budget,
+                        brainCandidates: brainCandidates
                     )
                     let assemblyDuration = assemblyStart.duration(to: clock.now)
                     let responseEvidence = assembly.evidence.enumerated().map { offset, item in
@@ -306,6 +326,7 @@ public struct ReaderAgent: Sendable {
                     pipelineMetrics.semanticCacheHits = semanticRanking?.cacheHitMiss.hits
                     pipelineMetrics.semanticCacheMisses = semanticRanking?.cacheHitMiss.misses
                     pipelineMetrics.semanticUnavailable = semanticRanking == nil
+                    pipelineMetrics.brainCandidateCount = assembly.brainCandidates.isEmpty ? nil : assembly.brainCandidates.count
                     let citationBoundary: ReadingBoundary?
                     if let currentLocator, let contextBuilder {
                         citationBoundary = await contextBuilder.readingBoundary(for: reflection.bookID, locator: currentLocator)
@@ -330,6 +351,9 @@ public struct ReaderAgent: Sendable {
                             nearbyCharacterBudget: executionPlan.budget.nearbyCharacters,
                             pastThoughtCharacterBudget: executionPlan.budget.pastThoughtCharacters,
                             conversationCharacterBudget: executionPlan.budget.conversationCharacters,
+                            brainContext: assembly.brainCandidates.map { candidate in
+                                (title: candidate.metadata["brainTitle"] ?? "", content: candidate.content)
+                            },
                             sessionContext: sessionContext
                         )
                     ) {

@@ -33,9 +33,10 @@ public struct ContextAssemblyResult: Hashable, Sendable {
 /// relevance, confidence and token cost decide deterministically.
 public struct ContextCandidateRanker: Sendable {
     /// Default source priority (mirrors today's evidence order):
-    /// nearbyPassage > bookPassage > pastReflection > memory > conversation.
+    /// pinnedBrain > nearbyPassage > bookPassage > pastReflection = brain > memory > conversation.
     public static let defaultPriority: [ContextSource: Int] = [
-        .nearbyPassage: 5, .bookPassage: 4, .pastReflection: 3, .memory: 2, .conversation: 1,
+        .nearbyPassage: 5, .bookPassage: 4, .pastReflection: 3, .brain: 3,
+        .pinnedBrain: 6, .memory: 2, .conversation: 1,
     ]
     /// Metadata key linking a book candidate to its parent chunk (for merging).
     public static let parentIDKey = "parentID"

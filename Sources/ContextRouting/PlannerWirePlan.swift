@@ -14,6 +14,7 @@ public struct PlannerWirePlan: Codable, Hashable, Sendable {
     public var nearbyPassage: NearbyPassagePlan
     public var bookRetrieval: BookRetrievalRequest?
     public var pastThoughtRetrieval: PastThoughtRetrievalRequest?
+    public var brainRetrieval: BrainRetrievalRequest?
     public var response: ResponsePlan?
 
     public init(
@@ -21,13 +22,23 @@ public struct PlannerWirePlan: Codable, Hashable, Sendable {
         nearbyPassage: NearbyPassagePlan,
         bookRetrieval: BookRetrievalRequest? = nil,
         pastThoughtRetrieval: PastThoughtRetrievalRequest? = nil,
+        brainRetrieval: BrainRetrievalRequest? = nil,
         response: ResponsePlan? = nil
     ) {
         self.intent = intent
         self.nearbyPassage = nearbyPassage
         self.bookRetrieval = bookRetrieval
         self.pastThoughtRetrieval = pastThoughtRetrieval
+        self.brainRetrieval = brainRetrieval
         self.response = response
+    }
+
+    public struct BrainRetrievalRequest: Codable, Hashable, Sendable {
+        public var query: String
+
+        public init(query: String) {
+            self.query = query
+        }
     }
 
     public struct BookRetrievalRequest: Codable, Hashable, Sendable {
@@ -98,6 +109,9 @@ public extension PlannerWirePlan {
                 query: Self.boundedQuery(past.query),
                 purpose: past.purpose
             )))
+        }
+        if let brain = brainRetrieval {
+            requests.append(.brain(BrainContextRequest(query: Self.boundedQuery(brain.query))))
         }
         let response = self.response.map { SemanticResponsePlan(length: $0.length, posture: $0.posture) }
             ?? SemanticResponsePlan(length: .short, posture: .respondOnly)

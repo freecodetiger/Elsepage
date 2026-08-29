@@ -33,6 +33,10 @@ public struct SemanticContextPlan: Hashable, Sendable {
     public var pastThoughtRequest: PastThoughtContextRequest? {
         requests.compactMap { if case .pastThought(let request) = $0 { return request } else { return nil } }.first
     }
+
+    public var brainRequest: BrainContextRequest? {
+        requests.compactMap { if case .brain(let request) = $0 { return request } else { return nil } }.first
+    }
 }
 
 /// One planned context source. A tagged union so invalid states are hard to
@@ -45,6 +49,19 @@ public enum ContextRequest: Hashable, Sendable {
     case nearby
     case book(BookContextRequest)
     case pastThought(PastThoughtContextRequest)
+    /// Retrieval over the user's own formed thinking (Thought/Question). The
+    /// LLM decides only whether the user is clearly reaching back to their own
+    /// ideas and provides a query; kinds and limits are compiled policy.
+    case brain(BrainContextRequest)
+}
+
+/// A planned retrieval over the user's brain items (docs/brain.md §11B).
+public struct BrainContextRequest: Hashable, Sendable {
+    public let query: String
+
+    public init(query: String) {
+        self.query = query
+    }
 }
 
 /// A planned book retrieval. Queries are the only open-world values; scope and

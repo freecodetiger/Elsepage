@@ -15,6 +15,8 @@ public struct ContextExecutionPlan: Hashable, Sendable {
     public let book: BookRetrievalPolicy?
     /// Nil → past-thought retrieval (and connection building) is skipped.
     public let pastThought: ReflectionRetrievalPolicy?
+    /// Nil → no brain retrieval this turn (user's own formed thinking).
+    public let brain: BrainRetrievalPolicy?
     /// Deterministic system policy: long-term memory is always consulted as
     /// evidence, independent of the LLM plan (v1 plans carried a
     /// `memoryRetrieval` request that no consumer ever read; the behavior was
@@ -38,6 +40,7 @@ public struct ContextExecutionPlan: Hashable, Sendable {
         nearbyIncluded: Bool,
         book: BookRetrievalPolicy?,
         pastThought: ReflectionRetrievalPolicy?,
+        brain: BrainRetrievalPolicy?,
         memory: MemoryRetrievalPolicy,
         responseGuidance: ResponseGuidance,
         budget: ContextBudget,
@@ -48,6 +51,7 @@ public struct ContextExecutionPlan: Hashable, Sendable {
         self.nearbyIncluded = nearbyIncluded
         self.book = book
         self.pastThought = pastThought
+        self.brain = brain
         self.memory = memory
         self.responseGuidance = responseGuidance
         self.budget = budget
@@ -116,6 +120,23 @@ public struct MemoryRetrievalPolicy: Hashable, Sendable {
     }
 }
 
+/// Compiled brain-retrieval execution policy (docs/brain.md §11B). The LLM
+/// decides only whether the user reaches back to their own ideas and provides
+/// a query; kinds (thought+question) and the limit are code policy. Pinned
+/// context (an explicitly active brain item) bypasses the plan entirely — it
+/// is input-driven and can never be vetoed by the model.
+public struct BrainRetrievalPolicy: Hashable, Sendable {
+    public let query: String
+    public let limit: Int
+
+    public init(query: String, limit: Int = Self.defaultLimit) {
+        self.query = query
+        self.limit = max(1, limit)
+    }
+
+    public static let defaultLimit = 3
+}
+
 /// Compiles a validated `SemanticContextPlan` into a `ContextExecutionPlan`.
 public struct ContextPolicyCompiler: Sendable {
     public init() {}
@@ -124,6 +145,9 @@ public struct ContextPolicyCompiler: Sendable {
         let bookPolicy = plan.bookRequest.map { Self.bookPolicy(for: $0) }
         let pastPolicy = plan.pastThoughtRequest.map {
             ReflectionRetrievalPolicy(query: $0.query, purpose: $0.purpose)
+        }
+        let brainPolicy = plan.brainRequest.map {
+            BrainRetrievalPolicy(query: $0.query, limit: BrainRetrievalPolicy.defaultLimit)
         }
         let budget = Self.budget(for: plan.intent)
         let guidance = Self.responseGuidance(from: plan.response)
@@ -170,6 +194,7 @@ public struct ContextPolicyCompiler: Sendable {
             nearbyIncluded: plan.nearbyRequested,
             book: bookPolicy,
             pastThought: pastPolicy,
+            brain: brainPolicy,
             memory: MemoryRetrievalPolicy(),
             responseGuidance: guidance,
             budget: budget,

@@ -54,6 +54,17 @@ public struct SemanticPlanValidator: Sendable {
                     continue
                 }
                 requests.append(.pastThought(PastThoughtContextRequest(query: query, purpose: past.purpose)))
+            case .brain(let brain):
+                guard input.availableSources.hasBrainItems == true else {
+                    corrections.append("dropped brain request: brain lane unavailable")
+                    continue
+                }
+                let query = brain.query.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !query.isEmpty else {
+                    corrections.append("dropped brain request: empty query")
+                    continue
+                }
+                requests.append(.brain(BrainContextRequest(query: query)))
             }
         }
 

@@ -43,10 +43,14 @@ public struct AvailableContextSources: Hashable, Codable, Sendable {
     public let hasSessionHighlight: Bool?
     public let hasSessionNote: Bool?
     public let hasBookReflections: Bool?
+    /// Brain lane availability (brain repo wired). Nullable for decode
+    /// compatibility; the validator treats nil as "unavailable".
+    public let hasBrainItems: Bool?
 
     public init(hasNearbyPassage: Bool, hasBookIndex: Bool, hasPastThoughts: Bool) {
         self.hasNearbyPassage = hasNearbyPassage; self.hasBookIndex = hasBookIndex; self.hasPastThoughts = hasPastThoughts
         self.hasSessionHighlight = nil; self.hasSessionNote = nil; self.hasBookReflections = nil
+        self.hasBrainItems = nil
     }
 
     public init(
@@ -55,6 +59,17 @@ public struct AvailableContextSources: Hashable, Codable, Sendable {
     ) {
         self.hasNearbyPassage = hasNearbyPassage; self.hasBookIndex = hasBookIndex; self.hasPastThoughts = hasPastThoughts
         self.hasSessionHighlight = hasSessionHighlight; self.hasSessionNote = hasSessionNote; self.hasBookReflections = hasBookReflections
+        self.hasBrainItems = nil
+    }
+
+    public init(
+        hasNearbyPassage: Bool, hasBookIndex: Bool, hasPastThoughts: Bool,
+        hasSessionHighlight: Bool?, hasSessionNote: Bool?, hasBookReflections: Bool?,
+        hasBrainItems: Bool?
+    ) {
+        self.hasNearbyPassage = hasNearbyPassage; self.hasBookIndex = hasBookIndex; self.hasPastThoughts = hasPastThoughts
+        self.hasSessionHighlight = hasSessionHighlight; self.hasSessionNote = hasSessionNote; self.hasBookReflections = hasBookReflections
+        self.hasBrainItems = hasBrainItems
     }
 }
 
@@ -183,6 +198,8 @@ public struct ContextPipelineMetrics: Hashable, Codable, Sendable {
     public var semanticCacheHits: Int?
     public var semanticCacheMisses: Int?
     public var semanticUnavailable: Bool?
+    /// Brain items delivered to the prompt (phase 16 bridge); nil on older rows.
+    public var brainCandidateCount: Int?
 
     public init() {}
 }

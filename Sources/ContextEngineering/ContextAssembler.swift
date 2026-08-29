@@ -28,6 +28,17 @@ public struct AssembledEvidence: Hashable, Sendable {
 public struct EvidenceAssemblyResult: Hashable, Sendable {
     public let evidence: [AssembledEvidence]
     public let stats: ContextAssemblyStats
+    /// Brain items that survived packing (source .brain/.pinnedBrain). They
+    /// reach the prompt as the user's own formed thinking — never as [E]-
+    /// citable `AssembledEvidence` (see phase 16 CONTEXT: brain items are not
+    /// external, verifiable evidence).
+    public let brainCandidates: [ContextCandidate]
+
+    public init(evidence: [AssembledEvidence], stats: ContextAssemblyStats, brainCandidates: [ContextCandidate] = []) {
+        self.evidence = evidence
+        self.stats = stats
+        self.brainCandidates = brainCandidates
+    }
 }
 
 /// A pre-built nearby-passage candidate (text + provenance; truncation/budgeting
@@ -67,7 +78,8 @@ public struct ContextAssembler: Sendable {
         previousReflection: Reflection?,
         memories: [ReaderMemory],
         reflectionBookID: BookID,
-        budget: ContextBudget
+        budget: ContextBudget,
+        brainCandidates: [ContextCandidate] = []
     ) -> EvidenceAssemblyResult {
         var candidates: [ContextCandidate] = []
         var provenance: [String: AssembledEvidence] = [:]
@@ -105,6 +117,10 @@ public struct ContextAssembler: Sendable {
             )
         }
 
+        // Brain candidates are already ContextCandidates (bridged by
+        // BrainContextProvider); they carry no citation provenance by design.
+        candidates.append(contentsOf: brainCandidates)
+
         let profile = ContextBudgetProfile(
             totalCharacters: budget.totalCharacters,
             perSource: [
@@ -112,13 +128,24 @@ public struct ContextAssembler: Sendable {
                 .bookPassage: budget.bookEvidenceCharacters,
                 .pastReflection: budget.pastThoughtCharacters,
                 .memory: Self.derivedMemoryCharacters(from: budget.pastThoughtCharacters),
+                // Compiled policy constants (phase 16): retrieved brain items get
+                // a bounded slice; the pinned item is unbounded within the total
+                // so it always enters the bundle.
+                .brain: Self.brainCharacters,
+                .pinnedBrain: budget.totalCharacters,
             ]
         )
         let packed = ranker.build(from: candidates, budget: profile)
-        let evidence = packed.bundle.candidates.compactMap { candidate -> AssembledEvidence? in
-            guard let base = provenance["\(candidate.source.rawValue):\(candidate.id)"] else { return nil }
-            return AssembledEvidence(kind: base.kind, sourceID: base.sourceID, bookID: base.bookID, title: base.title, excerpt: candidate.content, locator: base.locator)
-        }
-        return EvidenceAssemblyResult(evidence: evidence, stats: packed.stats)
+        let brain = packed.bundle.candidates.filter { $0.source == .brain || $0.source == .pinnedBrain }
+        let evidence = packed.bundle.candidates
+            .filter { $0.source != .brain && $0.source != .pinnedBrain }
+            .compactMap { candidate -> AssembledEvidence? in
+                guard let base = provenance["\(candidate.source.rawValue):\(candidate.id)"] else { return nil }
+                return AssembledEvidence(kind: base.kind, sourceID: base.sourceID, bookID: base.bookID, title: base.title, excerpt: candidate.content, locator: base.locator)
+            }
+        return EvidenceAssemblyResult(evidence: evidence, stats: packed.stats, brainCandidates: brain)
     }
+
+    /// Compiled policy constant: character budget for retrieved brain items.
+    static let brainCharacters = 1_200
 }
