@@ -50,6 +50,14 @@ public struct JournalEntryService: Sendable {
 
     // MARK: - Private
 
+    /// JRNL-01/02: applies the user's edit to an Agent-drafted What-I-Think
+    /// bullet. The row is flagged `userEdited` and keeps the Agent's original
+    /// draft, so any later re-materialization of Agent output can never silently
+    /// overwrite the user's words (PRD F9: 忠于用户).
+    public func applyUserEdit(thoughtID: UUID, newText: String) async throws {
+        try await journal.applyUserEdit(thoughtID: thoughtID, newText: newText)
+    }
+
     private func entry(
         for reflection: Reflection,
         book: Book,
@@ -120,19 +128,33 @@ public struct JournalEntryService: Sendable {
 
     /// Parses structured Agent output once per message and persists the derived
     /// rows. `hasStructuredData` keeps this idempotent across reloads.
+    ///
+    /// JRNL-02 overwrite rule: a `userEdited` thought can never be re-drafted by
+    /// the Agent. If this materialization sees a draft identical to the agent
+    /// original captured on a user-edited row (same message re-parsed after a
+    /// partial restore, a future re-parse, or a follow-up message restating the
+    /// same point), the redraft is simply dropped — the user text wins and no
+    /// shadow copy is stored. Drafts that differ from every claimed original are
+    /// appended as new bullets; user rows are never mutated or deleted.
     private func materializeStructuredOutput(
         for reflection: Reflection,
         messages: [ReflectionMessage]
     ) async throws {
+        let claimedAgentOriginals = Set(
+            try await journal.thoughts(for: reflection.id)
+                .filter(\.userEdited)
+                .compactMap(\.agentOriginalText)
+        )
         for message in messages where message.author == .agent {
             guard !(try await journal.hasStructuredData(for: reflection.id, messageID: message.id)) else { continue }
             let parsed = JournalStructuredParser.parse(message.content)
             guard !parsed.thoughts.isEmpty || parsed.question != nil
                 || !parsed.memoryProposals.isEmpty || !parsed.citations.isEmpty else { continue }
-            for thought in parsed.thoughts {
+            for thought in parsed.thoughts where !claimedAgentOriginals.contains(thought) {
                 try await journal.saveThought(.init(
                     reflectionID: reflection.id, messageID: message.id,
-                    thought: thought, createdAt: message.createdAt
+                    thought: thought, createdAt: message.createdAt,
+                    agentOriginalText: thought
                 ))
             }
             if let question = parsed.question {

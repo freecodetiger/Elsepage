@@ -59,7 +59,8 @@ import Testing
         "v4_reflection_provenance", "v5_model_provider_configuration", "v6_reflection_connections",
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
-        "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference"
+        "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference",
+        "v19_journal_user_edited_thoughts"
     ])
 }
 
@@ -157,6 +158,76 @@ import Testing
     }
     #expect(row.flatMap { String.fromDatabaseValue($0["role"]) } == "parent")
     #expect(row.flatMap { String.fromDatabaseValue($0["parentID"]) } == nil)
+}
+
+@Test func migratesV18DatabaseToV19BackfillingJournalThoughtOriginals() async throws {
+    // A v18 journalThoughts row has no userEdited/agentOriginalText columns. v19
+    // must add them additively, backfill every pre-existing row with its (still
+    // Agent) text as the original draft, and leave the visible text untouched —
+    // so the row is protected from Agent overwrites the moment it is first edited.
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v18_reader_highlight_color_preference")
+
+    let reflectionUUID = UUID()
+    let thoughtUUID = UUID()
+    try await queue.write { db in
+        try db.execute(sql: "INSERT INTO books (id, fingerprint, title, fileName, fileSize, importedAt) VALUES (?,?,?,?,?,?)",
+            arguments: ["00000000-0000-0000-0000-000000000004", "v19-journal", "Legacy", "legacy.epub", 100, Date()])
+        try db.execute(sql: "INSERT INTO reflections (id, bookID, originalText, inputKind, createdAt) VALUES (?, ?, ?, 'text', ?)",
+            arguments: [reflectionUUID.uuidString.lowercased(), "00000000-0000-0000-0000-000000000004", "升级前的原始表达", Date()])
+        try db.execute(sql: "INSERT INTO journalThoughts (id, reflectionID, messageID, thought, createdAt) VALUES (?,?,?,?,?)",
+            arguments: [thoughtUUID.uuidString.lowercased(), reflectionUUID.uuidString.lowercased(), UUID().uuidString.lowercased(), "Agent 之前的整理稿", Date()])
+    }
+
+    try AppDatabase.migrator.migrate(queue)
+    let database = try AppDatabase(writer: queue)
+    let journal = GRDBJournalRepository(database: database)
+    let reflectionID = ReflectionID(rawValue: reflectionUUID)
+
+    let row = try await queue.read { db in
+        try Row.fetchOne(db, sql: "SELECT userEdited, agentOriginalText FROM journalThoughts WHERE id=?", arguments: [thoughtUUID.uuidString.lowercased()])
+    }
+    #expect(row.flatMap { Bool.fromDatabaseValue($0["userEdited"]) } == false)
+    #expect(row.flatMap { String.fromDatabaseValue($0["agentOriginalText"]) } == "Agent 之前的整理稿")
+
+    // The repository round-trips the upgraded row with the backfilled draft.
+    let thoughts = try await journal.thoughts(for: reflectionID)
+    #expect(thoughts.map(\.thought) == ["Agent 之前的整理稿"])
+    #expect(thoughts.map(\.userEdited) == [false])
+    #expect(thoughts.map(\.agentOriginalText) == ["Agent 之前的整理稿"])
+
+    // And the first user edit keeps that Agent draft, never re-backfilling it
+    // with the previous user text.
+    try await journal.applyUserEdit(thoughtID: thoughts[0].id, newText: "我自己的说法")
+    let edited = try #require(try await journal.thoughts(for: reflectionID).first)
+    #expect(edited.thought == "我自己的说法")
+    #expect(edited.userEdited)
+    #expect(edited.agentOriginalText == "Agent 之前的整理稿")
+}
+
+@Test func journalFreshInstallRunsToHeadWithUserEditedColumns() async throws {
+    // Fresh installs run every migration, so the v19 columns exist from the
+    // start and a saved thought carries its Agent draft without an upgrade.
+    let database = try AppDatabase.inMemory()
+    let columns = try await database.writer.read { db in
+        try Row.fetchAll(db, sql: "PRAGMA table_info(journalThoughts)")
+            .map { row in String.fromDatabaseValue(row["name"])! }
+    }
+    #expect(columns.contains("userEdited"))
+    #expect(columns.contains("agentOriginalText"))
+
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let journal = GRDBJournalRepository(database: database)
+    let book = Book(fingerprint: .init(rawValue: "fresh-v19"), title: "全新安装", fileName: "fresh.epub", fileSize: 1)
+    try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "全新安装的想法", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    try await journal.saveThought(.init(reflectionID: reflection.id, messageID: UUID(), thought: "Agent 初稿"))
+    let thought = try #require(try await journal.thoughts(for: reflection.id).first)
+    #expect(!thought.userEdited)
+    #expect(thought.agentOriginalText == "Agent 初稿")
 }
 
 @Test func bookDeletionCascadesPositionHighlightsNotesAndPreferences() async throws {
