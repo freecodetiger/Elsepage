@@ -19,7 +19,10 @@ struct JournalEntryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
-            Button(action: { withAnimation(.snappy(duration: 0.24)) { isExpanded.toggle() } }) {
+            Button(action: {
+                if !isExpanded { Haptics.cardExpanded() }
+                withAnimation(.snappy(duration: 0.24)) { isExpanded.toggle() }
+            }) {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                     metadata
                     Text(entry.reflection.originalText)

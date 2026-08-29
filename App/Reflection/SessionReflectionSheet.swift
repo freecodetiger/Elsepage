@@ -592,6 +592,8 @@ final class SessionReflectionModel: Identifiable {
                 recordAgentDiscussion: recordAgentDiscussion
             )
             state = .saved
+            // Reflection 完成 (PRD §10.4): the output is durable, celebrate quietly.
+            Haptics.reflectionSaved()
             // The submission opens the Agent conversation: one user-initiated
             // discussion (FIX-01). Local-first — the save above is already durable.
             await recordAgentDiscussion?(summary.session.id)
@@ -1362,7 +1364,7 @@ private struct ReflectionComposer: View {
 
     private var sendButton: some View {
         Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Haptics.followUpSent()
             Task { await model.send() }
         } label: {
             Image(systemName: "arrow.up")

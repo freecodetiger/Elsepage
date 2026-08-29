@@ -747,13 +747,13 @@ extension Note {
 }
 
 /// Restrained haptics for annotation moments only (PRD 10.4); page turns and
-/// ordinary reading never vibrate.
-enum AnnotationHaptics {
+/// ordinary reading never vibrate. The vocabulary itself lives in Haptics.
+private enum AnnotationHaptics {
     static func highlightCreated() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptics.highlightCreated()
     }
 
     static func annotationDeleted() {
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        Haptics.annotationDeleted()
     }
 }

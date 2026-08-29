@@ -58,7 +58,7 @@ struct AchievementToastOverlay: ViewModifier {
 
     @MainActor
     private func present(_ record: AchievementRecord) {
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Haptics.achievementUnlocked()
         Task { [weak achievements] in
             try? await Task.sleep(for: .seconds(3))
             await MainActor.run { achievements?.dismissPending() }

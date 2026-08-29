@@ -224,6 +224,7 @@ struct ThoughtsView: View {
                 isReplying: model.replyingTo == entry.reflection.id,
                 contextTrace: model.tracesByReflection[entry.reflection.id],
                 toggleExpanded: {
+                    if expandedEntryID != entry.id { Haptics.cardExpanded() }
                     withAnimation(.snappy(duration: 0.24)) {
                         expandedEntryID = expandedEntryID == entry.id ? nil : entry.id
                     }

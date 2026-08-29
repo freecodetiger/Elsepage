@@ -298,6 +298,6 @@ struct VoiceReflectionControls: View {
     }
 
     private func haptic() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Haptics.recordingPress()
     }
 }

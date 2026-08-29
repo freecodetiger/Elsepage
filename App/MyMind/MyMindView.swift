@@ -251,6 +251,7 @@ struct MyMindView: View {
             withAnimation(.snappy(duration: 0.24)) { expandedMemoryID = nil }
         } else {
             withAnimation(.snappy(duration: 0.24)) { expandedMemoryID = memory.id }
+            Haptics.cardExpanded()
             if evidenceByMemory[memory.id] == nil {
                 Task { await loadEvidence(for: memory) }
             }
