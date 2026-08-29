@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "AppInfrastructure", targets: ["AppInfrastructure"]),
         .library(name: "BenchCore", targets: ["BenchCore"]),
         .executable(name: "readloop-bench", targets: ["readloop-bench"]),
+        .executable(name: "readloop-bench-compare", targets: ["readloop-bench-compare"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
@@ -54,6 +55,7 @@ let package = Package(
             ]
         ),
         .executableTarget(name: "readloop-bench", dependencies: ["BenchCore"]),
+        .executableTarget(name: "readloop-bench-compare", dependencies: ["BenchCore"]),
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
