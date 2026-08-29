@@ -1,3 +1,4 @@
+import AppInfrastructure
 import ReaderCore
 import SwiftUI
 import UIKit
@@ -183,7 +184,8 @@ struct SelectionToolbar: View {
                         .fill(color.annotationColor)
                         .frame(width: 28, height: 28)
                         .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
-                        .frame(width: 40, height: 40)
+                        // A11Y-03: the 28pt swatch rides in a 44pt hit target.
+                        .frame(width: AccessibilityMetrics.minimumTapTargetSide, height: AccessibilityMetrics.minimumTapTargetSide)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -299,7 +301,8 @@ struct HighlightMenu: View {
                                         .foregroundStyle(.black.opacity(0.65))
                                 }
                             }
-                            .frame(width: 40, height: 40)
+                            // A11Y-03: the 28pt swatch rides in a 44pt hit target.
+                            .frame(width: AccessibilityMetrics.minimumTapTargetSide, height: AccessibilityMetrics.minimumTapTargetSide)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -384,6 +387,11 @@ struct TransientNoticePill: View {
         .shadow(color: .black.opacity(0.14), radius: 16, y: 7)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(label)，\(canUndo ? "可以撤销" : "通知")")
+        // A11Y-02: the pill is transient, so VoiceOver users get the same
+        // feedback as a spoken announcement.
+        .onAppear {
+            UIAccessibility.post(notification: .announcement, argument: "\(label)，\(canUndo ? "可以撤销" : "通知")")
+        }
     }
 }
 
@@ -428,6 +436,8 @@ struct NoteEditorSheet: View {
                 Spacer()
                 Button("完成") { dismiss() }
                     .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
 
             if let excerpt {

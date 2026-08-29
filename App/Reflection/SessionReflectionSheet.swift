@@ -969,22 +969,31 @@ struct SessionReflectionSheet: View {
 
     /// 原话 ↔ 优化版切换。优化始终忠实原意(PRD P2),原话一键可回。
     private var optimizationToggle: some View {
-        HStack(spacing: ElsepageTheme.Spacing.small) {
-            Label(
-                model.showingOptimized ? "AI 优化版" : "我的原话",
-                systemImage: model.showingOptimized ? "wand.and.stars" : "text.quote"
-            )
-            .font(.caption.weight(.medium))
-            .foregroundStyle(Color.elsepageAccent)
-            Spacer()
-            Button(model.showingOptimized ? "查看我的原话" : "查看 AI 优化版") {
-                if model.showingOptimized { model.showRaw() } else { model.showOptimized() }
-            }
-            .font(.caption)
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+        // A11Y-01: the badge and the switch button stack when large type no
+        // longer fits on one line.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ElsepageTheme.Spacing.small) { toggleContent }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { toggleContent }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("切换原话与优化版")
+    }
+
+    @ViewBuilder private var toggleContent: some View {
+        Label(
+            model.showingOptimized ? "AI 优化版" : "我的原话",
+            systemImage: model.showingOptimized ? "wand.and.stars" : "text.quote"
+        )
+        .font(.caption.weight(.medium))
+        .foregroundStyle(Color.elsepageAccent)
+        Spacer(minLength: 0)
+        Button(model.showingOptimized ? "查看我的原话" : "查看 AI 优化版") {
+            if model.showingOptimized { model.showRaw() } else { model.showOptimized() }
+        }
+        .font(.caption)
+        .buttonStyle(.bordered)
+        // A11Y-03: keep the switch reachable at the 44pt minimum.
+        .controlSize(.regular)
     }
 
     private var header: some View {
@@ -1113,6 +1122,9 @@ struct ReflectionConversationView: View {
                                 Task { await model.retryPendingSend() }
                             }
                             .font(.caption.weight(.semibold))
+                            // A11Y-03: quiet text button, full-size hit target.
+                            .frame(minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                     }
                     Text(pending.content).fixedSize(horizontal: false, vertical: true)
@@ -1219,6 +1231,7 @@ struct ReflectionConversationView: View {
         Button(role: .destructive) { confirmsDeletion = true } label: {
             Image(systemName: "trash")
         }
+        .elsepageTapTarget()
         .disabled(model.isResponding || isVoiceInputActive)
         .accessibilityLabel("删除最新一条 Reflection")
     }
@@ -1326,8 +1339,11 @@ private struct ReflectionComposer: View {
                     } label: {
                         if model.isPolishing {
                             ProgressView().controlSize(.small)
+                                .frame(minHeight: 44)
                         } else {
                             Label("整理表达", systemImage: "wand.and.stars")
+                                // A11Y-03: 44pt minimum target.
+                                .frame(minHeight: 44)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -1342,6 +1358,9 @@ private struct ReflectionComposer: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
+                            // A11Y-03: 44pt minimum target.
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.circle)
@@ -1361,6 +1380,9 @@ private struct ReflectionComposer: View {
                         self.clearedDraft = nil
                     }
                     .font(.footnote.weight(.semibold))
+                    // A11Y-03: quiet text button, full-size hit target.
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
             }
         }
@@ -1375,10 +1397,12 @@ private struct ReflectionComposer: View {
         } label: {
             Image(systemName: "arrow.up")
                 .font(.body.weight(.semibold))
+                // A11Y-03: 44pt minimum target for the primary send control.
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.circle)
-        .controlSize(.large)
         .accessibilityLabel("发送")
         .disabled(!ReflectionComposerPolicy.canSend(
             text: model.followUpText,

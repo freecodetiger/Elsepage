@@ -176,7 +176,8 @@ struct ThoughtsView: View {
                         Button(option.title) { filter = option }
                             .buttonStyle(.bordered)
                             .tint(filter == option ? .elsepageAccent : .secondary)
-                            .controlSize(.small)
+                            // A11Y-03: keep the chip reachable at 44pt tall.
+                            .frame(minHeight: 44)
                     }
                 }
             }
@@ -331,7 +332,9 @@ private struct ThoughtEntryCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "收起想法" : "展开想法")
+            // A11Y-02: 书名、时间、想法与状态读作一条，展开状态由 hint 表达。
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(isExpanded ? "轻点收起想法" : "轻点展开回应与连接")
 
             if isExpanded {
                 expandedContent
@@ -360,24 +363,31 @@ private struct ThoughtEntryCard: View {
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
     }
 
     private var compactStatus: some View {
-        HStack(spacing: ElsepageTheme.Spacing.medium) {
-            if entry.derivedAgentResponse != nil {
-                Label("有回应", systemImage: "sparkles")
-            }
-            if !entry.connections.isEmpty {
-                Label("连接过去", systemImage: "link")
-            }
-            let discussionCount = entry.messages.filter { $0.author == .user }.count
-            if discussionCount > 0 {
-                Label("\(discussionCount) 次讨论", systemImage: "bubble.left.and.bubble.right")
-            }
+        // A11Y-01: status capsules wrap when large type no longer fits a row.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ElsepageTheme.Spacing.medium) { statusContent }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { statusContent }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder private var statusContent: some View {
+        if entry.derivedAgentResponse != nil {
+            Label("有回应", systemImage: "sparkles")
+        }
+        if !entry.connections.isEmpty {
+            Label("连接过去", systemImage: "link")
+        }
+        let discussionCount = entry.messages.filter { $0.author == .user }.count
+        if discussionCount > 0 {
+            Label("\(discussionCount) 次讨论", systemImage: "bubble.left.and.bubble.right")
+        }
     }
 
     @ViewBuilder private var expandedContent: some View {

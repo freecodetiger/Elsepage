@@ -42,22 +42,33 @@ struct RAGManagementView: View {
                 badge(status.state)
             }
             if status.totalChunks > 0 {
-                ProgressView(value: status.semanticFraction).tint(.elsepageAccent)
+                ProgressView(value: status.semanticFraction)
+                    .tint(.elsepageAccent)
+                    .accessibilityLabel("语义索引进度")
+                    .accessibilityValue(Text(semanticLabel(status)))
                 Text(semanticLabel(status)).font(.caption).foregroundStyle(.secondary)
             }
             if status.totalResources > 0, status.state != .ready {
-                ProgressView(value: status.lexicalFraction).tint(.secondary)
+                ProgressView(value: status.lexicalFraction)
+                    .tint(.secondary)
+                    .accessibilityLabel("词法索引进度")
+                    .accessibilityValue(Text("词法索引 \(min(status.nextResourceOrdinal, status.totalResources))/\(status.totalResources)"))
                 Text("词法索引 \(min(status.nextResourceOrdinal, status.totalResources))/\(status.totalResources)")
                     .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
             if let error = status.lastError {
                 Text(error).font(.caption).foregroundStyle(.red).lineLimit(2)
             }
             HStack(spacing: 16) {
                 Button("重新语义索引") { model.reembed(status.bookID) }
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
                 Button("重建索引", role: .destructive) {
                     Task { await model.reindex(status.bookID) }
                 }
+                .frame(minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .font(.footnote)
         }

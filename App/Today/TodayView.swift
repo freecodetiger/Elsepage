@@ -175,7 +175,11 @@ struct TodayView: View {
             Text(title).font(.title2).fixedSize(horizontal: false, vertical: true)
             Divider()
             streaksView
-            Button(action, action: onTap).buttonStyle(.borderedProminent).tint(.elsepageAccent)
+            Button(action, action: onTap)
+                .buttonStyle(.borderedProminent)
+                .tint(.elsepageAccent)
+                // A11Y-03: AA label on the accent fill in both color schemes.
+                .foregroundStyle(Color.elsepageOnAccent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ElsepageTheme.Spacing.xLarge)
@@ -184,9 +188,17 @@ struct TodayView: View {
     }
 
     private var streaksView: some View {
-        HStack(spacing: ElsepageTheme.Spacing.medium) {
-            streakBadge(label: "连续阅读", days: model.readingStreak.days, emphasized: false)
-            streakBadge(label: "连续思考", days: model.thinkingStreak.days, emphasized: true)
+        // A11Y-01: at accessibility sizes the two capsules stack instead of
+        // squeezing; ViewThatFits picks the first layout that fits.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ElsepageTheme.Spacing.medium) {
+                streakBadge(label: "连续阅读", days: model.readingStreak.days, emphasized: false)
+                streakBadge(label: "连续思考", days: model.thinkingStreak.days, emphasized: true)
+            }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                streakBadge(label: "连续阅读", days: model.readingStreak.days, emphasized: false)
+                streakBadge(label: "连续思考", days: model.thinkingStreak.days, emphasized: true)
+            }
         }
         // Streak 延续 (PRD §10.3): the day counter rolls over quietly.
         .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.readingStreak.days)
@@ -196,6 +208,7 @@ struct TodayView: View {
     private func streakBadge(label: String, days: Int, emphasized: Bool) -> some View {
         HStack(spacing: ElsepageTheme.Spacing.xSmall) {
             Image(systemName: emphasized ? "brain.head.profile" : "book")
+                .accessibilityHidden(true)
             Text("\(label) \(days) 天")
                 .font(emphasized ? .subheadline.weight(.semibold) : .footnote)
                 .contentTransition(reduceMotion ? .identity : .numericText())
@@ -207,5 +220,7 @@ struct TodayView: View {
             emphasized ? Color.elsepageAccent.opacity(0.12) : Color.secondary.opacity(0.08),
             in: Capsule()
         )
+        // A11Y-02: one element per badge — the decorative glyph stays silent.
+        .accessibilityElement(children: .combine)
     }
 }

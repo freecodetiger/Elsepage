@@ -160,6 +160,8 @@ struct MyMindView: View {
             RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
                 .stroke(.primary.opacity(0.06))
         }
+        // A11Y-02: badge icon, title, blurb and date read as one stop.
+        .accessibilityElement(children: .combine)
     }
 
     private var emptyState: some View {
@@ -321,7 +323,10 @@ private struct MemoryRow: View {
                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
+            // A11Y-02: 类型、说法、时间与置信度读作一条；操作按钮保持独立可达。
+            .accessibilityElement(children: .combine)
             actions
             if isExpanded {
                 evidenceBlock
@@ -382,7 +387,8 @@ private struct MemoryRow: View {
             .font(.caption)
             .buttonStyle(.bordered)
             .tint(Color.elsepageAccent)
-            .controlSize(.small)
+            // A11Y-03: keep each compact action at the 44pt minimum target.
+            .frame(minHeight: 44)
         }
     }
 
