@@ -127,6 +127,7 @@ struct MyMindView: View {
                     selectedStage: thought.stage,
                     stageLabel: { brainStageLabel($0) },
                     onSave: { title, statement, stage in
+                        guard let title else { return }
                         Task { await model.editThought(thought, title: title, statement: statement, stage: stage) }
                     }
                 )
@@ -796,23 +797,42 @@ private struct BrainQuestionDetailView: View {
 private struct BrainItemEditorSheet<Stage: Hashable>: View {
     let title: String
     let textTitle: String
-    @State var text: String
+    @State private var text: String
     let secondaryTitle: String?
-    @State var secondaryText: String?
+    @State private var secondaryText: String?
     let stages: [Stage]
-    @State var selectedStage: Stage
+    @State private var selectedStage: Stage
     let stageLabel: (Stage) -> String
     let onSave: (_ secondary: String?, _ text: String, _ stage: Stage) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    init(
+        title: String,
+        textTitle: String,
+        initialText: String,
+        secondaryTitle: String? = nil,
+        initialSecondaryText: String? = nil,
+        stages: [Stage],
+        selectedStage: Stage,
+        stageLabel: @escaping (Stage) -> String,
+        onSave: @escaping (_ secondary: String?, _ text: String, _ stage: Stage) -> Void
+    ) {
+        self.title = title
+        self.textTitle = textTitle
+        _text = State(initialValue: initialText)
+        self.secondaryTitle = secondaryTitle
+        _secondaryText = State(initialValue: initialSecondaryText)
+        self.stages = stages
+        _selectedStage = State(initialValue: selectedStage)
+        self.stageLabel = stageLabel
+        self.onSave = onSave
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 if let secondaryTitle {
-                    TextField(secondaryTitle, text: Binding(
-                        get: { secondaryText ?? "" },
-                        set: { secondaryText = $0 }
-                    ))
+                    TextField(secondaryTitle, text: $secondaryText)
                 }
                 TextField(textTitle, text: $text, axis: .vertical)
                     .lineLimit(3...8)
@@ -829,14 +849,23 @@ private struct BrainItemEditorSheet<Stage: Hashable>: View {
                     Button("取消") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        onSave(secondaryText.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }, trimmed, selectedStage)
-                        dismiss()
-                    }
+                    Button("保存") { commit() }
                 }
             }
         }
+    }
+
+    private func commit() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var secondary: String?
+        if secondaryTitle != nil {
+            guard let trimmedSecondary = secondaryText?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !trimmedSecondary.isEmpty else { return }
+            secondary = trimmedSecondary
+        }
+        onSave(secondary, trimmed, selectedStage)
+        dismiss()
     }
 }
