@@ -23,7 +23,31 @@ public final class GRDBJournalRepository: JournalRepository, @unchecked Sendable
     }
 
     public func saveThought(_ thought: JournalThought) async throws {
-        try await db.writer.write { db in try JournalThoughtRecord(thought).insert(db) }
+        // Every JournalThought row is Agent-drafted (PRD F9: 忠于用户), so a row
+        // saved without an explicit draft captures its own text as the Agent
+        // original. That keeps the JRNL-02 overwrite guard (`claimedAgentOriginals`)
+        // effective for every materialization path, not just the ones that
+        // remember to pass `agentOriginalText` in.
+        try await db.writer.write { db in
+            try JournalThoughtRecord(thought.capturingAgentOriginal()).insert(db)
+        }
+    }
+
+    public func applyUserEdit(thoughtID: UUID, newText: String) async throws {
+        let text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        try await db.writer.write { db in
+            // COALESCE backfills the Agent draft for rows that somehow predate
+            // it, then the user text takes over. Missing rows are a no-op: the
+            // caller reloads and renders the stored truth.
+            try db.execute(
+                sql: """
+                    UPDATE journalThoughts
+                    SET thought = ?, userEdited = 1, agentOriginalText = COALESCE(agentOriginalText, thought)
+                    WHERE id = ?
+                    """,
+                arguments: [text, thoughtID.uuidString.lowercased()]
+            )
+        }
     }
 
     public func questions(for reflectionID: ReflectionID) async throws -> [AgentQuestion] {
@@ -86,6 +110,8 @@ private struct JournalThoughtRecord: Codable, FetchableRecord, PersistableRecord
     static let databaseTableName = "journalThoughts"
     var id, reflectionID, messageID, thought: String
     var createdAt: Date
+    var userEdited: Bool
+    var agentOriginalText: String?
 
     init(_ thought: JournalThought) {
         id = thought.id.uuidString.lowercased()
@@ -93,6 +119,8 @@ private struct JournalThoughtRecord: Codable, FetchableRecord, PersistableRecord
         messageID = thought.messageID.uuidString.lowercased()
         self.thought = thought.thought
         createdAt = thought.createdAt
+        userEdited = thought.userEdited
+        agentOriginalText = thought.agentOriginalText
     }
 
     func domain() throws -> JournalThought {
@@ -101,7 +129,9 @@ private struct JournalThoughtRecord: Codable, FetchableRecord, PersistableRecord
             reflectionID: .init(rawValue: try decodeUUID(reflectionID, table: Self.databaseTableName, recordID: id, field: "reflectionID")),
             messageID: try decodeUUID(messageID, table: Self.databaseTableName, recordID: id, field: "messageID"),
             thought: thought,
-            createdAt: createdAt
+            createdAt: createdAt,
+            userEdited: userEdited,
+            agentOriginalText: agentOriginalText
         )
     }
 }

@@ -6,22 +6,67 @@ import RetrievalCore
 
 /// A "What I think" bullet derived from the Agent's structured output. It is
 /// derived data and never replaces the user's own `originalText`.
+///
+/// User sovereignty (JRNL-01/02, PRD F9 忠于用户): the user may edit a bullet.
+/// An edited row keeps the Agent's original draft in `agentOriginalText` and is
+/// flagged `userEdited`; later re-materialization of Agent output must never
+/// overwrite the user's words (`JournalEntryService` drops a matching Agent
+/// redraft instead). The Agent draft is captured once — at materialization or,
+/// for pre-v19 rows, by the v19 migration backfill — and never rewritten.
 public struct JournalThought: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
     public let reflectionID: ReflectionID
     public let messageID: UUID
     public let thought: String
     public let createdAt: Date
+    /// True once the user has edited (or explicitly confirmed) this bullet.
+    public let userEdited: Bool
+    /// The Agent's original draft, preserved verbatim so the user version and
+    /// the Agent version remain distinguishable in data.
+    public let agentOriginalText: String?
 
     public init(
         id: UUID = UUID(), reflectionID: ReflectionID,
-        messageID: UUID, thought: String, createdAt: Date = Date()
+        messageID: UUID, thought: String, createdAt: Date = Date(),
+        userEdited: Bool = false, agentOriginalText: String? = nil
     ) {
         self.id = id
         self.reflectionID = reflectionID
         self.messageID = messageID
         self.thought = thought
         self.createdAt = createdAt
+        self.userEdited = userEdited
+        self.agentOriginalText = agentOriginalText
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, reflectionID, messageID, thought, createdAt, userEdited, agentOriginalText
+    }
+
+    /// Tolerant decode: archives and payloads written before the userEdited
+    /// fields existed decode with `userEdited = false` and no agent draft.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        reflectionID = try container.decode(ReflectionID.self, forKey: .reflectionID)
+        messageID = try container.decode(UUID.self, forKey: .messageID)
+        thought = try container.decode(String.self, forKey: .thought)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        userEdited = try container.decodeIfPresent(Bool.self, forKey: .userEdited) ?? false
+        agentOriginalText = try container.decodeIfPresent(String.self, forKey: .agentOriginalText)
+    }
+
+    /// Returns a copy whose `agentOriginalText` defaults to the draft itself when
+    /// unset. JournalThought rows are always Agent-drafted, so this is the
+    /// persistence invariant behind the JRNL-02 overwrite guard: every Agent
+    /// bullet keeps its original, whichever materialization path saved it.
+    public func capturingAgentOriginal() -> JournalThought {
+        guard agentOriginalText == nil else { return self }
+        return JournalThought(
+            id: id, reflectionID: reflectionID, messageID: messageID,
+            thought: thought, createdAt: createdAt,
+            userEdited: userEdited, agentOriginalText: thought
+        )
     }
 }
 
@@ -180,6 +225,10 @@ public struct JournalEntry: Hashable, Sendable, Identifiable {
 public protocol JournalRepository: Sendable {
     func thoughts(for reflectionID: ReflectionID) async throws -> [JournalThought]
     func saveThought(_ thought: JournalThought) async throws
+    /// Applies a user edit to an Agent-drafted thought (JRNL-01/02): stores the
+    /// user's text, flags the row `userEdited` and preserves the Agent's original
+    /// draft. Agent re-materialization must never overwrite a row edited here.
+    func applyUserEdit(thoughtID: UUID, newText: String) async throws
     func questions(for reflectionID: ReflectionID) async throws -> [AgentQuestion]
     func saveQuestion(_ question: AgentQuestion) async throws
     func citations(for reflectionID: ReflectionID) async throws -> [ReflectionCitation]

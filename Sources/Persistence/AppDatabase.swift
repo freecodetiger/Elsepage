@@ -415,6 +415,21 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "lastUsedHighlightColor", .text).notNull().defaults(to: HighlightColor.yellow.rawValue)
             }
         }
+
+        // JRNL-01/02 Journal user sovereignty (PRD F9: 忠于用户). A "What I think"
+        // bullet the user has edited is flagged `userEdited` and keeps the Agent's
+        // original draft in `agentOriginalText`, so later re-materialization of
+        // Agent output can never silently overwrite the user's words. The backfill
+        // gives every pre-existing row its (still-Agent) text as the original, so
+        // old rows are protected the moment they are first edited. Additive: old
+        // installs upgrade intact.
+        migrator.registerMigration("v19_journal_user_edited_thoughts") { db in
+            try db.alter(table: "journalThoughts") { t in
+                t.add(column: "userEdited", .boolean).notNull().defaults(to: false)
+                t.add(column: "agentOriginalText", .text)
+            }
+            try db.execute(sql: "UPDATE journalThoughts SET agentOriginalText = thought")
+        }
         return migrator
     }
 

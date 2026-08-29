@@ -159,6 +159,119 @@ import Testing
     #expect(try await journal.thoughts(for: submitted.id).count == 1)
 }
 
+@Test func journalThoughtUserEditPersistsAndFlagsUserEdited() async throws {
+    // JRNL-01/02: the user's edit replaces the displayed text, flags the row and
+    // preserves the Agent draft — including across a second edit.
+    let db = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: db)
+    let reflections = GRDBReflectionRepository(database: db)
+    let journal = GRDBJournalRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "journal-user-edit"), title: "忠于用户", fileName: "edit.epub", fileSize: 1)
+    try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "原始表达保持不动", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+
+    let thought = JournalThought(reflectionID: reflection.id, messageID: UUID(), thought: "Agent 的整理稿")
+    try await journal.saveThought(thought)
+
+    try await journal.applyUserEdit(thoughtID: thought.id, newText: "  我自己的说法  ")
+    let edited = try #require(try await journal.thoughts(for: reflection.id).first)
+    #expect(edited.id == thought.id)
+    #expect(edited.thought == "我自己的说法")
+    #expect(edited.userEdited)
+    #expect(edited.agentOriginalText == "Agent 的整理稿")
+
+    // A second edit keeps the original Agent draft, not the previous user text.
+    try await journal.applyUserEdit(thoughtID: thought.id, newText: "再次修改")
+    let reEdited = try #require(try await journal.thoughts(for: reflection.id).first)
+    #expect(reEdited.thought == "再次修改")
+    #expect(reEdited.userEdited)
+    #expect(reEdited.agentOriginalText == "Agent 的整理稿")
+}
+
+@Test func journalThoughtDecodesLegacyArchiveWithoutUserEditedFields() throws {
+    // Exports written before userEdited existed must stay decodable (TRUST-02
+    // compatibility): missing fields default to the unedited Agent draft. The
+    // legacy payload is simulated faithfully by encoding a thought with the
+    // exporter's strategies and deleting the two new keys, so the identifier
+    // shapes match whatever the archive format actually produces.
+    let thought = JournalThought(
+        reflectionID: ReflectionID(rawValue: UUID()), messageID: UUID(),
+        thought: "旧导出里的想法", createdAt: Date(timeIntervalSince1970: 1_767_225_600)
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    var payload = try JSONSerialization.jsonObject(with: encoder.encode(thought)) as! [String: Any]
+    payload.removeValue(forKey: "userEdited")
+    payload.removeValue(forKey: "agentOriginalText")
+    #expect(payload["userEdited"] == nil)
+
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let legacy = try decoder.decode(JournalThought.self, from: try JSONSerialization.data(withJSONObject: payload))
+    #expect(legacy.thought == "旧导出里的想法")
+    #expect(!legacy.userEdited)
+    #expect(legacy.agentOriginalText == nil)
+}
+
+@Test func journalEntryServiceRematerializationNeverOverwritesUserEditedThoughts() async throws {
+    // JRNL-02 regression: re-assembling the Journal from new Agent output —
+    // reloads, re-materialization and follow-up messages — must never silently
+    // overwrite a thought the user has edited. The user text wins; a matching
+    // Agent redraft is dropped, while genuinely new bullets still appear.
+    let db = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: db)
+    let reading = GRDBReadingRepository(database: db)
+    let sessionsRepo = GRDBReadingSessionRepository(database: db)
+    let reflections = GRDBReflectionRepository(database: db)
+    let journal = GRDBJournalRepository(database: db)
+    let index = GRDBBookIndexRepository(database: db)
+
+    let book = Book(fingerprint: .init(rawValue: "journal-f9"), title: "用户主权", fileName: "f9.epub", fileSize: 1)
+    try await books.insert(book)
+
+    let submitted = try await TextReflectionSubmissionService(repository: reflections).submit(.init(
+        bookID: book.id, sessionID: nil, locator: try locator(href: "0.xhtml", progression: 0.2),
+        originalText: "读到自由与责任的章节。", linkedHighlightIDs: []
+    ))
+    try await reflections.appendMessage(try ReflectionMessage(
+        reflectionID: submitted.id, author: .agent, source: .agentGenerated,
+        content: #"{"question": "自由意味着什么？", "whatIThink": ["用户重新审视了自由与责任"]}"#,
+        createdAt: Date(timeIntervalSince1970: 100)
+    ))
+
+    let service = JournalEntryService(
+        books: books, reflections: reflections, sessions: sessionsRepo,
+        index: index, reading: reading, journal: journal
+    )
+    _ = try await service.recentEntries()
+    let original = try #require(try await journal.thoughts(for: submitted.id).first)
+    #expect(original.thought == "用户重新审视了自由与责任")
+    #expect(!original.userEdited)
+    #expect(original.agentOriginalText == "用户重新审视了自由与责任")
+
+    try await service.applyUserEdit(thoughtID: original.id, newText: "我自己的一句话")
+
+    // Idempotent reloads keep the user text untouched.
+    _ = try await service.recentEntries()
+    _ = try await service.recentEntries()
+    #expect(try await journal.thoughts(for: submitted.id).map(\.thought) == ["我自己的一句话"])
+
+    // A follow-up Agent message restating the same point must not resurrect the
+    // Agent draft next to the user's row; genuinely new bullets still land.
+    try await reflections.appendMessage(try ReflectionMessage(
+        reflectionID: submitted.id, author: .agent, source: .agentGenerated,
+        content: #"{"whatIThink": ["用户重新审视了自由与责任", "另一个新观点"]}"#,
+        createdAt: Date(timeIntervalSince1970: 200)
+    ))
+    _ = try await service.recentEntries()
+    let thoughts = try await journal.thoughts(for: submitted.id)
+    #expect(thoughts.map(\.thought) == ["我自己的一句话", "另一个新观点"])
+    #expect(thoughts[0].userEdited)
+    #expect(thoughts[0].agentOriginalText == "用户重新审视了自由与责任")
+    #expect(!thoughts[1].userEdited)
+}
+
 @Test func textSubmissionLinksSessionHighlightsThroughInsert() async throws {
     let db = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: db)
