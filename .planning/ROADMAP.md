@@ -6,12 +6,12 @@
 
 ## Milestones
 
-- 🚧 **v0.5 TestFlight 就绪** — Phases 1-6 (进行中)
-- 📋 **v1.0 App Store 首发** — Phases 7-11 (已规划)
+- ✅ **v0.5 TestFlight 就绪** — Phases 1-6 (代码完成 2026-08-29,待用户真机验收)
+- 🚧 **v1.0 App Store 首发** — Phases 7-11 (进行中)
 
 ## Phases
 
-### 🚧 v0.5 TestFlight 就绪 (In Progress)
+### ✅ v0.5 TestFlight 就绪 (Shipped — code complete 2026-08-29)
 
 **Milestone Goal:** 产品核心循环完整、可信、可引导,达到 PRD §18「0.5 Habit & Polish:可公开 TestFlight 水准」。
 
@@ -100,7 +100,7 @@ Plans:
 - [ ] 06-02: FIX-01..03 批量修正
 - [ ] 06-03: 里程碑集成验证(swift test 全绿 + 更新规划文档)
 
-### 📋 v1.0 App Store 首发 (Planned)
+### 🚧 v1.0 App Store 首发 (In Progress)
 
 **Milestone Goal:** 达到 PRD §18「1.0 App Store」首发标准,完成上架。
 
@@ -186,7 +186,7 @@ v1.0: 7 ‖ 8(并行)+ 9(依赖 5)→ 10 → 11
 | 3. Journal 用户主权 | v0.5 | 1/1 | Complete | 2026-08-29 |
 | 4. Onboarding 三步引导 | v0.5 | 2/2 | Complete | 2026-08-29 |
 | 5. ReaderAgentBench 最小可用 | v0.5 | 2/2 | Complete | 2026-08-29 |
-| 6. 习惯打磨与偏差批量修 | v0.5 | 0/3 | Not started | - |
+| 6. 习惯打磨与偏差批量修 | v0.5 | 3/3 | Complete | 2026-08-29 |
 | 7. 无障碍与动态字体 | v1.0 | 0/2 | Not started | - |
 | 8. Provider 稳定性 | v1.0 | 0/2 | Not started | - |
 | 9. Bench LLM 评审与回归纪律 | v1.0 | 0/2 | Not started | - |

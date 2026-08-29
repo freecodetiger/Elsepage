@@ -46,6 +46,15 @@ None yet.
 
 None yet.
 
+Phase: 7 of 11 (无障碍与动态字体) — v1.0 波次开始
+Plan: Phase 7/8 并行执行中; Phase 9 排队 (依赖已满足)
+Status: In progress
+Last activity: 2026-08-29 — v0.5 代码完成 (Phase 6 合并, main 274 tests 全绿, 迁移 v20); 等待用户真机验收 TestFlight
+
+Progress: [██████░░░░] 59% (13/22 plans)
+
+v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单见 .planning/UAT-v0.5.md (待补)
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
