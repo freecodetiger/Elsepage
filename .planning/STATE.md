@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-08-29)
 
 ## Current Position
 
-Phase: 5 of 11 (ReaderAgentBench 最小可用)
-Plan: Phase 5 执行中; 完成后进入 Phase 6 集成收尾
+Phase: 6 of 11 (习惯打磨与偏差批量修)
+Plan: Phase 6 执行中 (v0.5 最后一个 phase)
 Status: In progress
-Last activity: 2026-08-29 — Phase 4 (Onboarding) 合并; main 259 tests 全绿
+Last activity: 2026-08-29 — Phase 5 (Bench) 合并; 全量基线 10/10 跑通 (docs/bench/runs/2026-08-29-baseline); main 264 tests 全绿
 
-Progress: [████░░░░░░] 41% (9/22 plans)
+Progress: [█████░░░░░] 50% (10/22 plans)
 
 Milestone: v0.5 TestFlight 就绪 (Phases 1-6)
 Next milestone: v1.0 App Store 首发 (Phases 7-11)

@@ -185,7 +185,7 @@ v1.0: 7 ‖ 8(并行)+ 9(依赖 5)→ 10 → 11
 | 2. Library/Today 补全 | v0.5 | 2/2 | Complete | 2026-08-29 |
 | 3. Journal 用户主权 | v0.5 | 1/1 | Complete | 2026-08-29 |
 | 4. Onboarding 三步引导 | v0.5 | 2/2 | Complete | 2026-08-29 |
-| 5. ReaderAgentBench 最小可用 | v0.5 | 0/2 | Not started | - |
+| 5. ReaderAgentBench 最小可用 | v0.5 | 2/2 | Complete | 2026-08-29 |
 | 6. 习惯打磨与偏差批量修 | v0.5 | 0/3 | Not started | - |
 | 7. 无障碍与动态字体 | v1.0 | 0/2 | Not started | - |
 | 8. Provider 稳定性 | v1.0 | 0/2 | Not started | - |
