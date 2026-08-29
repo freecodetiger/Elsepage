@@ -57,5 +57,6 @@ v1.0:  p7-a11y ‖ p8-providers ‖ p9-bench-judge(依赖 p5 产物)
 ## 质量门槛(全 phase 生效)
 
 - Agent 负责:开发 + `swift test` 全绿;不执行 xcodebuild 构建/模拟器/真机操作
+- **App/ 层补充要求**:`swift test` 不编译 App/。凡修改或新增 App/ 文件,必须完成 `swiftc -parse` 语法检查,并在里程碑收尾时做一次 `xcodebuild -sdk iphoneos CODE_SIGNING_ALLOWED=NO build` **仅编译验证**(不签名、不跑模拟器)— actor 隔离、类型、target 成员等问题只有编译才能暴露(2026-08-29 两轮返工的教训:`Haptics` 未入工程、`AnnotationHaptics` actor 隔离、Onboarding `@Bindable` 捕获)
 - 用户负责:xcodebuild 构建、真机手测、TestFlight 上传,以及 phase 6/11 的验收签字
 - 涉及真实 Provider 的联调(bench 跑批、Test Connection、验证矩阵):用户提供 API Key 后按 phase 内说明执行,Key 不入库不入日志
