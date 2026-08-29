@@ -12,9 +12,9 @@ See: .planning/PROJECT.md (updated 2026-08-29)
 Phase: 1 of 11 (信任基线) — 并行推进中
 Plan: Phase 2 已合并; Phase 1/3 执行中; 4/5 排队
 Status: In progress
-Last activity: 2026-08-29 — Phase 1 (信任基线) 合并; main 238 tests 全绿; PRD 已更新至 v0.3
+Last activity: 2026-08-29 — Phase 3 (Journal 用户主权) 合并; main 243 tests 全绿; 迁移 v19 落地
 
-Progress: [██░░░░░░░░] 18% (4/22 plans)
+Progress: [███░░░░░░░] 32% (7/22 plans)
 
 Milestone: v0.5 TestFlight 就绪 (Phases 1-6)
 Next milestone: v1.0 App Store 首发 (Phases 7-11)
