@@ -832,7 +832,10 @@ private struct BrainItemEditorSheet<Stage: Hashable>: View {
         NavigationStack {
             Form {
                 if let secondaryTitle {
-                    TextField(secondaryTitle, text: $secondaryText)
+                    TextField(secondaryTitle, text: Binding(
+                        get: { secondaryText ?? "" },
+                        set: { secondaryText = $0.isEmpty ? nil : $0 }
+                    ))
                 }
                 TextField(textTitle, text: $text, axis: .vertical)
                     .lineLimit(3...8)
