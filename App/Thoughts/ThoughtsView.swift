@@ -106,22 +106,50 @@ struct ThoughtsView: View {
         )
     }
 
+    private var searchActive: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchEmptyState: some View {
+        ContentUnavailableView.search(text: searchText)
+            .frame(maxWidth: .infinity)
+            .padding(.top, ElsepageTheme.Spacing.xLarge)
+    }
+
     private var archive: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
                 controls
                 if viewMode == .journal {
                     if visibleJournalEntries.isEmpty {
-                        ContentUnavailableView.search(text: searchText)
+                        if searchActive {
+                            searchEmptyState
+                        } else {
+                            // 日志为空：说明这条路径会沉淀什么，不催促。
+                            ContentUnavailableView(
+                                "日志还没有整理出条目",
+                                systemImage: "book.closed",
+                                description: Text("每次反思后，Agent 整理的想法、提问与记忆变化会安静地沉淀在这里。")
+                            )
                             .frame(maxWidth: .infinity)
                             .padding(.top, ElsepageTheme.Spacing.xLarge)
+                        }
                     } else {
                         journalSections
                     }
                 } else if visibleEntries.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
+                    if searchActive {
+                        searchEmptyState
+                    } else {
+                        // 筛选（有回应/有连接）下没有条目：温和说明，不制造负罪感。
+                        ContentUnavailableView(
+                            "这个筛选下没有想法",
+                            systemImage: "line.3.horizontal.decrease",
+                            description: Text("换个筛选条件看看，或回到「全部」。")
+                        )
                         .frame(maxWidth: .infinity)
                         .padding(.top, ElsepageTheme.Spacing.xLarge)
+                    }
                 } else if viewMode == .timeline {
                     timelineSections
                 } else {
