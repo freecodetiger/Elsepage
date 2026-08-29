@@ -284,7 +284,7 @@ v1.1: 12 → 13 ‖ 14 ‖ 15(并行)→ 16 → 17 → 18 → 19
 | 13. Brain UI | v1.1 | 1/1 | Complete | 2026-08-29 |
 | 14. Evidence / Relation | v1.1 | 1/1 | Complete | 2026-08-29 |
 | 15. Persistent Embedding + BrainRetriever | v1.1 | 1/1 | Complete | 2026-08-29 |
-| 16. Agent Bridge | v1.1 | 0/1 | Planned | - |
+| 16. Agent Bridge | v1.1 | 1/1 | Complete | 2026-08-29 |
 | 17. BrainProjectionService | v1.1 | 0/1 | Planned | - |
 | 18. Revision / Evolution | v1.1 | 0/1 | Planned | - |
 | 19. Evaluation / Observability | v1.1 | 0/1 | Planned | - |

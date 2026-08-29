@@ -66,8 +66,8 @@ v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单�
 ## Session Continuity
 
 Last session: 2026-08-29
-Stopped at: v1.1 Personal Brain — Phase 12/13/14/15 完成(Domain、UI、Evidence/Relation、检索基建);下一阶段 Phase 16 Agent Bridge → Phase 17 投影服务(大脑开始更新);App 层 xcodebuild 编译验证待用户(Phase 13+14 累计)
-Resume file: .planning/phases/15-brain-retriever/15-SUMMARY.md
+Stopped at: v1.1 Personal Brain — Phase 12-16 完成(Domain、UI、Evidence/Relation、检索、Agent Bridge);下一阶段 Phase 17 BrainProjectionService(写入统一,大脑开始自动更新);App 层 xcodebuild 验证待用户;「继续想想」UI 形态待用户拍板
+Resume file: .planning/phases/16-agent-bridge/16-SUMMARY.md
 
 ### v1.1 Brain 里程碑进度
 
