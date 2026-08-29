@@ -1,9 +1,11 @@
 import BrainCore
+import ContextEngineering
 import Foundation
 import GRDB
 import LibraryCore
 import Persistence
 import ReflectionCore
+import RetrievalCore
 import Testing
 
 // Phase 12 (docs/brain.md): BrainCore domain round-trips, brainItems per-kind
@@ -16,7 +18,7 @@ import Testing
     let statement = "自由最困难的部分是没有人能替你承担选择的后果。"
 
     let thought = BrainItem.thought(Thought(
-        id: BrainItemID(rawValue: "thought-1"), title: "自由意味着责任",
+        id: BrainItemID(rawValue: "thought-1"), title: "自由与责任",
         statement: statement,
         stage: .evolving, provenance: BrainProvenance(originEvidence: nil),
         createdAt: now, updatedAt: now
@@ -47,7 +49,7 @@ import Testing
         Issue.record("expected thought")
         return
     }
-    #expect(loadedThought.title == "自由意味着责任")
+    #expect(loadedThought.title == "自由与责任")
     #expect(loadedThought.statement == statement)
     #expect(loadedThought.stage == .evolving)
 
@@ -178,7 +180,7 @@ import Testing
     let database = try AppDatabase.inMemory()
     let repository = GRDBBrainRepository(database: database)
     let thought = BrainItem.thought(Thought(
-        id: BrainItemID(rawValue: "thought-e"), title: "自由意味着责任",
+        id: BrainItemID(rawValue: "thought-e"), title: "自由与责任",
         statement: "自由的核心是承担选择。", stage: .evolving,
         provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
     ))
@@ -287,6 +289,174 @@ import Testing
     #expect(remaining.count == 1, "reflection-sourced evidence is cleaned with its reflection")
     #expect(remaining.first?.source == .bookChunk("chunk-keep"))
     #expect(try await repository.item(id: thought.id) != nil, "the thought itself survives")
+}
+
+// MARK: - Persistent embeddings + BrainRetriever (phase 15)
+
+/// Deterministic keyword→vector mapping so lanes are controllable in tests:
+/// 自由 → e1, 责任 → e2, anything else → e3.
+private struct KeywordEmbeddingProvider: EmbeddingProvider {
+    let modelIdentifier = "fake-brain-embed"
+    let dimensions = 4
+    func embed(_ texts: [String]) async throws -> [[Float]] {
+        texts.map { text in
+            if text.contains("自由") { return [1, 0, 0, 0] }
+            if text.contains("责任") { return [0, 1, 0, 0] }
+            return [0, 0, 1, 0]
+        }
+    }
+}
+
+private actor EmbedCallCounter {
+    private var calls = 0
+    func increment() { calls += 1 }
+    var count: Int { calls }
+}
+
+private final class CountingEmbeddingProvider: EmbeddingProvider, @unchecked Sendable {
+    let modelIdentifier = "fake-brain-embed"
+    let dimensions = 4
+    private let counter = EmbedCallCounter()
+    var embedCallCount: Int { get async { await counter.count } }
+    func embed(_ texts: [String]) async throws -> [[Float]] {
+        await counter.increment()
+        return texts.map { text in
+            if text.contains("自由") { return [1, 0, 0, 0] }
+            return [0, 0, 1, 0]
+        }
+    }
+}
+
+@Test func brainEmbeddingStoreRoundTripsAndCascades() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let store = GRDBBrainEmbeddingStore(database: database)
+    let now = Date()
+    let thought = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-vec"), title: "向量", statement: "自由与责任",
+        stage: .evolving, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: now, updatedAt: now
+    ))
+    let question = BrainItem.question(Question(
+        id: BrainItemID(rawValue: "q-vec"), question: "什么是自由？", state: .open,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: now, updatedAt: now
+    ))
+    try await repository.save(thought)
+    try await repository.save(question)
+    try await store.save([
+        BrainItemVector(itemID: thought.id, model: "m1", dimensions: 2, contentHash: "h1", vector: [1.5, -2.25], updatedAt: now),
+        BrainItemVector(itemID: question.id, model: "m1", dimensions: 2, contentHash: "h2", vector: [0.5, 0.5], updatedAt: now),
+        BrainItemVector(itemID: question.id, model: "m2", dimensions: 2, contentHash: "h2", vector: [9, 9], updatedAt: now),
+    ])
+
+    let rows = try await store.vectors(model: "m1")
+    #expect(rows.count == 2)
+    #expect(rows.first { $0.itemID == thought.id }?.vector == [1.5, -2.25], "Float vector round-trips byte-exact")
+    #expect(try await store.vectors(model: "m2").count == 1, "rows are keyed per model")
+
+    try await repository.delete(id: thought.id)
+    #expect(try await store.vectors(model: "m1").count == 1, "item deletion cascades its vectors")
+
+    try await database.wipeAllUserData()
+    #expect(try await store.vectors(model: "m1").isEmpty)
+}
+
+@Test func brainRetrieverRefreshesStaleEmbeddingsExactlyOnce() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let store = GRDBBrainEmbeddingStore(database: database)
+    let provider = CountingEmbeddingProvider()
+    let retriever = BrainRetriever(
+        items: repository, store: store,
+        embeddingProvider: { @Sendable in provider }
+    )
+    let thought = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-stale"), title: "自由观",
+        statement: "自由意味着承担选择的责任", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(thought)
+    // A vector exists but is stale (wrong contentHash).
+    try await store.save([BrainItemVector(
+        itemID: thought.id, model: provider.modelIdentifier, dimensions: 4,
+        contentHash: "stale", vector: [0, 0, 1, 0], updatedAt: Date()
+    )])
+
+    let first = await retriever.retrieve(query: "自由", limit: 3)
+    #expect(first.first?.semanticScore != nil, "stale vector refreshed, semantic lane fires")
+
+    let stored = try await store.vectors(model: provider.modelIdentifier)
+    #expect(stored.first?.contentHash == BrainRetriever.contentHash("自由意味着承担选择的责任"))
+
+    let callsAfterFirst = await provider.embedCallCount
+    let second = await retriever.retrieve(query: "自由", limit: 3)
+    #expect(second.first?.semanticScore != nil)
+    let callsAfterSecond = await provider.embedCallCount
+    #expect(callsAfterSecond == callsAfterFirst + 1, "second query embeds the query only — content unchanged means zero item re-embeds")
+}
+
+@Test func brainRetrieverFallsBackToLexicalWhenSemanticUnavailable() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let retriever = BrainRetriever(items: repository)
+    try await repository.save(.thought(Thought(
+        id: BrainItemID(rawValue: "t-lex"), title: "自由与责任",
+        statement: "自由的选择带来不可转嫁的责任", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
+
+    let hits = await retriever.retrieve(query: "自由与责任", limit: 3)
+    #expect(hits.first?.lexicalScore != nil)
+    #expect(hits.first?.semanticScore == nil)
+}
+
+@Test func brainRetrieverSemanticSurfacesLexicalMiss() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let store = GRDBBrainEmbeddingStore(database: database)
+    let retriever = BrainRetriever(
+        items: repository, store: store,
+        embeddingProvider: { @Sendable in KeywordEmbeddingProvider() }
+    )
+    try await repository.save(.thought(Thought(
+        id: BrainItemID(rawValue: "t-sem"), title: "自由观",
+        statement: "自由观正在变化", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
+
+    // "自由" tokenizes to a single bigram → the lexical lane (≥2 tokens) stays
+    // empty; only the semantic lane can recall the item.
+    let hits = await retriever.retrieve(query: "自由", limit: 3)
+    let candidate = try #require(hits.first)
+    #expect(candidate.semanticScore != nil)
+    #expect(candidate.lexicalScore == nil)
+}
+
+@Test func brainRetrieverHonorsKindsAndEligibility() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let now = Date()
+    try await repository.save(.memory(BrainMemory(
+        id: BrainItemID(rawValue: "m-sup"), content: "自由的选择带来责任",
+        origin: .agentInferred, confidence: .medium, state: .superseded,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: now, updatedAt: now
+    )))
+    try await repository.save(.thought(Thought(
+        id: BrainItemID(rawValue: "t-arch"), title: "已归档", statement: "自由的选择带来责任",
+        stage: .archived, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: now, updatedAt: now
+    )))
+    try await repository.save(.thought(Thought(
+        id: BrainItemID(rawValue: "t-live"), title: "活跃想法", statement: "自由的选择带来责任",
+        stage: .evolving, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: now, updatedAt: now
+    )))
+
+    let thoughtsOnly = await BrainRetriever(items: repository).retrieve(query: "自由与责任", kinds: [.thought], limit: 5)
+    #expect(thoughtsOnly.map { $0.item.id.rawValue } == ["t-live"], "kinds filter excludes memory")
+
+    let allKinds = await BrainRetriever(items: repository).retrieve(query: "自由与责任", limit: 5)
+    #expect(allKinds.map { $0.item.id.rawValue } == ["t-live"], "superseded memories and archived thoughts are ineligible even when kinds allow")
 }
 
 @Test func wipeCoversEvidenceAndRelations() async throws {

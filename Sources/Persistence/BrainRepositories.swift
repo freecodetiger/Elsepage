@@ -182,6 +182,71 @@ private struct BrainItemRecord: Codable, FetchableRecord, PersistableRecord {
     }
 }
 
+/// GRDB-backed `BrainEmbeddingStore`. Vectors are stored per (item, model);
+/// a model switch keeps old rows, and item deletion cascades via FK.
+public final class GRDBBrainEmbeddingStore: BrainEmbeddingStore, @unchecked Sendable {
+    private let db: AppDatabase
+    public init(database: AppDatabase) { db = database }
+
+    public func vectors(model: String) async throws -> [BrainItemVector] {
+        try await db.writer.read { db in
+            try BrainItemVectorRecord
+                .filter(Column("model") == model)
+                .order(Column("updatedAt"))
+                .fetchAll(db)
+                .map { try $0.domain() }
+        }
+    }
+
+    public func save(_ vectors: [BrainItemVector]) async throws {
+        guard !vectors.isEmpty else { return }
+        try await db.writer.write { db in
+            for vector in vectors {
+                try BrainItemVectorRecord(vector).save(db)
+            }
+        }
+    }
+}
+
+private struct BrainItemVectorRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "brainItemEmbeddings"
+    var brainItemID: String
+    var model: String
+    var dimensions: Int
+    var contentHash: String
+    var vector: Data
+    var updatedAt: Date
+
+    init(_ vector: BrainItemVector) {
+        brainItemID = vector.itemID.rawValue
+        model = vector.model
+        dimensions = vector.dimensions
+        contentHash = vector.contentHash
+        self.vector = Self.encode(vector.vector)
+        updatedAt = vector.updatedAt
+    }
+
+    func domain() throws -> BrainItemVector {
+        guard let decoded = Self.decode(vector, dimensions: dimensions) else {
+            throw BrainItemValidationError.stateMismatch
+        }
+        return BrainItemVector(
+            itemID: BrainItemID(rawValue: brainItemID), model: model,
+            dimensions: dimensions, contentHash: contentHash,
+            vector: decoded, updatedAt: updatedAt
+        )
+    }
+
+    private static func encode(_ vector: [Float]) -> Data {
+        vector.withUnsafeBufferPointer { Data(buffer: $0) }
+    }
+
+    private static func decode(_ data: Data, dimensions: Int) -> [Float]? {
+        guard data.count == dimensions * MemoryLayout<Float>.size else { return nil }
+        return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+}
+
 private extension BrainItem {
     var content: String {
         switch self {

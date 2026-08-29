@@ -512,6 +512,22 @@ public final class AppDatabase: @unchecked Sendable {
             try db.create(index: "brainItemEvidence_onItem", on: "brainItemEvidence", columns: ["brainItemID"])
             try db.create(index: "brainItemRelations_onTarget", on: "brainItemRelations", columns: ["targetItemID"])
         }
+
+        // Persistent brain-item embeddings (docs/brain.md §6, phase 15): created
+        // once, reused across queries. PK (item, model) keeps old-model rows on
+        // a model switch (same policy as bookChunkEmbeddings); item deletion
+        // cascades its vectors, so there is no manual GC.
+        migrator.registerMigration("v23_brain_item_embeddings") { db in
+            try db.create(table: "brainItemEmbeddings", ifNotExists: true) { t in
+                t.column("brainItemID", .text).notNull().references("brainItems", onDelete: .cascade)
+                t.column("model", .text).notNull()
+                t.column("dimensions", .integer).notNull()
+                t.column("contentHash", .text).notNull()
+                t.column("vector", .blob).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.primaryKey(["brainItemID", "model"])
+            }
+        }
         return migrator
     }
 
@@ -552,6 +568,7 @@ public final class AppDatabase: @unchecked Sendable {
         "reflectionConnections",
         "reflectionEvidence",
         "memories",
+        "brainItemEmbeddings",
         "brainItemEvidence",
         "brainItemRelations",
         "brainItems",
