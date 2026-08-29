@@ -46,12 +46,12 @@ None yet.
 
 None yet.
 
-Phase: 7 of 11 (无障碍与动态字体) — v1.0 波次开始
-Plan: Phase 7/8 并行执行中; Phase 9 排队 (依赖已满足)
-Status: In progress
-Last activity: 2026-08-29 — Phase 10 (发布合规) 合并; project.yml 版本 1.0.0 (用户需 xcodegen); Phase 9 执行中
+Phase: 11 of 11 (首发验收) — 代码侧完成
+Plan: UAT 清单已交付 (docs/release/UAT-CHECKLIST.md); 剩余全部为用户真机验收项
+Status: Awaiting user acceptance
+Last activity: 2026-08-29 — Phase 9/10/11 代码侧完成; 评审基线 20.10/22; 317 ST + 26 XCT 全绿; 修复 Haptics.swift 工程遗漏并加防回归测试
 
-Progress: [█████████░] 86% (19/22 plans)
+Progress: [█████████▓] 95% (21/22 plans)
 
 v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单见 .planning/UAT-v0.5.md (待补)
 
