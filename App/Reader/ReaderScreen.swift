@@ -193,7 +193,8 @@ struct ReaderScreen: View {
                 reflectionRepository: model.reflectionRepository,
                 readerAgent: model.readerAgent,
                 makePolishService: model.makePolishService,
-                achievements: model.achievements
+                achievements: model.achievements,
+                recordAgentDiscussion: model.agentDiscussionRecorder
             )
         }
     }

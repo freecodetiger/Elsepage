@@ -52,6 +52,10 @@ public protocol ReadingSessionRepository: Sendable {
         id: ReadingSessionID, endedAt: Date, endLocator: BookLocator,
         highlightCount: Int, noteCount: Int, agentDiscussionCount: Int
     ) async throws
+    /// FIX-01 (PRD §21.5): persists an increment of the user-initiated agent
+    /// discussion counter as soon as a discussion starts, so it survives crashes
+    /// and can never be overwritten by a later session end.
+    func incrementAgentDiscussionCount(id: ReadingSessionID, by count: Int) async throws
     func delete(id: ReadingSessionID) async throws
 }
 

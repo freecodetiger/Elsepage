@@ -650,6 +650,15 @@ final class ReaderModel {
         }
     }
 
+    /// FIX-01: hook that counts one user-initiated agent discussion (reflection
+    /// submission or follow-up send) against the reading session.
+    var agentDiscussionRecorder: AgentDiscussionRecorder? {
+        let sessions = sessions
+        return { sessionID in
+            try? await sessions.recordAgentDiscussion(id: sessionID)
+        }
+    }
+
     func reflect(on locator: BookLocator) async {
         do {
             let session: ReadingSession
@@ -667,7 +676,8 @@ final class ReaderModel {
                 reflectionRepository: reflectionRepository,
                 readerAgent: readerAgent,
                 makePolishService: makePolishService,
-                achievements: achievements
+                achievements: achievements,
+                recordAgentDiscussion: agentDiscussionRecorder
             )
         } catch is CancellationError {
             return

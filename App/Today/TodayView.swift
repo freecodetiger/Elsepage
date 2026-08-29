@@ -152,7 +152,11 @@ struct TodayView: View {
                     reflectionRepository: model.library.reflectionRepository,
                     readerAgent: model.library.readerAgent,
                     makePolishService: model.library.makePolishService,
-                    achievements: achievements
+                    achievements: achievements,
+                    recordAgentDiscussion: { sessionID in
+                        // 补写 reopen the same session's discussion thread (FIX-01).
+                        try? await model.library.sessionService.recordAgentDiscussion(id: sessionID)
+                    }
                 )
             }
         case .reflectionComplete(let book):

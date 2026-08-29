@@ -23,13 +23,17 @@ public actor ReadingSessionService {
     }
 
     /// Completes a session exactly once. A repeated end request returns the already-recorded result.
+    /// `agentDiscussionCount` is normally left nil: the counter is persisted at the
+    /// moment each user-initiated discussion starts (`recordAgentDiscussion`), so
+    /// ending a session preserves it. An explicit value — legacy callers, tests —
+    /// is combined by taking the larger of the persisted and provided numbers.
     public func end(
         id: ReadingSessionID,
         at locator: BookLocator,
         endedAt: Date = Date(),
         highlightCount: Int,
         noteCount: Int,
-        agentDiscussionCount: Int = 0
+        agentDiscussionCount: Int? = nil
     ) async throws -> ReadingSession {
         guard let existing = try await repository.session(id: id) else {
             throw ReadingSessionServiceError.missingSession
@@ -42,12 +46,25 @@ public actor ReadingSessionService {
             endLocator: locator,
             highlightCount: max(0, highlightCount),
             noteCount: max(0, noteCount),
-            agentDiscussionCount: max(0, agentDiscussionCount)
+            agentDiscussionCount: max(existing.agentDiscussionCount, max(0, agentDiscussionCount ?? 0))
         )
         guard let completed = try await repository.session(id: id) else {
             throw ReadingSessionServiceError.missingSession
         }
         return completed
+    }
+
+    /// FIX-01 (PRD §21.5): records one user-initiated agent discussion — the
+    /// Reflection submission that opens the Agent conversation, and each follow-up
+    /// the user sends in it. The increment lands in the store immediately (and is
+    /// additive), so app kills and later session ends never lose it. Sessions
+    /// that already ended still accept the increment: a 补写 Reflection reopens
+    /// that session's discussion thread, and the count stays a property of it.
+    /// Returns the updated session, or nil when the session is unknown.
+    public func recordAgentDiscussion(id: ReadingSessionID) async throws -> ReadingSession? {
+        guard (try await repository.session(id: id)) != nil else { return nil }
+        try await repository.incrementAgentDiscussionCount(id: id, by: 1)
+        return try await repository.session(id: id)
     }
 }
 
