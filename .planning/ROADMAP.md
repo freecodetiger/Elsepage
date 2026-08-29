@@ -280,7 +280,7 @@ v1.1: 12 → 13 ‖ 14 ‖ 15(并行)→ 16 → 17 → 18 → 19
 | 9. Bench LLM 评审与回归纪律 | v1.0 | 2/2 | Complete | 2026-08-29 |
 | 10. 发布工程与合规 | v1.0 | 2/2 | Complete | 2026-08-29 |
 | 11. 首发验收 | v1.0 | 1/2 | In progress | - |
-| 12. Brain Domain + Persistence | v1.1 | 0/1 | In progress | - |
+| 12. Brain Domain + Persistence | v1.1 | 1/1 | Complete | 2026-08-29 |
 | 13. Brain UI | v1.1 | 0/1 | Planned | - |
 | 14. Evidence / Relation | v1.1 | 0/1 | Planned | - |
 | 15. Persistent Embedding + BrainRetriever | v1.1 | 0/1 | Planned | - |
