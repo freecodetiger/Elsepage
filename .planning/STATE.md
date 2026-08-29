@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-08-29)
 
 ## Current Position
 
-Phase: 1 of 11 (信任基线) — 并行推进中
-Plan: Phase 2 已合并; Phase 1/3 执行中; 4/5 排队
+Phase: 5 of 11 (ReaderAgentBench 最小可用)
+Plan: Phase 5 执行中; 完成后进入 Phase 6 集成收尾
 Status: In progress
-Last activity: 2026-08-29 — Phase 3 (Journal 用户主权) 合并; main 243 tests 全绿; 迁移 v19 落地
+Last activity: 2026-08-29 — Phase 4 (Onboarding) 合并; main 259 tests 全绿
 
-Progress: [███░░░░░░░] 32% (7/22 plans)
+Progress: [████░░░░░░] 41% (9/22 plans)
 
 Milestone: v0.5 TestFlight 就绪 (Phases 1-6)
 Next milestone: v1.0 App Store 首发 (Phases 7-11)
