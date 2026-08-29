@@ -74,7 +74,6 @@ private func makeConfiguration(reranker: String?) -> ProviderConfiguration {
         baseURL: URL(string: "https://api.siliconflow.cn/v1")!,
         modelID: "chat-model",
         secretReference: .init(rawValue: "ref"),
-        streamingEnabled: false,
         embeddingModelID: nil,
         rerankerModelID: reranker
     )

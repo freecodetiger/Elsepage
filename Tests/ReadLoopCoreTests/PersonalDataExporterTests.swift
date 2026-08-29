@@ -24,7 +24,6 @@ import Testing
         baseURL: URL(string: "https://api.example.com/v1")!,
         modelID: "example-chat",
         secretReference: SecretReference(rawValue: "primary-provider-key"),
-        streamingEnabled: false
     ))
 
     let book = TestFixtures.book(fingerprint: "export-book")

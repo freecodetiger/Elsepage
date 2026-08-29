@@ -40,7 +40,6 @@ final class ProviderSettingsModel {
     var baseURL = "https://api.openai.com/v1"
     var modelID = ""
     var apiKey = ""
-    var streamingEnabled = false
     private(set) var hasSavedKey = false
     private(set) var isWorking = false
     private(set) var statusMessage: String?
@@ -65,7 +64,6 @@ final class ProviderSettingsModel {
             selectedPreset = .matching(baseURL: configuration.baseURL)
             baseURL = configuration.baseURL.absoluteString
             modelID = configuration.modelID
-            streamingEnabled = configuration.streamingEnabled
             hasSavedKey = try await secrets.secret(for: Self.secretReference) != nil
         } catch { errorMessage = Self.message(for: error) }
     }
@@ -162,7 +160,6 @@ final class ProviderSettingsModel {
             baseURL: url,
             modelID: model,
             secretReference: Self.secretReference,
-            streamingEnabled: streamingEnabled,
             embeddingModelID: loadedConfiguration?.embeddingModelID,
             embeddingBaseURL: loadedConfiguration?.embeddingBaseURL,
             embeddingSecretReference: Self.embeddingSecretReference,

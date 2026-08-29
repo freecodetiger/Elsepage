@@ -130,7 +130,7 @@ final class RAGSettingsModel {
         let cleared = ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: nil,
+            embeddingModelID: nil,
             embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
             rerankerModelID: base.rerankerModelID, rerankerBaseURL: base.rerankerBaseURL,
             rerankerSecretReference: base.rerankerSecretReference
@@ -155,7 +155,7 @@ final class RAGSettingsModel {
         return ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: embedding,
+            embeddingModelID: embedding,
             embeddingBaseURL: url, embeddingSecretReference: ProviderSettingsModel.embeddingSecretReference,
             rerankerModelID: base.rerankerModelID, rerankerBaseURL: base.rerankerBaseURL,
             rerankerSecretReference: base.rerankerSecretReference
@@ -210,7 +210,7 @@ final class RAGSettingsModel {
         let cleared = ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
+            embeddingModelID: base.embeddingModelID,
             embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
             rerankerModelID: nil,
             rerankerBaseURL: base.rerankerBaseURL, rerankerSecretReference: base.rerankerSecretReference
@@ -235,7 +235,7 @@ final class RAGSettingsModel {
         return ProviderConfiguration(
             id: base.id, provider: base.provider, baseURL: base.baseURL,
             modelID: base.modelID, secretReference: base.secretReference,
-            streamingEnabled: base.streamingEnabled, embeddingModelID: base.embeddingModelID,
+            embeddingModelID: base.embeddingModelID,
             embeddingBaseURL: base.embeddingBaseURL, embeddingSecretReference: base.embeddingSecretReference,
             rerankerModelID: reranker,
             rerankerBaseURL: url, rerankerSecretReference: ProviderSettingsModel.rerankerSecretReference
