@@ -187,7 +187,11 @@ struct MyMindView: View {
         BrainThoughtDetailView(
             thought: thought,
             evidenceLoader: { await model.brainEvidence(for: .thought(thought)) },
-            contextLoader: { await model.brainEvidenceContext(for: $0) },
+            contextLoader: { evidence in
+                await model.brainEvidenceContext(for: evidence).map {
+                    MemoryEvidence(reflectionText: $0.reflectionText, book: $0.book, locator: $0.locator)
+                }
+            },
             openSource: openSource,
             onEdit: { editingThought = thought },
             onDelete: {
@@ -203,7 +207,11 @@ struct MyMindView: View {
         BrainQuestionDetailView(
             question: question,
             evidenceLoader: { await model.brainEvidence(for: .question(question)) },
-            contextLoader: { await model.brainEvidenceContext(for: $0) },
+            contextLoader: { evidence in
+                await model.brainEvidenceContext(for: evidence).map {
+                    MemoryEvidence(reflectionText: $0.reflectionText, book: $0.book, locator: $0.locator)
+                }
+            },
             openSource: openSource,
             onEdit: { editingQuestion = question },
             onDelete: {

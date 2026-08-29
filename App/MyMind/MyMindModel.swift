@@ -149,7 +149,8 @@ final class MyMindModel {
     /// sources and for soft-dangling rows whose reflection was deleted.
     func brainEvidenceContext(for evidence: BrainEvidence) async -> (reflectionText: String, book: Book?, locator: BookLocator?)? {
         guard case .reflection(let id) = evidence.source,
-              let reflectionID = ReflectionID(rawValue: id),
+              let uuid = UUID(uuidString: id),
+              let reflectionID = ReflectionID(rawValue: uuid),
               let reflection = try? await reflections.reflection(id: reflectionID) else { return nil }
         let rows = (try? await reflections.evidence(for: reflectionID)) ?? []
         let locator = rows.first(where: { $0.sourceType == .bookLocator })?.locator
