@@ -44,7 +44,14 @@ final class ProviderSettingsModel {
     private(set) var hasSavedKey = false
     private(set) var isWorking = false
     private(set) var statusMessage: String?
+    /// Outcome of the most recent `testConnection()` (Onboarding uses it to
+    /// unlock its 继续 affordance without matching on localized strings).
+    private(set) var lastConnectionTestSucceeded = false
     var errorMessage: String?
+
+    /// True when a provider row or a saved key already exists — lets Onboarding
+    /// recognize an already-configured user without duplicating load logic.
+    var isConfigured: Bool { hasSavedKey || loadedConfiguration != nil }
 
     init(configurations: any ProviderConfigurationRepository, secrets: any SecretStore) {
         self.configurations = configurations
@@ -99,14 +106,19 @@ final class ProviderSettingsModel {
     }
 
     func testConnection() async {
-        guard let configuration = configuration() else { return }
+        guard let configuration = configuration() else {
+            lastConnectionTestSucceeded = false
+            return
+        }
         isWorking = true
         statusMessage = nil
+        lastConnectionTestSucceeded = false
         defer { isWorking = false }
         do {
             let key = try await resolvedKey()
             try await ProviderConnectionTester().test(configuration: configuration, apiKey: key)
             statusMessage = "连接成功"
+            lastConnectionTestSucceeded = true
         } catch { errorMessage = Self.message(for: error) }
     }
 
