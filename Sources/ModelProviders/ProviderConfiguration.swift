@@ -43,6 +43,11 @@ public enum ModelProviderPreset: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The persisted provider kind. Note: the `.anthropic` preset also
+    /// persists as `.openAICompatible` because the `providerConfigurations`
+    /// schema CHECK constraint only admits 'openAI'/'openAICompatible'; the
+    /// native Messages API is selected at client-construction time from the
+    /// canonical preset base URL (see `ModelClientRouting`).
     public var providerKind: ModelProviderKind {
         self == .openAI ? .openAI : .openAICompatible
     }

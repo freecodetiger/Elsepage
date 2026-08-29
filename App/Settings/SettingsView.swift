@@ -127,7 +127,7 @@ struct ChatProviderView: View {
                     Button("删除配置和 API Key", role: .destructive) { showsDeleteConfirmation = true }
                 }
             } footer: {
-                Text("预设会自动使用服务商的 OpenAI-compatible 地址。API Key 只保存在本机 Keychain；模型名请按服务商控制台填写。")
+                Text("预设会自动使用服务商的官方接口地址：Anthropic 使用原生 Messages API，其余为 OpenAI-compatible。API Key 只保存在本机 Keychain；模型名请按服务商控制台填写。")
             }
             .disabled(model.isWorking)
 
