@@ -77,6 +77,9 @@ final class AppModel {
                       let key = try? await secrets.secret(for: configuration.effectiveRerankerSecretReference), !key.isEmpty else { return nil }
                 return try? SiliconFlowReranker(configuration: configuration, apiKey: key)
             }
+            // 大脑维护路径(v1.1 Phase 17):检索 + 投影共用同一个 BrainRetriever。
+            let brainRetriever = BrainRetriever(items: brain, store: brainStore, embeddingProvider: makeEmbeddingProvider)
+            let brainProjection = BrainProjectionService(items: brain, retriever: brainRetriever)
             let readerAgent = ReaderAgent(
                 reflections: reflections,
                 models: modelClientFactory,
@@ -89,17 +92,13 @@ final class AppModel {
                     reading: reading,
                     reflections: reflections
                 ),
+                brainRetriever: brainRetriever,
+                projection: brainProjection,
                 traceRepository: routingTraces,
                 memories: memories,
                 // Reflection/Memory semantic recall lane (Phase 5): query-time embed
                 // behind a process-local cache; nil provider degrades to lexical.
-                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider),
-                // 大脑维护路径(v1.1 Phase 17):回复后异步投影到 Brain。
-                brainRetriever: BrainRetriever(items: brain, store: brainStore, embeddingProvider: makeEmbeddingProvider),
-                projection: BrainProjectionService(
-                    items: brain,
-                    retriever: BrainRetriever(items: brain, store: brainStore, embeddingProvider: makeEmbeddingProvider)
-                )
+                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider)
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
             // Re-checked every time a reflection sheet opens, so the polish button appears as soon
