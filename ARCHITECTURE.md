@@ -36,7 +36,7 @@ flowchart TD
     end
 
     subgraph DB["本地持久化 (GRDB/SQLite)"]
-        PERS["bookTextBlocks / bookChunks(parent+child, role/parentID)<br/>bookChunksFTS(trigram, child only) / bookChunkEmbeddings(child only)<br/>bookIndexJobs / bookReflections / reflectionMessages<br/>agentResponseEvidence / reflectionConnections / routingTraces / memories"]
+        PERS["bookTextBlocks / bookChunks(parent+child, role/parentID)<br/>bookChunksFTS(trigram, child only) / bookChunkEmbeddings(child only)<br/>bookIndexJobs / bookReflections / reflectionMessages<br/>agentResponseEvidence / reflectionConnections / routingTraces / memories<br/>brainItems / brainItemEvidence / brainItemRelations / brainItemRevisions<br/>brainItemEmbeddings / brainProjectionTraces"]
     end
 
     UI --> RA
@@ -215,6 +215,33 @@ flowchart TD
 - **退化链**:无 embedding → 纯词法;无 reranker / rerank 失败 → 融合;index 不可用 → graceful;无 boundary → 无 book evidence。
 
 **代码锚点**:`Sources/RetrievalCore/RetrievalServices.swift` · `StructureAwareChunker.swift` · `SmallToBigExpander.swift` · `RetrievalModels.swift` · `Sources/Persistence/BookIndexRepository.swift` · `AppDatabase.swift` · `Sources/ModelProviders/OpenAICompatibleEmbeddingProvider.swift` · `SiliconFlowReranker.swift`
+
+---
+
+## 5. 子图 D:Personal Brain 维护路径(v1.1,fire-and-forget)
+
+与 ReaderAgent 主链**解耦**的异步维护路径:回复持久化完成后触发,失败绝不影响 Reflection/回复。
+
+```mermaid
+flowchart TD
+    PERSIST2["Reflection/回复持久化完成"] --> OBS["BrainProjectionService.observe<br/>(fire-and-forget Task)"]
+    OBS --> CAND["BrainRetriever<br/>lexical + 持久化 embedding(brainItemEmbeddings)+ RRF<br/>kinds 过滤,候选 ≤4"]
+    CAND --> LLM["brain-projection-v1<br/>1 call / 20s / 600 tok,无修复重试"]
+    LLM --> DEC{"解码成功?"}
+    DEC -->|否| NC["noChange(decodeFailed 入 trace)"]
+    DEC -->|是| VAL["BrainMutationValidator<br/>target∈候选 / 内容≤200字蒸馏纪律<br/>create 仅候选空(碎片化护栏)/ 单提案"]
+    VAL -->|通过| EXEC["事务执行<br/>attachEvidence(.origin/.revises/.raises…)<br/>updateThought 先记录旧陈述→brainItemRevisions"]
+    VAL -->|拒绝| TRACE2["brainProjectionTraces<br/>(验收率/碎片化拒绝率/动作分布)"]
+    EXEC --> TRACE2
+```
+
+**关键决策**:
+- Brain 条目(用户自己的想法)**不进 [E] 引用体系**——它们不是可校验的外部证据;经 BrainContextProvider 适配为 `ContextSource.brain/pinnedBrain` 候选进 prompt 专属区块。
+- 记忆经 `proposeMemory` 形成(needsReview/agentInferred),用户在 MyMind 确认;旧 Journal memory_proposals 链路为死代码待清理。
+- 「继续想想」= 基于旧想法写新反思(挂书规则:item 最近反思证据的书),`activeBrain` 置顶直通 prompt,LLM 不可否决。
+- 陈述蒸馏纪律:update 重写不续写(≤200 字硬上限),旧表述降级为修订 → 演化时间线。
+
+**代码锚点**:`Sources/ReaderAgent/BrainProjectionService.swift` · `Sources/ContextEngineering/BrainRetriever.swift` · `BrainContextProvider.swift` · `Sources/BrainCore/`
 
 ---
 

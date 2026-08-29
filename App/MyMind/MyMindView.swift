@@ -1,6 +1,8 @@
 import AchievementCore
 import BrainCore
+import ContextEngineering
 import LibraryCore
+import ReaderAgent
 import ReaderCore
 import ReflectionCore
 import SwiftUI
@@ -24,6 +26,7 @@ struct MyMindView: View {
     @State private var evidenceByMemory: [UUID: MemoryEvidence] = [:]
     @State private var selectedThought: Thought?
     @State private var selectedQuestion: Question?
+    @State private var discussingItem: BrainItem?
     @State private var editingThought: Thought?
     @State private var editingQuestion: Question?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -194,6 +197,8 @@ struct MyMindView: View {
                 }
             },
             openSource: openSource,
+            canContinueThinking: model.canContinueThinking,
+            onContinueThinking: { discussingItem = .thought(thought) },
             onEdit: { editingThought = thought },
             onDelete: {
                 Task {
@@ -214,6 +219,8 @@ struct MyMindView: View {
                 }
             },
             openSource: openSource,
+            canContinueThinking: model.canContinueThinking,
+            onContinueThinking: { discussingItem = .question(question) },
             onEdit: { editingQuestion = question },
             onDelete: {
                 Task {
@@ -292,6 +299,10 @@ struct MyMindView: View {
 
     private var editingQuestionBinding: Binding<Bool> {
         Binding(get: { editingQuestion != nil }, set: { if !$0 { editingQuestion = nil } })
+    }
+
+    private var discussingBinding: Binding<Bool> {
+        Binding(get: { discussingItem != nil }, set: { if !$0 { discussingItem = nil } })
     }
 
     /// 低调徽章区(PRD F13):只列出已解锁的成就,无锁定/进度/积分。
@@ -703,6 +714,8 @@ private struct BrainThoughtDetailView: View {
     let revisionsLoader: () async -> [BrainItemRevision]
     let contextLoader: (BrainEvidence) async -> MemoryEvidence?
     let openSource: (Book, BookLocator) -> Void
+    let canContinueThinking: Bool
+    let onContinueThinking: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showsDelete = false
@@ -747,6 +760,10 @@ private struct BrainThoughtDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("继续想想", action: onContinueThinking)
+                    .disabled(!canContinueThinking)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("编辑", action: onEdit)
             }
@@ -821,6 +838,8 @@ private struct BrainQuestionDetailView: View {
     let evidenceLoader: () async -> [BrainEvidence]
     let contextLoader: (BrainEvidence) async -> MemoryEvidence?
     let openSource: (Book, BookLocator) -> Void
+    let canContinueThinking: Bool
+    let onContinueThinking: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showsDelete = false
@@ -863,6 +882,10 @@ private struct BrainQuestionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("继续想想", action: onContinueThinking)
+                    .disabled(!canContinueThinking)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("编辑", action: onEdit)
             }
@@ -1078,5 +1101,103 @@ private struct BrainItemEditorSheet<Stage: Hashable>: View {
         }
         onSave(secondary, trimmed, selectedStage)
         dismiss()
+    }
+}
+
+
+/// 继续想想(形态 C,phase 19):用户文字存为新反思,Agent 带着置顶的
+/// brain item 流式回应。原文永远是用户的话(F9);回复沉淀在想法档案里。
+private struct BrainDiscussionSheet: View {
+    let item: BrainItem
+    let runner: (String) async throws -> AsyncStream<ReaderAgentEvent>
+    @State private var draft = ""
+    @State private var reply = ""
+    @State private var isReplying = false
+    @State private var finished = false
+    @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
+                    VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                        Text("正在讨论")
+                            .font(.system(.headline, design: .serif, weight: .semibold))
+                        Text(BrainContextProvider.titleText(of: item))
+                            .font(.subheadline.weight(.medium))
+                    }
+                    if !reply.isEmpty || isReplying {
+                        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                            Text("Agent 的回应")
+                                .font(.system(.headline, design: .serif, weight: .semibold))
+                            Text(reply.isEmpty ? "…" : reply)
+                                .font(.body)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if finished {
+                        Label("已存入想法档案", systemImage: "checkmark.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.elsepageAccent)
+                    }
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(ElsepageTheme.Spacing.page)
+            }
+            .background(Color.elsepageBackground)
+            .navigationTitle("继续想想")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                HStack(alignment: .bottom, spacing: ElsepageTheme.Spacing.small) {
+                    TextField("写下此刻的想法…", text: $draft, axis: .vertical)
+                        .lineLimit(1...4)
+                        .textFieldStyle(.roundedBorder)
+                    Button(action: submit) {
+                        Image(systemName: isReplying ? "ellipsis.circle" : "arrow.up.circle.fill")
+                            .font(.title2)
+                    }
+                    .disabled(isReplying || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .frame(minHeight: 44)
+                }
+                .padding(ElsepageTheme.Spacing.medium)
+                .background(ElsepageTheme.MaterialToken.chrome)
+            }
+        }
+    }
+
+    private func submit() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isReplying else { return }
+        isReplying = true
+        errorMessage = nil
+        Task {
+            do {
+                let stream = try await runner(text)
+                draft = ""
+                for await event in stream {
+                    switch event {
+                    case .textDelta(let delta): reply += delta
+                    case .completed: finished = true; isReplying = false
+                    case .failed(let failure): errorMessage = String(describing: failure); isReplying = false
+                    case .cancelled: isReplying = false
+                    case .started, .contextPrepared, .citationsValidated, .contextDisclosed: break
+                    }
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                isReplying = false
+            }
+        }
     }
 }

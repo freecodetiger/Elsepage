@@ -3,8 +3,12 @@ import BrainCore
 import Foundation
 import LibraryCore
 import Observation
+import ReaderAgent
 import ReaderCore
 import ReflectionCore
+
+/// 继续想想不可用(Agent 未装配/书架空/文字为空)。
+struct ReflectionAgentUnavailable: Error {}
 
 /// Presentation state for the "我的大脑" surface (docs/brain.md §14): Thoughts /
 /// Questions come from the Brain store (brainItems), Memories keep reading the
@@ -18,6 +22,8 @@ final class MyMindModel {
     private let brain: any BrainRepository
     private let reflections: any ReflectionRepository
     private let books: any BookRepository
+    /// 继续想想(phase 19,形态 C):nil → 详情页按钮隐藏。
+    private let readerAgent: ReaderAgent?
     /// FIX-03: 修改/不准确 are the deterministic "Changed My Mind" signals —
     /// fired only on the user's own action, never on Agent inference.
     let achievements: AchievementModel?
@@ -33,13 +39,48 @@ final class MyMindModel {
         brain: any BrainRepository,
         reflections: any ReflectionRepository,
         books: any BookRepository,
-        achievements: AchievementModel? = nil
+        achievements: AchievementModel? = nil,
+        readerAgent: ReaderAgent? = nil
     ) {
         self.memories = memories
         self.brain = brain
         self.reflections = reflections
         self.books = books
         self.achievements = achievements
+        self.readerAgent = readerAgent
+    }
+
+    /// 继续想想的可用性:需要 Agent,且书架非空(反思必须挂一本书)。
+    var canContinueThinking: Bool { readerAgent != nil }
+
+    /// 讨论挂书规则(形态 C):item 最近一条反思证据的书;无证据回退最近
+    /// 打开的书;书架空 → nil(按钮隐藏/禁用)。
+    func discussionBook(for item: BrainItem) async -> Book? {
+        let evidence = await brainEvidence(for: item)
+        for row in evidence.reversed() {
+            if case .reflection(let id) = row.source, let uuid = UUID(uuidString: id),
+               let reflectionID = ReflectionID(rawValue: uuid),
+               let reflection = try? await reflections.reflection(id: reflectionID),
+               let book = try? await books.book(id: reflection.bookID) {
+                return book
+            }
+        }
+        let library = (try? await books.allBooks()) ?? []
+        return library.sorted {
+            ($0.lastOpenedAt ?? $0.importedAt) > ($1.lastOpenedAt ?? $1.importedAt)
+        }.first
+    }
+
+    /// 继续想想:用户文字存为新反思(原文永远是用户的话),Agent 带
+    /// pinned 上下文回复。反思先持久化,再走主链——投影服务会自然观察它。
+    func continueThinking(item: BrainItem, text: String) async throws -> AsyncStream<ReaderAgentEvent> {
+        guard let readerAgent else { throw ReflectionAgentUnavailable() }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ReflectionAgentUnavailable() }
+        guard let book = await discussionBook(for: item) else { throw ReflectionAgentUnavailable() }
+        let reflection = Reflection(bookID: book.id, originalText: trimmed, inputKind: .text)
+        try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+        return readerAgent.respond(to: reflection.id, activeBrain: item)
     }
 
     /// The deterministic "AI 眼中的我" projection of the current store.

@@ -214,3 +214,85 @@ private final class ProjectionScriptedClient: ModelClient, @unchecked Sendable {
     try await database.wipeAllUserData()
     #expect(try await repository.items().isEmpty)
 }
+
+// MARK: - Observability (phase 19)
+
+@Test func projectionTraceRecordsOutcomeWithoutObservationText() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let traces = GRDBBrainProjectionTraceRepository(database: database)
+    let service = BrainProjectionService(
+        items: repository, retriever: BrainRetriever(items: repository), traceRepository: traces
+    )
+    // The trace FK requires the reflection to exist (production truth).
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "来源反思", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    let observation = "我又想到了自由与责任的隐秘张力"
+    _ = await service.observe(
+        observation: observation, reflectionID: reflection.id,
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"createThought\",\"title\":\"自由观\",\"content\":\"自由的核心是承担选择。\",\"stage\":\"evolving\"}"
+        ])
+    )
+
+    let recent = try await traces.recentTraces(limit: 5)
+    #expect(recent.count == 1)
+    #expect(recent.first?.action == .createThought)
+    #expect(recent.first?.applied == true)
+    // ADR 0001: the observation text never lands in the trace.
+    let raw = try await database.writer.read { db in
+        try String.fetchOne(db, sql: "SELECT traceJSON FROM brainProjectionTraces LIMIT 1")
+    } ?? ""
+    #expect(!raw.contains(observation))
+    #expect(!raw.contains("反思正文"))
+}
+
+@Test func projectionDiagnosticsAggregateAcceptanceAndFragmentation() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let traces = GRDBBrainProjectionTraceRepository(database: database)
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "来源反思", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    let service = BrainProjectionService(
+        items: repository, retriever: BrainRetriever(items: repository), traceRepository: traces
+    )
+    // Seed two thoughts so a later create hits the fragmentation guard.
+    for id in ["t-a", "t-b"] {
+        try await repository.save(.thought(Thought(
+            id: BrainItemID(rawValue: id), title: id, statement: "自由就是不受束缚",
+            stage: .evolving, provenance: BrainProvenance(originEvidence: nil),
+            createdAt: Date(), updatedAt: Date()
+        )))
+    }
+    _ = await service.observe(
+        observation: "自由就是不受束缚吗，我觉得不止如此", reflectionID: reflection.id,
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"updateThought\",\"itemID\":\"t-a\",\"content\":\"自由的核心是承担选择。\"}"
+        ])
+    )
+    _ = await service.observe(
+        observation: "自由就是不受束缚吗，我觉得不止如此", reflectionID: reflection.id,
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"createThought\",\"title\":\"碎片\",\"content\":\"应被护栏拒绝的新想法。\",\"stage\":\"emerging\"}"
+        ])
+    )
+    _ = await service.observe(
+        observation: "随便聊聊", reflectionID: reflection.id,
+        using: ProjectionScriptedClient(responses: ["{\"action\":\"noChange\"}"])
+    )
+
+    let diagnostics = try await traces.diagnostics()
+    #expect(diagnostics.totalRuns == 3)
+    #expect(diagnostics.appliedCount == 1)
+    #expect(abs((diagnostics.acceptanceRate ?? 0) - 1.0 / 3.0) < 0.001)
+    #expect(diagnostics.fragmentationRejections == 1)
+    #expect(diagnostics.actionDistribution["updateThought"] == 1)
+    #expect(diagnostics.actionDistribution["createThought"] == 1)
+    #expect(diagnostics.actionDistribution["noChange"] == 1)
+}

@@ -62,7 +62,7 @@ import Testing
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
         "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference",
         "v19_journal_user_edited_thoughts", "v20_drop_streaming_flag", "v21_brain", "v22_brain_evidence_relations",
-        "v23_brain_item_embeddings", "v24_brain_item_revisions"
+        "v23_brain_item_embeddings", "v24_brain_item_revisions", "v25_brain_projection_traces"
     ])
 }
 

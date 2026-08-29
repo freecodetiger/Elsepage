@@ -361,3 +361,50 @@ private struct BrainItemRevisionRecord: Codable, FetchableRecord, TableRecord {
         )
     }
 }
+
+/// GRDB-backed `BrainProjectionTraceRepository`. Derived diagnostics in a
+/// single JSON column, mirroring the routingTraces pattern; personal-app trace
+/// volume is small, so aggregation happens in Swift.
+public final class GRDBBrainProjectionTraceRepository: BrainProjectionTraceRepository, @unchecked Sendable {
+    private let db: AppDatabase
+
+    public init(database: AppDatabase) { db = database }
+
+    public func save(_ trace: BrainProjectionTrace) async throws {
+        try await db.writer.write { db in
+            try BrainProjectionTraceRecord(
+                id: trace.id.uuidString.lowercased(),
+                reflectionID: trace.reflectionID,
+                createdAt: trace.createdAt,
+                traceJSON: try JSONEncoder().encode(trace)
+            ).insert(db)
+        }
+    }
+
+    public func recentTraces(limit: Int) async throws -> [BrainProjectionTrace] {
+        try await db.writer.read { db in
+            try BrainProjectionTraceRecord
+                .order(Column("createdAt").desc, Column("id").desc)
+                .limit(max(0, limit))
+                .fetchAll(db)
+                .compactMap { try? JSONDecoder().decode(BrainProjectionTrace.self, from: $0.traceJSON) }
+        }
+    }
+
+    public func diagnostics() async throws -> BrainProjectionDiagnostics {
+        let traces = try await db.writer.read { db in
+            try BrainProjectionTraceRecord.fetchAll(db).compactMap {
+                try? JSONDecoder().decode(BrainProjectionTrace.self, from: $0.traceJSON)
+            }
+        }
+        return BrainProjectionDiagnostics(traces: traces)
+    }
+}
+
+private struct BrainProjectionTraceRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "brainProjectionTraces"
+    var id: String
+    var reflectionID: String
+    var createdAt: Date
+    var traceJSON: Data
+}

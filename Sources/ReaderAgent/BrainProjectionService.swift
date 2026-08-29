@@ -13,23 +13,56 @@ public struct BrainProjectionService: Sendable {
     private let items: any BrainRepository
     private let retriever: BrainRetriever
     private let validator = BrainMutationValidator()
+    /// 可选观测(phase 19):nil = 不记录。trace 永不含观察文本(ADR 0001)。
+    private let traceRepository: (any BrainProjectionTraceRepository)?
 
-    public init(items: any BrainRepository, retriever: BrainRetriever) {
+    public init(items: any BrainRepository, retriever: BrainRetriever, traceRepository: (any BrainProjectionTraceRepository)? = nil) {
         self.items = items
         self.retriever = retriever
+        self.traceRepository = traceRepository
     }
 
     public func observe(observation: String, reflectionID: ReflectionID, using client: any ModelClient) async -> BrainMutationOutcome {
+        let clock = ContinuousClock()
+        let start = clock.now
         let candidates = await retriever.retrieve(query: observation, kinds: [.thought, .question], limit: 4)
-        let proposal = await requestMutation(observation: observation, candidates: candidates, using: client)
+        let (proposal, decodeFailed) = await requestMutation(observation: observation, candidates: candidates, using: client)
         let outcome = validator.validate(proposal, candidates: candidates)
-        guard outcome.applied else { return outcome }
-        return await execute(proposal, reflectionID: reflectionID)
+        let final: BrainMutationOutcome
+        if outcome.applied {
+            final = await execute(proposal, reflectionID: reflectionID)
+        } else {
+            final = outcome
+        }
+        let duration = start.duration(to: clock.now)
+        await recordTrace(
+            reflectionID: reflectionID, proposal: final.proposal, applied: final.applied,
+            corrections: final.corrections, candidateCount: candidates.count,
+            decodeFailed: decodeFailed, duration: duration
+        )
+        return final
+    }
+
+    private func recordTrace(
+        reflectionID: ReflectionID, proposal: BrainMutationProposal, applied: Bool,
+        corrections: [String], candidateCount: Int, decodeFailed: Bool,
+        duration: Duration
+    ) async {
+        guard let traceRepository else { return }
+        let components = duration.components
+        let trace = BrainProjectionTrace(
+            reflectionID: reflectionID.description,
+            action: proposal.action, applied: applied, corrections: corrections,
+            candidateCount: candidateCount, decodeFailed: decodeFailed,
+            durationSeconds: Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+        )
+        // Best-effort: observability never breaks the maintenance path.
+        try? await traceRepository.save(trace)
     }
 
     // MARK: - LLM request
 
-    private func requestMutation(observation: String, candidates: [BrainCandidate], using client: any ModelClient) async -> BrainMutationProposal {
+    private func requestMutation(observation: String, candidates: [BrainCandidate], using client: any ModelClient) async -> (proposal: BrainMutationProposal, decodeFailed: Bool) {
         let candidateSummaries = candidates.map { candidate -> [String: String] in
             [
                 "id": candidate.item.id.rawValue,
@@ -45,7 +78,7 @@ public struct BrainProjectionService: Sendable {
         ]
         guard let payloadJSON = try? JSONSerialization.data(withJSONObject: payload),
               let payloadText = String(data: payloadJSON, encoding: .utf8) else {
-            return .noChange
+            return (.noChange, false)
         }
         let request = AgentInput(
             metadata: .init(agentKind: "brain.projection", promptVersion: "brain-projection-v1", contextRecipeVersion: "brain-observation-v1"),
@@ -56,15 +89,18 @@ public struct BrainProjectionService: Sendable {
             temperature: 0
         )
         var proposal: BrainMutationProposal = .noChange
+        var decodeFailed = false
         for await event in AgentExecutor(client: client, budget: .init(maxModelCalls: 1, maxWallTime: .seconds(20), maxOutputTokens: 600)).run(input: request) {
             if case .completed(let result) = event {
                 if let wire = try? JSONDecoder().decode(BrainMutationWire.self, from: Data(result.response.content.utf8)),
                    let decoded = wire.normalized() {
                     proposal = decoded
+                } else {
+                    decodeFailed = true
                 }
             }
         }
-        return proposal
+        return (proposal, decodeFailed)
     }
 
     private static func stateText(of item: BrainItem) -> String {

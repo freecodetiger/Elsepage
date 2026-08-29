@@ -545,6 +545,18 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "length(trim(content)) > 0")
             }
         }
+        // Brain projection observability (docs/brain.md §20 Phase 8, phase 19):
+        // derived diagnostics only — action shape, outcome, corrections,
+        // durations. The observation text and reflection body never land here
+        // (ADR 0001).
+        migrator.registerMigration("v25_brain_projection_traces") { db in
+            try db.create(table: "brainProjectionTraces", ifNotExists: true) { t in
+                t.column("id", .text).primaryKey()
+                t.column("reflectionID", .text).notNull().indexed().references("reflections", onDelete: .cascade)
+                t.column("createdAt", .datetime).notNull().indexed()
+                t.column("traceJSON", .blob).notNull()
+            }
+        }
         return migrator
     }
 
@@ -573,6 +585,7 @@ public final class AppDatabase: @unchecked Sendable {
     /// therefore listed explicitly. Public so tests can assert the wipe leaves
     /// zero rows in every table — new user-data tables must be added here.
     public static let userDataTableOrder: [String] = [
+        "brainProjectionTraces",
         "routingTraces",
         "journalMemoryChanges",
         "journalThoughts",

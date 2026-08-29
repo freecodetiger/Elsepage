@@ -193,7 +193,8 @@ final class AppModel {
                 brain: brain,
                 reflections: reflections,
                 books: books,
-                achievements: achievements
+                achievements: achievements,
+                readerAgent: readerAgent
             )
             self.achievements = achievements
             await settings?.loadAll()
