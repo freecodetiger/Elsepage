@@ -184,7 +184,8 @@ final class AppModel {
             myMind = MyMindModel(
                 memories: memories,
                 reflections: reflections,
-                books: books
+                books: books,
+                achievements: achievements
             )
             self.achievements = achievements
             await settings?.loadAll()

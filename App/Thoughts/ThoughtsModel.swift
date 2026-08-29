@@ -99,8 +99,8 @@ final class ThoughtsModel {
             case .contextPrepared(let connection):
                 if let connection, let achievements,
                    let connected = try? await reflections.reflection(id: connection.sourceReflectionID) {
-                    await achievements.handle(.init(
-                        reflection: reflection,
+                    await achievements.handle(.reflection(
+                        reflection,
                         connectedSource: .init(reflection: connected, bookID: connected.bookID),
                         now: Date()
                     ))

@@ -596,7 +596,7 @@ final class SessionReflectionModel: Identifiable {
             // discussion (FIX-01). Local-first — the save above is already durable.
             await recordAgentDiscussion?(summary.session.id)
             if let achievements {
-                await achievements.handle(.init(reflection: reflection, connectedSource: nil, now: Date()))
+                await achievements.handle(.reflection(reflection, connectedSource: nil, now: Date()))
             }
             return reflection
         } catch is CancellationError {
@@ -734,9 +734,13 @@ final class ReflectionConversationModel: Identifiable {
         await consume(readerAgent.continueDiscussion(on: reflection.id, messageID: id, text: text))
         if messages.contains(where: { $0.id == id }) {
             pendingUserMessage = nil
-            // The follow-up persisted: one user-initiated discussion (FIX-01).
+            // The follow-up persisted: one user-initiated discussion (FIX-01), and
+            // the user's own words are now in the thread (Questioner signal).
             if let sessionID = reflection.sessionID {
                 await recordAgentDiscussion?(sessionID)
+            }
+            if let achievements {
+                await achievements.handle(.reflection(reflection, connectedSource: nil, now: Date()))
             }
         } else if pendingUserMessage?.id == id {
             pendingUserMessage?.deliveryState = .failed
@@ -781,8 +785,8 @@ final class ReflectionConversationModel: Identifiable {
                 if let connection {
                     connectedReflection = try? await repository.reflection(id: connection.sourceReflectionID)
                     if let connectedReflection, let achievements {
-                        await achievements.handle(.init(
-                            reflection: reflection,
+                        await achievements.handle(.reflection(
+                            reflection,
                             connectedSource: .init(reflection: connectedReflection, bookID: connectedReflection.bookID),
                             now: Date()
                         ))

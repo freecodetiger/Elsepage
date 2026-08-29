@@ -114,6 +114,99 @@ import Testing
     #expect(oldPass.contains { $0.id == .returnToAnIdea })
 }
 
+@Test func questionerUnlocksOnceOnExplicitUserChallenge() async throws {
+    let db = try AppDatabase.inMemory()
+    let reflections = GRDBReflectionRepository(database: db)
+    let service = AchievementService(
+        repository: GRDBAchievementRepository(database: db), reflections: reflections
+    )
+    let book = TestFixtures.book(fingerprint: "questioner")
+    try await GRDBBookRepository(database: db).insert(book)
+    let now = Date()
+
+    // Neutral reflection does not unlock Questioner…
+    let neutral = try reflection(book: book.id, createdAt: now, originalText: "这一章让我想到很多")
+    try await reflections.insert(neutral, linkedHighlightIDs: [], evidence: [])
+    let neutralPass = try await evaluate(service, reflection: neutral, now: now)
+    #expect(!neutralPass.contains { $0.id == .questioner })
+
+    // …and neither does a challenge that only appears in Agent output.
+    try await reflections.appendMessage(.init(
+        reflectionID: neutral.id, author: .agent, source: .agentGenerated,
+        content: "这里值得质疑：作者的论证是否成立？", createdAt: now
+    ))
+    let agentTextPass = try await evaluate(service, reflection: neutral, now: now)
+    #expect(!agentTextPass.contains { $0.id == .questioner })
+
+    // An explicit challenge in the user's own words unlocks, exactly once.
+    let challenge = try reflection(book: book.id, createdAt: now, originalText: "我不认同作者这个判断。")
+    try await reflections.insert(challenge, linkedHighlightIDs: [], evidence: [])
+    let unlocked = try await service.evaluate(event(reflection: challenge, now: now))
+    let record = try #require(unlocked.first { $0.id == .questioner })
+    #expect(record.source?.reflectionID == challenge.id)
+    #expect(try await service.evaluate(event(reflection: challenge, now: now)).isEmpty)
+}
+
+@Test func questionerAlsoUnlocksFromUserFollowUpMessages() async throws {
+    let db = try AppDatabase.inMemory()
+    let reflections = GRDBReflectionRepository(database: db)
+    let service = AchievementService(
+        repository: GRDBAchievementRepository(database: db), reflections: reflections
+    )
+    let book = TestFixtures.book(fingerprint: "questioner-followup")
+    try await GRDBBookRepository(database: db).insert(book)
+    let now = Date()
+    let neutral = try reflection(book: book.id, createdAt: now, originalText: "先记下这段")
+    try await reflections.insert(neutral, linkedHighlightIDs: [], evidence: [])
+
+    // A neutral root plus a challenging follow-up (继续说) still counts.
+    try await reflections.appendMessage(.init(
+        reflectionID: neutral.id, author: .user, source: .userInput,
+        content: "回头再看，还是不敢苟同作者的说法。", createdAt: now.addingTimeInterval(60)
+    ))
+    let unlocked = try await service.evaluate(event(reflection: neutral, now: now))
+    #expect(unlocked.contains { $0.id == .questioner })
+}
+
+@Test func questionerHeuristicRejectsInnocuousText() {
+    // Prefer false negatives: none of these carry an explicit challenge marker.
+    for text in [
+        "这一段写得很好，我认同作者的角度。",
+        "今天读完了第三章，明天继续。",
+        "作者举的例子让我想起自己的经历。",
+        "同意这个观点的前提是大家都读过前文。",
+    ] {
+        #expect(!QuestionerHeuristic.expressesExplicitChallenge(text), "误报：\(text)")
+    }
+    for text in ["我不同意作者的说法", "对此表示质疑", "作者错了", "作者忽略了最关键的前提"] {
+        #expect(QuestionerHeuristic.expressesExplicitChallenge(text), "漏报：\(text)")
+    }
+}
+
+@Test func changedMyMindUnlocksOnlyOnUserMemoryRevision() async throws {
+    let db = try AppDatabase.inMemory()
+    let reflections = GRDBReflectionRepository(database: db)
+    let service = AchievementService(
+        repository: GRDBAchievementRepository(database: db), reflections: reflections
+    )
+    let book = TestFixtures.book(fingerprint: "changed-my-mind")
+    try await GRDBBookRepository(database: db).insert(book)
+    let now = Date()
+    let current = try reflection(book: book.id, createdAt: now)
+    try await reflections.insert(current, linkedHighlightIDs: [], evidence: [])
+
+    // Reflection moments never unlock it — not even with a connection.
+    let past = try reflection(book: book.id, createdAt: now.addingTimeInterval(-40 * 24 * 3600))
+    let reflectionPass = try await evaluate(service, reflection: current, now: now, connected: (past, book.id))
+    #expect(!reflectionPass.contains { $0.id == .changedMyMind })
+
+    // The user's own revise/supersede action in My Mind unlocks it, exactly once.
+    let unlocked = try await service.evaluate(.userMemoryRevision(now: now))
+    let record = try #require(unlocked.first { $0.id == .changedMyMind })
+    #expect(record.source == nil)
+    #expect(try await service.evaluate(.userMemoryRevision(now: now)).isEmpty)
+}
+
 @Test func achievementRepositoryRoundTripsUnlockOnes() async throws {
     let db = try AppDatabase.inMemory()
     let repository = GRDBAchievementRepository(database: db)
@@ -139,8 +232,17 @@ import Testing
 
 // MARK: - Fixtures
 
-private func reflection(book: BookID, createdAt: Date) throws -> Reflection {
-    Reflection(bookID: book, originalText: "测试反思", inputKind: .text, createdAt: createdAt)
+private func evaluate(
+    _ service: AchievementService,
+    reflection: Reflection,
+    now: Date,
+    connected: (reflection: Reflection, bookID: BookID)? = nil
+) async throws -> [AchievementRecord] {
+    try await service.evaluate(event(reflection: reflection, now: now, connected: connected))
+}
+
+private func reflection(book: BookID, createdAt: Date, originalText: String = "测试反思") throws -> Reflection {
+    Reflection(bookID: book, originalText: originalText, inputKind: .text, createdAt: createdAt)
 }
 
 private func event(
@@ -148,8 +250,8 @@ private func event(
     now: Date,
     connected: (reflection: Reflection, bookID: BookID)? = nil
 ) -> AchievementEvent {
-    AchievementEvent(
-        reflection: reflection,
+    .reflection(
+        reflection,
         connectedSource: connected.map { ConnectedSource(reflection: $0.reflection, bookID: $0.bookID) },
         now: now
     )

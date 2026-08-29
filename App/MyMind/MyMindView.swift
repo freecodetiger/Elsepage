@@ -67,6 +67,7 @@ struct MyMindView: View {
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)
             }
+            .achievementToast(achievements)
             .alert("暂时无法完成操作", isPresented: errorBinding) {
                 Button("好") {}
             } message: {
