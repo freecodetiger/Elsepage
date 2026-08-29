@@ -58,11 +58,12 @@ final class MyMindModel {
     func discussionBook(for item: BrainItem) async -> Book? {
         let evidence = await brainEvidence(for: item)
         for row in evidence.reversed() {
-            if case .reflection(let id) = row.source, let uuid = UUID(uuidString: id),
-               let reflectionID = ReflectionID(rawValue: uuid),
-               let reflection = try? await reflections.reflection(id: reflectionID),
-               let book = try? await books.book(id: reflection.bookID) {
-                return book
+            if case .reflection(let id) = row.source, let uuid = UUID(uuidString: id) {
+                let reflectionID = ReflectionID(rawValue: uuid)
+                if let reflection = try? await reflections.reflection(id: reflectionID),
+                   let book = try? await books.book(id: reflection.bookID) {
+                    return book
+                }
             }
         }
         let library = (try? await books.allBooks()) ?? []
