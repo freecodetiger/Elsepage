@@ -73,6 +73,7 @@ struct SettingsView: View {
             Image(systemName: icon)
                 .foregroundStyle(.tint)
                 .frame(width: 24)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 Text(status)
@@ -80,6 +81,8 @@ struct SettingsView: View {
                     .foregroundStyle(muted ? Color.secondary : Color.green)
             }
         }
+        // A11Y-02: title + live status read as one stop.
+        .accessibilityElement(children: .combine)
     }
 }
 

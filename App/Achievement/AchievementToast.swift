@@ -17,6 +17,7 @@ struct AchievementToast: View {
                 .foregroundStyle(Color.elsepageAccent)
                 .frame(width: 36, height: 36)
                 .background(Color.elsepageAccent.opacity(0.12), in: Circle())
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("解锁成就").font(.caption2).foregroundStyle(.secondary)
                 Text(achievement.title).font(.subheadline.weight(.semibold))
@@ -26,6 +27,8 @@ struct AchievementToast: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
             .accessibilityLabel("关闭")
         }
         .padding(ElsepageTheme.Spacing.medium)
@@ -39,6 +42,11 @@ struct AchievementToast: View {
         .contentShape(Rectangle())
         .onTapGesture { onDismiss() }
         .onAppear { appeared = true }
+        // A11Y-02: the toast is transient and non-blocking, so VoiceOver users
+        // get the unlock as an announcement (P1: reading is never interrupted).
+        .onAppear {
+            UIAccessibility.post(notification: .announcement, argument: "解锁成就：\(achievement.title)")
+        }
     }
 
     /// Achievement moment (PRD §10.3): a single bounce on the badge icon;
