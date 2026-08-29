@@ -1,3 +1,4 @@
+import AppInfrastructure
 import LibraryCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -10,6 +11,9 @@ struct LibraryView: View {
     @State private var showsSettings = false
     @State private var selectedBook: Book?
     @State private var deletingBook: Book?
+    /// A11Y-01: the grid collapses to one readable column at accessibility
+    /// Dynamic Type sizes instead of squeezing titles into half-width cells.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(model: LibraryModel, settings: SettingsRootModel, onReflectionSaved: @escaping () -> Void = {}) {
         self.model = model
@@ -102,6 +106,8 @@ struct LibraryView: View {
             Button("导入 EPUB") { importing = true }
                 .buttonStyle(.borderedProminent)
                 .tint(.elsepageAccent)
+                // A11Y-03: AA label on the accent fill in both color schemes.
+                .foregroundStyle(Color.elsepageOnAccent)
                 .disabled(model.isImporting)
         }
         .padding(ElsepageTheme.Spacing.xLarge)
@@ -121,10 +127,12 @@ struct LibraryView: View {
 
     private func bookList(_ model: LibraryModel) -> some View {
         GeometryReader { geometry in
+            let columnCount = LibraryGridLayout.columnCount(isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
             let columnWidth = LibraryGridLayout.columnWidth(
                 containerWidth: geometry.size.width,
                 horizontalPadding: ElsepageTheme.Spacing.page,
-                columnSpacing: ElsepageTheme.Spacing.medium
+                columnSpacing: ElsepageTheme.Spacing.medium,
+                columnCount: columnCount
             )
 
             if model.visibleBooks.isEmpty {
@@ -138,7 +146,7 @@ struct LibraryView: View {
                     LazyVGrid(
                         columns: Array(
                             repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
-                            count: LibraryGridLayout.columnCount
+                            count: columnCount
                         ),
                         spacing: ElsepageTheme.Spacing.xLarge
                     ) {
@@ -215,9 +223,11 @@ struct LibraryView: View {
     }
 
     private func accessibilityLabel(for book: Book) -> String {
-        if let statsLine = model.statsLine(for: book) {
-            return "\(book.title)，\(metadata(for: book))，\(statsLine)"
-        }
-        return "\(book.title)，\(metadata(for: book))"
+        LibraryBookAccessibility.label(
+            title: book.title,
+            author: book.author,
+            statsLine: model.statsLine(for: book),
+            progress: model.progress(for: book)
+        )
     }
 }

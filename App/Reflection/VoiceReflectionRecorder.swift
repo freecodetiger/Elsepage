@@ -136,6 +136,10 @@ struct VoiceReflectionControls: View {
     @State private var pressTask: Task<Void, Never>?
     @State private var isHoldingLongPress = false
     @State private var isPolishing = false
+    /// A11Y-01: the mic glyph follows Dynamic Type; the disc keeps a fixed,
+    /// recognizable size.
+    @ScaledMetric(relativeTo: .body) private var fullIconSize: CGFloat = 30
+    @ScaledMetric(relativeTo: .body) private var compactIconSize: CGFloat = 17
 
     var body: some View {
         VStack(spacing: ElsepageTheme.Spacing.medium) {
@@ -165,8 +169,12 @@ struct VoiceReflectionControls: View {
                         } label: {
                             if isPolishing {
                                 ProgressView().controlSize(.small)
+                                    // A11Y-03: keep the hit target stable while
+                                    // the spinner replaces the label.
+                                    .frame(minHeight: 44)
                             } else {
                                 Label("优化", systemImage: "wand.and.stars")
+                                    .frame(minHeight: 44)
                             }
                         }
                         .buttonStyle(.bordered)
@@ -232,8 +240,9 @@ struct VoiceReflectionControls: View {
     /// Prominent bottom-center mic button. Both default interactions work:
     /// tap to start / tap to stop, and hold to start / release to stop.
     private var micButton: some View {
-        let size: CGFloat = style == .compactComposer ? 40 : 76
-        let iconSize: CGFloat = style == .compactComposer ? 17 : 30
+        // A11Y-03: both variants keep the 44pt minimum tap target.
+        let size: CGFloat = style == .compactComposer ? 44 : 76
+        let iconSize: CGFloat = style == .compactComposer ? compactIconSize : fullIconSize
         return ZStack {
             Circle()
                 .fill(recorder.isRecording ? Color.red.opacity(0.12) : Color.elsepageAccent.opacity(0.10))
@@ -244,11 +253,18 @@ struct VoiceReflectionControls: View {
             Image(systemName: recorder.isRecording ? "stop.fill" : "mic.fill")
                 .font(.system(size: iconSize))
                 .foregroundStyle(recorder.isRecording ? Color.red : Color.elsepageAccent)
+                .accessibilityHidden(true)
         }
         .scaleEffect(recorder.isRecording ? 1.1 : 1.0)
         .animation(.snappy(duration: 0.2), value: recorder.isRecording)
         .contentShape(Circle())
+        // A11Y-02: the mic drives a gesture, not a Button, so the traits and
+        // state must be explicit for VoiceOver.
         .accessibilityLabel(recorder.isRecording ? "结束录音" : "开始语音输入")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("轻点开始或结束录音，也可以长按说话、松手结束")
+        .accessibilityValue(recorder.isRecording ? "正在转写" : "")
+        .accessibilityRespondsToUserInteraction(true)
         .gesture(recordingGesture)
     }
 

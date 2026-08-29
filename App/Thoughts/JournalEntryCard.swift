@@ -35,7 +35,10 @@ struct JournalEntryCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "收起日志" : "展开日志")
+            // A11Y-02: the whole card reads as one stop (书名、时间、原话、状态)
+            // with the expand/collapse state carried by the hint.
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(isExpanded ? "轻点收起日志" : "轻点展开完整日志")
 
             if isExpanded {
                 expandedContent
@@ -70,26 +73,33 @@ struct JournalEntryCard: View {
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
     }
 
     private var compactStatus: some View {
-        HStack(spacing: ElsepageTheme.Spacing.medium) {
-            if let duration = entry.sessionDuration {
-                Label(durationLabel(duration), systemImage: "clock")
-            }
-            if !entry.chapters.isEmpty {
-                Label("\(entry.chapters.count) 章", systemImage: "list.bullet")
-            }
-            if !entry.linkedHighlights.isEmpty {
-                Label("\(entry.linkedHighlights.count) 高亮", systemImage: "highlighter")
-            }
-            if !entry.openQuestions.isEmpty {
-                Label("有提问", systemImage: "questionmark.bubble")
-            }
+        // A11Y-01: status capsules wrap when large type no longer fits a row.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ElsepageTheme.Spacing.medium) { statusContent }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { statusContent }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder private var statusContent: some View {
+        if let duration = entry.sessionDuration {
+            Label(durationLabel(duration), systemImage: "clock")
+        }
+        if !entry.chapters.isEmpty {
+            Label("\(entry.chapters.count) 章", systemImage: "list.bullet")
+        }
+        if !entry.linkedHighlights.isEmpty {
+            Label("\(entry.linkedHighlights.count) 高亮", systemImage: "highlighter")
+        }
+        if !entry.openQuestions.isEmpty {
+            Label("有提问", systemImage: "questionmark.bubble")
+        }
     }
 
     @ViewBuilder private var expandedContent: some View {
@@ -97,6 +107,8 @@ struct JournalEntryCard: View {
             Label("打开会话", systemImage: "bubble.left.and.bubble.right")
         }
         .buttonStyle(.borderedProminent)
+        // A11Y-03: AA label on the accent fill in both color schemes.
+        .foregroundStyle(Color.elsepageOnAccent)
 
         if let session = entry.session, session.duration != nil {
             Divider()
@@ -198,6 +210,8 @@ struct JournalEntryCard: View {
             Divider()
             Button("回到原文") { openSource(entry.book, locator) }
                 .font(.footnote.weight(.medium))
+                .frame(minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
         }
     }
 
@@ -287,6 +301,8 @@ private struct JournalThoughtEditor: View {
                     dismiss()
                 }
                 .font(.subheadline.weight(.semibold))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
                 .disabled(trimmedDraft.isEmpty)
             }
 

@@ -1,22 +1,41 @@
+import AppInfrastructure
 import SwiftUI
 import UIKit
 
+/// Circular icon button used in the reader chrome and onboarding header.
+/// A11Y-01: the frame scales with Dynamic Type (@ScaledMetric) so the touch
+/// target keeps up with the icon; A11Y-03: the base is the 44pt HIG minimum.
 struct ElsepageIconButton: View {
     let systemName: String
     let accessibilityLabel: String
     let action: () -> Void
 
+    @ScaledMetric(relativeTo: .body) private var side: CGFloat = AccessibilityMetrics.minimumTapTargetSide
+
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.body.weight(.semibold))
-                .frame(width: 42, height: 42)
+                .frame(width: side, height: side)
                 .background(ElsepageTheme.MaterialToken.control, in: Circle())
                 .overlay(Circle().stroke(.primary.opacity(0.06)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+extension View {
+    /// A11Y-03: expands the hit-tested area to at least the 44×44pt HIG minimum
+    /// without changing what is drawn. Apply to plain-style icon buttons whose
+    /// visual glyph is smaller than the minimum target.
+    func elsepageTapTarget() -> some View {
+        frame(
+            minWidth: AccessibilityMetrics.minimumTapTargetSide,
+            minHeight: AccessibilityMetrics.minimumTapTargetSide
+        )
+        .contentShape(Rectangle())
     }
 }
 
@@ -55,8 +74,17 @@ struct ElsepageBookCover: View {
                 Text(title)
                     .font(ElsepageTheme.Typography.bookTitle)
                     .lineLimit(4)
+                    // The cover frame is fixed 2:3 while the title follows Dynamic
+                    // Type; graceful downscale keeps oversized type inside the
+                    // artwork instead of clipping it (A11Y-01). The card's real
+                    // title text below the cover always renders at full size.
+                    .minimumScaleFactor(0.5)
                 if let author, !author.isEmpty {
-                    Text(author).font(ElsepageTheme.Typography.metadata).opacity(0.72).lineLimit(2)
+                    Text(author)
+                        .font(ElsepageTheme.Typography.metadata)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.5)
+                        .opacity(0.72)
                 }
             }
             .foregroundStyle(.white)

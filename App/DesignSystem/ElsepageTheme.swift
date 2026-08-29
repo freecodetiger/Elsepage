@@ -1,3 +1,4 @@
+import AppInfrastructure
 import SwiftUI
 
 enum ElsepageTheme {
@@ -58,20 +59,34 @@ extension AnyTransition {
 }
 
 extension ShapeStyle where Self == Color {
+    /// Theme tokens are built from `ElsepagePalette` (Sources/AppInfrastructure)
+    /// so the WCAG contrast audited in unit tests is the exact palette the UI
+    /// renders (A11Y-03).
     static var elsepageBackground: Color {
-        Color(light: UIColor(red: 0.969, green: 0.965, blue: 0.949, alpha: 1), dark: UIColor(red: 0.075, green: 0.078, blue: 0.071, alpha: 1))
+        color(from: ElsepagePalette.background)
     }
 
     static var elsepageSurface: Color {
-        Color(light: UIColor(red: 0.992, green: 0.988, blue: 0.976, alpha: 1), dark: UIColor(red: 0.125, green: 0.129, blue: 0.118, alpha: 1))
+        color(from: ElsepagePalette.surface)
     }
 
     static var elsepageAccent: Color {
-        Color(light: UIColor(red: 0.373, green: 0.431, blue: 0.373, alpha: 1), dark: UIColor(red: 0.61, green: 0.69, blue: 0.60, alpha: 1))
+        color(from: ElsepagePalette.accent)
+    }
+
+    /// Label color for prominent buttons filled with the accent tint — white on
+    /// the deep light accent, near-black on the pale dark accent (A11Y-03).
+    static var elsepageOnAccent: Color {
+        color(from: ElsepagePalette.onAccent)
     }
 
     static var elsepageReaderSepia: Color {
-        Color(light: UIColor(red: 0.965, green: 0.945, blue: 0.902, alpha: 1), dark: UIColor(red: 0.14, green: 0.13, blue: 0.105, alpha: 1))
+        color(from: ElsepagePalette.readerSepia)
+    }
+
+    private static func color(from pair: ElsepagePalette.ThemePair) -> Color {
+        Color(light: UIColor(red: pair.light.red, green: pair.light.green, blue: pair.light.blue, alpha: 1),
+              dark: UIColor(red: pair.dark.red, green: pair.dark.green, blue: pair.dark.blue, alpha: 1))
     }
 }
 

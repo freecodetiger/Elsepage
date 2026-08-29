@@ -137,6 +137,8 @@ struct ReaderScreen: View {
                         Text(chapter).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
+                // A11Y-02: title + current chapter read as one element.
+                .accessibilityElement(children: .combine)
                 Spacer()
                 ElsepageIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索正文") { presentedSheet = .search }
                 ElsepageIconButton(systemName: "textformat", accessibilityLabel: "阅读设置") { presentedSheet = .appearance }
@@ -147,23 +149,21 @@ struct ReaderScreen: View {
 
             Spacer()
 
-            HStack(spacing: ElsepageTheme.Spacing.large) {
-                Button { presentedSheet = .contents } label: {
-                    Label("目录", systemImage: "list.bullet.indent").labelStyle(.iconOnly)
+            // A11Y-01: at accessibility Dynamic Type sizes a single row cannot
+            // fit on narrow widths, so the bar wraps into two stacked rows.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: ElsepageTheme.Spacing.large) {
+                    bottomBarButtons
+                    bottomBarProgress
                 }
-                Button { presentedSheet = .annotations } label: {
-                    Label("标注", systemImage: "highlighter").labelStyle(.iconOnly)
+                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                    HStack(spacing: ElsepageTheme.Spacing.large) {
+                        bottomBarButtons
+                    }
+                    HStack(spacing: ElsepageTheme.Spacing.small) {
+                        bottomBarProgress
+                    }
                 }
-                Button { finishReading() } label: {
-                    Label("读到这里", systemImage: "bookmark")
-                }
-                ProgressView(value: model.progress)
-                    .tint(.elsepageAccent)
-                    .accessibilityLabel("阅读进度")
-                    .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
-                Text(model.progress, format: .percent.precision(.fractionLength(0)))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
             }
             .font(.body)
             .buttonStyle(.plain)
@@ -172,6 +172,33 @@ struct ReaderScreen: View {
             .background(ElsepageTheme.MaterialToken.chrome)
         }
         .foregroundStyle(.primary)
+    }
+
+    @ViewBuilder private var bottomBarButtons: some View {
+        Button { presentedSheet = .contents } label: {
+            Label("目录", systemImage: "list.bullet.indent").labelStyle(.iconOnly)
+        }
+        .elsepageTapTarget()
+        Button { presentedSheet = .annotations } label: {
+            Label("标注", systemImage: "highlighter").labelStyle(.iconOnly)
+        }
+        .elsepageTapTarget()
+        Button { finishReading() } label: {
+            Label("读到这里", systemImage: "bookmark")
+        }
+        .elsepageTapTarget()
+    }
+
+    @ViewBuilder private var bottomBarProgress: some View {
+        ProgressView(value: model.progress)
+            .tint(.elsepageAccent)
+            .accessibilityLabel("阅读进度")
+            .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
+        // The visible percent duplicates the ProgressView's accessibilityValue.
+        Text(model.progress, format: .percent.precision(.fractionLength(0)))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 
     private func finishReading() {
@@ -353,12 +380,14 @@ private struct ReaderAnnotationsSheet: View {
                                         .fill(highlight.color.annotationColor)
                                         .frame(width: 10, height: 10)
                                         .padding(.top, 5)
+                                        .accessibilityHidden(true)
                                 } else {
                                     Image(systemName: "note.text")
                                         .font(.caption)
                                         .foregroundStyle(Color.elsepageAccent)
                                         .frame(width: 10)
                                         .padding(.top, 5)
+                                        .accessibilityHidden(true)
                                 }
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(annotation.locator.textHighlight ?? "原文位置")
@@ -376,6 +405,8 @@ private struct ReaderAnnotationsSheet: View {
                                 }
                                 Spacer(minLength: 0)
                             }
+                            // A11Y-02: excerpt + note + location read as one stop.
+                            .accessibilityElement(children: .combine)
                         }
                     }
                     .listStyle(.insetGrouped)
@@ -488,6 +519,8 @@ private struct ReaderAppearanceSheet: View {
                 Text(title).font(.caption2).foregroundStyle(.primary)
             }
             .frame(maxWidth: .infinity)
+            // A11Y-03: the whole cell (≥44pt tall) is the tap target.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title)主题")
@@ -496,7 +529,14 @@ private struct ReaderAppearanceSheet: View {
 
     private func settingSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         HStack {
-            Text(title).frame(width: 52, alignment: .leading)
+            Text(title)
+                // A11Y-01: a fixed 52pt column clips at accessibility sizes; a
+                // minimum lets the label wrap instead. The slider carries the
+                // label for VoiceOver, so the visible text stays silent.
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minWidth: 52, alignment: .leading)
+                .accessibilityHidden(true)
             Slider(value: value, in: range)
                 .accessibilityLabel(title)
         }

@@ -60,12 +60,13 @@ struct OnboardingView: View {
                     model.goBack()
                 }
             } else {
-                Color.clear.frame(width: 42, height: 42)
+                // Balances the back button; matches its 44pt tap target (A11Y-03).
+                Color.clear.frame(width: 44, height: 44)
             }
             Spacer()
             progressDots
             Spacer()
-            Color.clear.frame(width: 42, height: 42)
+            Color.clear.frame(width: 44, height: 44)
         }
         .padding(.horizontal, ElsepageTheme.Spacing.page)
         .padding(.top, ElsepageTheme.Spacing.medium)
@@ -219,6 +220,8 @@ struct OnboardingView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(.elsepageAccent)
+        // A11Y-03: AA label on the accent fill in both color schemes.
+        .foregroundStyle(Color.elsepageOnAccent)
         .disabled(primaryDisabled)
     }
 
