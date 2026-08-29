@@ -7,7 +7,8 @@
 ## Milestones
 
 - ✅ **v0.5 TestFlight 就绪** — Phases 1-6 (代码完成 2026-08-29,待用户真机验收)
-- 🚧 **v1.0 App Store 首发** — Phases 7-11 (进行中)
+- 🚧 **v1.0 App Store 首发** — Phases 7-11 (进行中;代码侧完成,待用户验收)
+- 📋 **v1.1 Personal Brain(我的大脑)** — Phases 12-19 (规划完成;来源 `docs/brain.md`,与 Phase 11 用户验收可并行)
 
 ## Phases
 
@@ -170,14 +171,101 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 11-01: UAT/崩溃恢复 checklist 与最终验证
+- [x] 11-01: UAT/崩溃恢复 checklist 与最终验证
 - [ ] 11-02: TestFlight 流程与发布确认
+
+### 📋 v1.1 Personal Brain — 我的大脑 (Planned)
+
+**Milestone Goal:** 按 `docs/brain.md` 落地 Brain Domain——Thought/Question/Memory 三类一级对象 + Evidence 基础设施,成为现有 Context Engineering 的上层个人思想模型。原则:LLM 提议,代码执行;Brain 维护路径不阻塞 ReaderAgent;Evidence 是事实,Brain Item 是解释。
+
+#### Phase 12: Brain Domain + Persistence
+**Goal**: Thought/Question/Memory 强类型域模型与可靠存储(brain.md §1-6,§20 Phase 1)
+**Depends on**: Phase 11 代码侧完成(纯增量,可与用户真机验收并行)
+**Requirements**: BRAIN-01
+**Success Criteria** (what must be TRUE):
+  1. BrainCore 模块(不 import ReaderAgent):`BrainItem` tagged union(thought/question/memory),ThoughtStage/QuestionState/MemoryState/MemoryOrigin/MemoryConfidence 均为封闭枚举
+  2. brainItems 表(GRDB v17 迁移,含 per-kind state CHECK)+ `BrainRepository` 仓储,kind → 强类型域对象映射
+  3. 既有 `memories` 一次性幂等回填(provisional→needsReview 等确定性映射),旧表与 MyMind UI 行为不变
+  4. swift test 全绿,含域映射、CRUD、回填幂等、擦除联动测试
+**Plans**: TBD
+
+Plans:
+- [x] 12-01: BrainCore 域模型 + brainItems 持久化 + 回填 + 测试
+
+#### Phase 13: Brain UI
+**Goal**: 「我的大脑」页面可浏览/编辑(brain.md §14-17,§20 Phase 2)
+**Depends on**: Phase 12
+**Requirements**: BRAIN-02
+**Success Criteria** (what must be TRUE):
+  1. 首页三分区(Thoughts 正在形成 / Questions 还没想明白 / Memories 记住的我)——不是数据库管理器
+  2. Thought/Question/Memory 详情页:当前陈述 / 来源 / 相关关系 / [继续想想] 入口
+  3. Memory 详情含 origin 与 confidence 的区分展示 + 编辑/删除(信任要求,brain.md §17)
+**Plans**: TBD
+
+#### Phase 14: Evidence / Relation
+**Goal**: Brain Item 有来源和关系(brain.md §4-5,§20 Phase 3)
+**Depends on**: Phase 12(可与 13/15 并行)
+**Requirements**: BRAIN-03
+**Success Criteria** (what must be TRUE):
+  1. brainItemEvidence(sourceType: reflection/bookChunk/message;relation: origin/supports/contradicts/revises/raises/answers)
+  2. brainItemRelations(克制集:related/supports/contradicts/evolvesFrom/raises/addresses/derivedMemory)
+  3. 删除 Reflection 级联其 evidence 行;无 Evidence 的 Item 可信度展示降级
+**Plans**: TBD
+
+#### Phase 15: Persistent Embedding + BrainRetriever
+**Goal**: Thought/Question 可语义检索(brain.md §12,§20 Phase 4)
+**Depends on**: Phase 12(可与 13/14 并行)
+**Requirements**: BRAIN-04
+**Success Criteria** (what must be TRUE):
+  1. brainItemEmbeddings 持久化(model/dimensions/contentHash),创建一次、反复检索,不重复 embed
+  2. BrainRetriever:lexical + persistent embedding + RRF,支持 kinds 过滤,输出 BrainCandidate
+  3. 语义不可用时退化为纯 lexical(沿用现有退化链模式)
+**Plans**: TBD
+
+#### Phase 16: Agent Bridge
+**Goal**: Brain Context 进入现有 ContextAssembler(brain.md §11-13,§20 Phase 5)
+**Depends on**: Phases 14, 15
+**Requirements**: BRAIN-05
+**Success Criteria** (what must be TRUE):
+  1. BrainContextProvider 把 BrainCandidate 适配为 ContextCandidate(integration layer,BrainCore 零改动)
+  2. Brain 页面内讨论 Item 时,该 Item 作为 Pinned Context 确定性进入 Context Bundle(activeBrainContext)
+  3. 普通阅读路径由 Planner 决定是否请求 Brain Retrieval(不强行塞进所有 prompt)
+**Plans**: TBD
+
+#### Phase 17: BrainProjectionService
+**Goal**: Reflection 自动更新 Brain(brain.md §7-9,§20 Phase 6)
+**Depends on**: Phases 15, 16
+**Requirements**: BRAIN-06
+**Success Criteria** (what must be TRUE):
+  1. Observation → 候选检索 → LLM 强类型 MutationProposal → BrainMutationValidator → 事务执行 → embedding 刷新;LLM 不直接写库
+  2. attach > update > create,createThreshold > attachThreshold;100 Reflection 不产生 83 Thought(碎片化上限测试)
+  3. Brain 维护为独立异步路径:失败不影响 Reflection 保存/ReaderAgent 回复/阅读流程
+**Plans**: TBD
+
+#### Phase 18: Revision / Evolution
+**Goal**: Thought 时间演化可展示(brain.md §10,§20 Phase 7)
+**Depends on**: Phase 17
+**Requirements**: BRAIN-07
+**Success Criteria** (what must be TRUE):
+  1. brainItemRevisions(itemID/revision/content/triggerEvidenceID),updateThought 不覆盖旧总结
+  2. Thought 详情可展示演化时间线(月度变化流)
+**Plans**: TBD
+
+#### Phase 19: Evaluation / Observability
+**Goal**: Brain 质量可验证(§20 Phase 8)
+**Depends on**: Phases 17, 18
+**Requirements**: BRAIN-08
+**Success Criteria** (what must be TRUE):
+  1. 投影提案验收率/碎片化率等指标可观测(复用 routingTraces 模式)
+  2. Brain 质量评估样本与回归入口,文档更新至 ARCHITECTURE.md
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
 v0.5: 1 ‖ 2 ‖ 3 ‖ 4 ‖ 5(并行)→ 6
 v1.0: 7 ‖ 8(并行)+ 9(依赖 5)→ 10 → 11
+v1.1: 12 → 13 ‖ 14 ‖ 15(并行)→ 16 → 17 → 18 → 19
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -192,3 +280,11 @@ v1.0: 7 ‖ 8(并行)+ 9(依赖 5)→ 10 → 11
 | 9. Bench LLM 评审与回归纪律 | v1.0 | 2/2 | Complete | 2026-08-29 |
 | 10. 发布工程与合规 | v1.0 | 2/2 | Complete | 2026-08-29 |
 | 11. 首发验收 | v1.0 | 1/2 | In progress | - |
+| 12. Brain Domain + Persistence | v1.1 | 0/1 | In progress | - |
+| 13. Brain UI | v1.1 | 0/1 | Planned | - |
+| 14. Evidence / Relation | v1.1 | 0/1 | Planned | - |
+| 15. Persistent Embedding + BrainRetriever | v1.1 | 0/1 | Planned | - |
+| 16. Agent Bridge | v1.1 | 0/1 | Planned | - |
+| 17. BrainProjectionService | v1.1 | 0/1 | Planned | - |
+| 18. Revision / Evolution | v1.1 | 0/1 | Planned | - |
+| 19. Evaluation / Observability | v1.1 | 0/1 | Planned | - |

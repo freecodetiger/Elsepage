@@ -75,6 +75,19 @@
 - [ ] **REL-04**: 崩溃恢复验证:强杀/重启后进度、划线、Reflection、Memory 不丢失(用户真机 checklist)
 - [ ] **REL-05**: 首发验收:swift test 全绿、bench 基线对比通过、用户按 UAT 清单真机验收、TestFlight 反馈处理流程建立
 
+## v1.1 Requirements(Personal Brain — 我的大脑)
+
+来源:`docs/brain.md`(Brain Domain 规范)。核心原则:Reflection 是原始思考记录,Thought/Question 是从多次 Reflection 中形成的思想结构,Memory 是 Agent 可长期依赖的稳定用户知识;Evidence 是事实,Brain Item 是解释;LLM 提议,代码执行。
+
+- **BRAIN-01**: Brain Domain + Persistence — Thought/Question/Memory 强类型域模型(阶段/状态/来源用封闭枚举,非法状态不可表示),brainItems 表 + 仓储可靠存储,既有 memories 一次性幂等回填
+- **BRAIN-02**: Brain UI — 「我的大脑」首页(最近的我 / Thoughts / Questions / Memories 分区)与三类 Item 详情页可浏览、可编辑
+- **BRAIN-03**: Evidence / Relation — brainItemEvidence(sourceType/sourceID/relation/weight)与 brainItemRelations(克制的关系集:related/supports/contradicts/evolvesFrom/raises/addresses/derivedMemory)
+- **BRAIN-04**: Persistent Embedding + BrainRetriever — brainItemEmbeddings 持久化,lexical + embedding + RRF,按 kinds 过滤,输出 BrainCandidate
+- **BRAIN-05**: Agent Bridge — BrainContextProvider 把 Brain Item 适配为 ContextCandidate 进入现有 ContextAssembler;BrainCore 不 import ReaderAgent
+- **BRAIN-06**: BrainProjectionService — Reflection 自动更新 Brain:Observation → BrainRetriever 候选 → LLM 强类型 Mutation Proposal → Validator → 事务执行;attach > update > create,createThreshold > attachThreshold;不阻塞 ReaderAgent 主链,Brain 失败不影响 Reflection/回复
+- **BRAIN-07**: Revision / Evolution — brainItemRevisions 保留 Thought 演化历史,UI 可展示时间线
+- **BRAIN-08**: Evaluation / Observability — Brain 质量可验证(投影提案的验收率、碎片化率),可观测
+
 ## v2 Requirements(首发后)
 
 PRD P1/P2 长期功能,当前不在路线图内:
@@ -129,12 +142,21 @@ PRD P1/P2 长期功能,当前不在路线图内:
 | REL-03 | Phase 10 | Pending |
 | REL-04 | Phase 11 | Pending |
 | REL-05 | Phase 11 | Pending |
+| BRAIN-01 | Phase 12 | Pending |
+| BRAIN-02 | Phase 13 | Pending |
+| BRAIN-03 | Phase 14 | Pending |
+| BRAIN-04 | Phase 15 | Pending |
+| BRAIN-05 | Phase 16 | Pending |
+| BRAIN-06 | Phase 17 | Pending |
+| BRAIN-07 | Phase 18 | Pending |
+| BRAIN-08 | Phase 19 | Pending |
 
 **Coverage:**
 - v1 requirements: 31 total
-- Mapped to phases: 31
+- v1.1 requirements: 8 total
+- Mapped to phases: 39
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-08-29*
-*Last updated: 2026-08-29 after initial definition*
+*Last updated: 2026-08-29 — added v1.1 Personal Brain milestone (docs/brain.md)*
