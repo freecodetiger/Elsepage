@@ -1,13 +1,15 @@
 import AchievementCore
+import BrainCore
 import LibraryCore
 import ReaderCore
 import ReflectionCore
 import SwiftUI
 
-/// WS2 "My Mind" / "AI 眼中的我". Shows what the Agent remembers about the
-/// reader. Every memory is traceable to its source reflection and mutable
-/// (准确 / 不准确 / 修改 / 忘记 / 查看依据 / 一键清除). The tone is "这是我目前
-/// 从阅读与讨论中形成的理解" — never a psychological-diagnosis vibe.
+/// 「我的大脑」(docs/brain.md §14): Thoughts / Questions / Memories 三分区。
+/// Thoughts and Questions live in the Brain store and are editable (never
+/// manually created — they form through reading, phase 17); Memories keep the
+/// legacy store and its full action set. The homepage is not a database
+/// manager: sections stay quiet and empty until content actually forms.
 struct MyMindView: View {
     @Bindable var model: MyMindModel
     @Bindable var settings: SettingsRootModel
@@ -20,7 +22,15 @@ struct MyMindView: View {
     @State private var showsClearAll = false
     @State private var showsSettings = false
     @State private var evidenceByMemory: [UUID: MemoryEvidence] = [:]
+    @State private var selectedThought: Thought?
+    @State private var selectedQuestion: Question?
+    @State private var editingThought: Thought?
+    @State private var editingQuestion: Question?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isEmpty: Bool {
+        model.allMemories.isEmpty && !model.hasBrainItems
+    }
 
     init(
         model: MyMindModel,
@@ -37,9 +47,9 @@ struct MyMindView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if model.isLoading && model.allMemories.isEmpty {
+                if model.isLoading && isEmpty {
                     ProgressView("正在整理对你的理解…")
-                } else if model.allMemories.isEmpty {
+                } else if isEmpty {
                     emptyState
                         .transition(.moment(reduceMotion))
                 } else {
@@ -88,6 +98,40 @@ struct MyMindView: View {
                     Task { await model.edit(memory, newClaim: claim) }
                 }
             }
+            .sheet(isPresented: editingThoughtBinding) {
+                if let thought = editingThought {
+                    BrainItemEditorSheet(
+                        title: "修改这个想法",
+                        textTitle: "想法",
+                        initialText: thought.statement,
+                        secondaryTitle: "标题",
+                        initialSecondaryText: thought.title,
+                        stages: ThoughtStage.allCases,
+                        selectedStage: thought.stage,
+                        stageLabel: { brainStageLabel($0) },
+                        onSave: { title, statement, stage in
+                            Task { await model.editThought(thought, title: title, statement: statement, stage: stage) }
+                        }
+                    )
+                }
+            }
+            .sheet(isPresented: editingQuestionBinding) {
+                if let question = editingQuestion {
+                    BrainItemEditorSheet(
+                        title: "修改这个问题",
+                        textTitle: "问题",
+                        initialText: question.question,
+                        secondaryTitle: nil,
+                        initialSecondaryText: nil,
+                        stages: QuestionState.allCases,
+                        selectedStage: question.state,
+                        stageLabel: { brainStateLabel($0) },
+                        onSave: { _, text, state in
+                            Task { await model.editQuestion(question, text: text, state: state) }
+                        }
+                    )
+                }
+            }
             .confirmationDialog("清除全部记忆？", isPresented: $showsClearAll, titleVisibility: .visible) {
                 Button("清除全部记忆", role: .destructive) { Task { await model.deleteAll() } }
                 Button("取消", role: .cancel) {}
@@ -100,15 +144,111 @@ struct MyMindView: View {
     private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-                profileSection
                 achievementsSection
+                thoughtsSection
+                questionsSection
+                profileSection
                 memoriesSection
             }
             .padding(ElsepageTheme.Spacing.page)
         }
+        .navigationDestination(item: $selectedThought) { thought in
+            BrainThoughtDetailView(
+                thought: thought,
+                onEdit: { editingThought = thought },
+                onDelete: {
+                    Task {
+                        await model.deleteThought(thought)
+                        selectedThought = nil
+                    }
+                }
+            )
+        }
+        .navigationDestination(item: $selectedQuestion) { question in
+            BrainQuestionDetailView(
+                question: question,
+                onEdit: { editingQuestion = question },
+                onDelete: {
+                    Task {
+                        await model.deleteQuestion(question)
+                        selectedQuestion = nil
+                    }
+                }
+            )
+        }
         // Memory 更新 (PRD §10.3): confirmations/edits settle without a jump cut.
         .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.allMemories.map(\.id))
         .refreshable { await model.reload() }
+    }
+
+    // MARK: - Thoughts / Questions (brain.md §14)
+
+    private var thoughtsSection: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Thoughts · 正在形成")
+                    .font(.system(.headline, design: .serif, weight: .semibold))
+                Spacer()
+                Text("\(model.thoughts.count) 个")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            if model.thoughts.isEmpty {
+                Text("你的想法还在阅读里，会随讨论逐渐成形。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.thoughts, id: \.id) { thought in
+                    BrainItemRow(
+                        title: thought.title,
+                        preview: thought.statement,
+                        badge: brainStageLabel(thought.stage),
+                        updatedAt: thought.updatedAt
+                    ) {
+                        Haptics.cardExpanded()
+                        selectedThought = thought
+                    }
+                }
+            }
+        }
+    }
+
+    private var questionsSection: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Questions · 还没想明白")
+                    .font(.system(.headline, design: .serif, weight: .semibold))
+                Spacer()
+                Text("\(model.questions.count) 个")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            if model.questions.isEmpty {
+                Text("还没有正在追踪的问题。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.questions, id: \.id) { question in
+                    BrainItemRow(
+                        title: question.question,
+                        preview: nil,
+                        badge: brainStateLabel(question.state),
+                        updatedAt: question.updatedAt
+                    ) {
+                        Haptics.cardExpanded()
+                        selectedQuestion = question
+                    }
+                }
+            }
+        }
+    }
+
+    private var editingThoughtBinding: Binding<Bool> {
+        Binding(get: { editingThought != nil }, set: { if !$0 { editingThought = nil } })
+    }
+
+    private var editingQuestionBinding: Binding<Bool> {
+        Binding(get: { editingQuestion != nil }, set: { if !$0 { editingQuestion = nil } })
     }
 
     /// 低调徽章区(PRD F13):只列出已解锁的成就,无锁定/进度/积分。
@@ -352,6 +492,9 @@ private struct MemoryRow: View {
 
     private var metadata: some View {
         HStack(spacing: ElsepageTheme.Spacing.small) {
+            Label(memory.userEdited ? "用户明确表达" : "AI 推断", systemImage: memory.userEdited ? "person" : "sparkles")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Text(memory.updatedAt, format: .dateTime.month().day().hour().minute())
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -366,7 +509,7 @@ private struct MemoryRow: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 4)
-            Text("\(Int(memory.confidence * 100))%")
+            Text("置信度 \(confidenceLabel(memory.confidence))")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
@@ -426,6 +569,247 @@ private extension MemoryKind {
         case .preference: "偏好"
         case .openQuestion: "未解问题"
         case .profileTrait: "特质"
+        }
+    }
+}
+
+private func confidenceLabel(_ confidence: Double) -> String {
+    if confidence >= 0.8 { "高" } else if confidence >= 0.5 { "中" } else { "低" }
+}
+
+private func brainStageLabel(_ stage: ThoughtStage) -> String {
+    switch stage {
+    case .emerging: "萌芽"
+    case .evolving: "演化中"
+    case .stable: "稳定"
+    case .reconsidering: "重新审视"
+    case .archived: "已归档"
+    }
+}
+
+private func brainStateLabel(_ state: QuestionState) -> String {
+    switch state {
+    case .open: "未解决"
+    case .exploring: "探索中"
+    case .partiallyResolved: "部分解决"
+    case .resolved: "已解决"
+    case .dormant: "暂放"
+    }
+}
+
+/// A Thoughts/Questions row on the homepage: tap opens the detail view.
+private struct BrainItemRow: View {
+    let title: String
+    let preview: String?
+    let badge: String
+    let updatedAt: Date
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                if let preview {
+                    Text(preview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                HStack(spacing: ElsepageTheme.Spacing.small) {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.elsepageAccent)
+                    Text(updatedAt, format: .dateTime.month().day())
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(ElsepageTheme.Spacing.medium)
+            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
+                    .stroke(.primary.opacity(0.06))
+            }
+            .accessibilityElement(children: .combine)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Thought detail (brain.md §15, phase-13 subset): current statement, stage,
+/// edit and delete. Evolution timeline arrives with revisions (phase 18);
+/// sources and related items arrive with evidence (phase 14).
+private struct BrainThoughtDetailView: View {
+    let thought: Thought
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showsDelete = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
+                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                    Text("当前的我")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                    Text(thought.statement)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: ElsepageTheme.Spacing.small) {
+                    Text(brainStageLabel(thought.stage))
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.elsepageAccent)
+                    Text("更新于 \(thought.updatedAt, format: .dateTime.year().month().day())")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(ElsepageTheme.Spacing.page)
+        }
+        .background(Color.elsepageBackground)
+        .navigationTitle(thought.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("编辑", action: onEdit)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) { showsDelete = true } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel("删除这个想法")
+            }
+        }
+        .confirmationDialog("删除这个想法？", isPresented: $showsDelete, titleVisibility: .visible) {
+            Button("删除", role: .destructive, action: onDelete)
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后无法撤销。")
+        }
+    }
+}
+
+/// Question detail (brain.md §16, phase-13 subset): the question and its state.
+/// "它从哪里来 / 正在形成的答案" arrive with evidence (phase 14).
+private struct BrainQuestionDetailView: View {
+    let question: Question
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showsDelete = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
+                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                    Text("问题")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                    Text(question.question)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: ElsepageTheme.Spacing.small) {
+                    Text(brainStateLabel(question.state))
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.elsepageAccent)
+                    Text("更新于 \(question.updatedAt, format: .dateTime.year().month().day())")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(ElsepageTheme.Spacing.page)
+        }
+        .background(Color.elsepageBackground)
+        .navigationTitle("还没想明白")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("编辑", action: onEdit)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) { showsDelete = true } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel("删除这个问题")
+            }
+        }
+        .confirmationDialog("删除这个问题？", isPresented: $showsDelete, titleVisibility: .visible) {
+            Button("删除", role: .destructive, action: onDelete)
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后无法撤销。")
+        }
+    }
+}
+
+/// Lightweight edit sheet for an existing Thought / Question. `Stage` is the
+/// item's stage-or-state enum; there is no creation path here on purpose —
+/// brain items form through reading (phase 17), not through a form.
+private struct BrainItemEditorSheet<Stage: Hashable>: View {
+    let title: String
+    let textTitle: String
+    @State var text: String
+    let secondaryTitle: String?
+    @State var secondaryText: String?
+    let stages: [Stage]
+    @State var selectedStage: Stage
+    let stageLabel: (Stage) -> String
+    let onSave: (_ secondary: String?, _ text: String, _ stage: Stage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let secondaryTitle {
+                    TextField(secondaryTitle, text: Binding(
+                        get: { secondaryText ?? "" },
+                        set: { secondaryText = $0 }
+                    ))
+                }
+                TextField(textTitle, text: $text, axis: .vertical)
+                    .lineLimit(3...8)
+                Picker("状态", selection: $selectedStage) {
+                    ForEach(stages, id: \.self) { stage in
+                        Text(stageLabel(stage)).tag(stage)
+                    }
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        onSave(secondaryText.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }, trimmed, selectedStage)
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }

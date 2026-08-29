@@ -86,6 +86,8 @@ targets:
       - package: ReadLoopCore
         product: ModelProviders
       - package: ReadLoopCore
+        product: BrainCore
+      - package: ReadLoopCore
         product: Persistence
       - package: ReadLoopCore
         product: AppInfrastructure
@@ -120,6 +122,8 @@ targets:
     dependencies:
       - package: ReadLoopCore
         product: LibraryCore
+      - package: ReadLoopCore
+        product: BrainCore
       - package: ReadLoopCore
         product: ReaderCore
       - package: ReadLoopCore

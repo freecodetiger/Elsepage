@@ -50,6 +50,7 @@ final class AppModel {
             let reflections = GRDBReflectionRepository(database: database)
             let journal = GRDBJournalRepository(database: database)
             let memories = GRDBMemoryRepository(database: database)
+            let brain = GRDBBrainRepository(database: database)
             let bookIndex = GRDBBookIndexRepository(database: database)
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
@@ -183,6 +184,7 @@ final class AppModel {
             )
             myMind = MyMindModel(
                 memories: memories,
+                brain: brain,
                 reflections: reflections,
                 books: books,
                 achievements: achievements
