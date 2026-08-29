@@ -49,9 +49,9 @@ None yet.
 Phase: 7 of 11 (无障碍与动态字体) — v1.0 波次开始
 Plan: Phase 7/8 并行执行中; Phase 9 排队 (依赖已满足)
 Status: In progress
-Last activity: 2026-08-29 — Phase 7 (无障碍) 合并; Phase 9/10 执行中; main 291 ST + 25 XCT 全绿
+Last activity: 2026-08-29 — Phase 10 (发布合规) 合并; project.yml 版本 1.0.0 (用户需 xcodegen); Phase 9 执行中
 
-Progress: [████████░░] 77% (17/22 plans)
+Progress: [█████████░] 86% (19/22 plans)
 
 v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单见 .planning/UAT-v0.5.md (待补)
 
