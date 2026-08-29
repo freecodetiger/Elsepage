@@ -79,7 +79,13 @@ final class LibraryModel {
         }
     }
 
-    func importBook(_ url: URL) async {
+    /// Imports an EPUB through the full pipeline (staging, metadata, dedupe,
+    /// indexing). Returns the book that is now in the library — the freshly
+    /// imported one, or the duplicate already stored (with `duplicateTitle`
+    /// set); nil when the import failed (`errorMessage` set). Onboarding reuses
+    /// this to confirm the first import by title.
+    @discardableResult
+    func importBook(_ url: URL) async -> Book? {
         isImporting = true; defer { isImporting = false }
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -91,9 +97,15 @@ final class LibraryModel {
             case .imported(let book):
                 await reload()
                 indexCoordinator.enqueue(book)
-            case .duplicate(let book): duplicateTitle = book.title
+                return book
+            case .duplicate(let book):
+                duplicateTitle = book.title
+                return book
             }
-        } catch { errorMessage = error.localizedDescription }
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
     }
 
     func resumeBookIndexing() async { await indexCoordinator.resume(books) }

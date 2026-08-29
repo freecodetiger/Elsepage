@@ -26,6 +26,16 @@ final class AppModel {
     /// Set when an external document import lands, so AppShell can surface the
     /// result by switching to 书架.
     var openLibraryAfterExternalImport = false
+    /// Non-nil while the first-launch onboarding (PRD §11) is presented over
+    /// the tab shell. AppShell shows it as a full-screen cover and calls
+    /// `completeOnboarding()` when the flow finishes; settable because the
+    /// cover's item binding lives there.
+    var onboarding: OnboardingModel?
+    /// Onboarding completion flag ("onboarding.hasCompleted"). It lives in the
+    /// standard UserDefaults domain, which 「清除所有本地数据」(Phase 1) removes
+    /// without preservation — that dependency is what re-triggers the flow
+    /// after a wipe (ONB-03), so there is no extra reset wiring anywhere.
+    private let onboardingCompletionStore = OnboardingCompletionStore()
 
     func start() async {
         guard library == nil, startupError == nil else { return }
@@ -179,6 +189,7 @@ final class AppModel {
             await library?.resumeBookIndexing()
             await achievements.reload()
             await importPendingIfReady()
+            presentOnboardingIfFirstLaunch()
         } catch {
             startupError = error.localizedDescription
         }
@@ -210,5 +221,35 @@ final class AppModel {
         pendingImportURL = nil
         await library.importBook(url)
         openLibraryAfterExternalImport = true
+    }
+
+    /// Decides whether the first-launch flow should be presented. Runs at the
+    /// end of every `start()` (fresh launch and post-wipe rebuild alike).
+    /// Existing content — books already imported or a configured provider —
+    /// marks an upgrading user: the flow completes silently instead of
+    /// interrupting them (PRD §11 不打断已导入用户).
+    private func presentOnboardingIfFirstLaunch() {
+        guard onboarding == nil else { return }
+        switch OnboardingLaunchResolver.decide(
+            hasCompletedBefore: onboardingCompletionStore.hasCompletedBefore,
+            hasBooksInLibrary: !(library?.books.isEmpty ?? true),
+            hasProviderConfiguration: settings?.chat.isConfigured ?? false
+        ) {
+        case .notNeeded:
+            break
+        case .completeSilently:
+            onboardingCompletionStore.setCompleted()
+        case .showFlow:
+            guard let library, let settings else { return }
+            onboarding = OnboardingModel(library: library, provider: settings.chat)
+        }
+    }
+
+    /// Finishes the onboarding flow: persists the completion flag (absent again
+    /// after 清除所有本地数据, which is what re-triggers the flow) and removes
+    /// the cover.
+    func completeOnboarding() {
+        onboardingCompletionStore.setCompleted()
+        onboarding = nil
     }
 }

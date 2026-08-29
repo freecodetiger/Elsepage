@@ -52,6 +52,19 @@ struct AppShell: View {
             selection = .library
             appModel.openLibraryAfterExternalImport = false
         }
+        // First-launch onboarding (PRD §11): 导入第一本书 → 配置 Provider →
+        // 指向第一次阅读。Full-screen over the tab shell; completion writes the
+        // flag via AppModel, and "打开刚导入的书" hands the book straight to the reader.
+        .fullScreenCover(item: $appModel.onboarding) { onboarding in
+            OnboardingView(model: onboarding) { book in
+                appModel.completeOnboarding()
+                if let book {
+                    readerDestination = .init(book: book, locator: nil)
+                } else {
+                    selection = .library
+                }
+            }
+        }
     }
 }
 
