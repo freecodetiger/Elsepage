@@ -440,7 +440,62 @@ public final class AppDatabase: @unchecked Sendable {
                 t.drop(column: "streamingEnabled")
             }
         }
+
+        // Brain domain (docs/brain.md, phase 12): one table for the three
+        // first-class objects (thought/question/memory) with per-kind state
+        // CHECKs — illegal states are unrepresentable at the storage layer too.
+        // The one-time backfill carries existing `memories` rows over unchanged
+        // in meaning: status→state and confidence→level are deterministic, and
+        // the old table keeps working (MyMind UI switches in phase 13).
+        migrator.registerMigration("v21_brain") { db in
+            try db.create(table: "brainItems", ifNotExists: true) { t in
+                t.column("id", .text).primaryKey()
+                t.column("kind", .text).notNull()
+                t.column("title", .text)
+                t.column("content", .text).notNull()
+                t.column("state", .text).notNull()
+                t.column("origin", .text)
+                t.column("confidence", .text)
+                // Memory-backfill only: mirrors the legacy memories.sourceReflectionID
+                // cascade. Thought/Question provenance moves to brainItemEvidence
+                // in phase 14 and must not use this column.
+                t.column("sourceReflectionID", .text).references("reflections", onDelete: .cascade)
+                t.column("contentHash", .text)
+                t.column("schemaVersion", .integer).notNull().defaults(to: 1)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.check(sql: "kind IN ('thought', 'question', 'memory')")
+                t.check(sql: "length(trim(content)) > 0")
+                t.check(sql: """
+                    (kind = 'memory' AND state IN ('active', 'needsReview', 'superseded', 'forgotten') \
+                    AND origin IS NOT NULL AND confidence IS NOT NULL AND title IS NULL) \
+                    OR (kind = 'thought' AND state IN ('emerging', 'evolving', 'stable', 'reconsidering', 'archived') \
+                    AND origin IS NULL AND confidence IS NULL AND title IS NOT NULL) \
+                    OR (kind = 'question' AND state IN ('open', 'exploring', 'partiallyResolved', 'resolved', 'dormant') \
+                    AND origin IS NULL AND confidence IS NULL)
+                    """)
+            }
+            try Self.backfillBrainItems(db)
+        }
         return migrator
+    }
+
+    /// One-time, idempotent carry-over of legacy `memories` rows into
+    /// `brainItems` (kind = memory). Deterministic mapping: provisional→needsReview,
+    /// active→active, superseded→superseded; confidence ≥0.8→high, ≥0.5→medium,
+    /// else low; origin agentInferred (every legacy memory came from the journal
+    /// agent pipeline). Internal so tests can re-run it against seeded rows.
+    public static func backfillBrainItems(_ db: Database) throws {
+        try db.execute(sql: """
+            INSERT OR IGNORE INTO brainItems
+                (id, kind, title, content, state, origin, confidence, sourceReflectionID, contentHash, schemaVersion, createdAt, updatedAt)
+            SELECT id, 'memory', NULL, claim,
+                   CASE status WHEN 'provisional' THEN 'needsReview' WHEN 'active' THEN 'active' ELSE 'superseded' END,
+                   'agentInferred',
+                   CASE WHEN confidence >= 0.8 THEN 'high' WHEN confidence >= 0.5 THEN 'medium' ELSE 'low' END,
+                   sourceReflectionID, NULL, 1, createdAt, updatedAt
+            FROM memories
+            """)
     }
 
     /// Every user-data table in child-before-parent order, so the wipe succeeds
@@ -462,6 +517,7 @@ public final class AppDatabase: @unchecked Sendable {
         "reflectionConnections",
         "reflectionEvidence",
         "memories",
+        "brainItems",
         "reflections",
         "readingSessions",
         "readingPositions",

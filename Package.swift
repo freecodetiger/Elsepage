@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.iOS(.v18), .macOS(.v14)],
     products: [
         .library(name: "LibraryCore", targets: ["LibraryCore"]),
+        .library(name: "BrainCore", targets: ["BrainCore"]),
         .library(name: "ReaderCore", targets: ["ReaderCore"]),
         .library(name: "ReadingSessionCore", targets: ["ReadingSessionCore"]),
         .library(name: "ReflectionCore", targets: ["ReflectionCore"]),
@@ -28,6 +29,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "LibraryCore"),
+        .target(name: "BrainCore"),
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore", "RetrievalCore"]),
@@ -42,7 +44,7 @@ let package = Package(
         .target(
             name: "Persistence",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "AchievementCore", "RetrievalCore", "ModelProviders", "ContextRouting",
+                "LibraryCore", "BrainCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "AchievementCore", "RetrievalCore", "ModelProviders", "ContextRouting",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
@@ -59,7 +61,7 @@ let package = Package(
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
-                "LibraryCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "AchievementCore", "SpeechCore", "RetrievalCore", "ContextRouting",
+                "LibraryCore", "BrainCore", "ReaderCore", "ReadingSessionCore", "ReflectionCore", "AchievementCore", "SpeechCore", "RetrievalCore", "ContextRouting",
                 "ContextEngineering", "AgentRuntime", "ReaderAgent", "ModelProviders", "Persistence", "AppInfrastructure",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
