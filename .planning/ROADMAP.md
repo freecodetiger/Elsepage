@@ -187,7 +187,7 @@ v1.0: 7 ‖ 8(并行)+ 9(依赖 5)→ 10 → 11
 | 4. Onboarding 三步引导 | v0.5 | 2/2 | Complete | 2026-08-29 |
 | 5. ReaderAgentBench 最小可用 | v0.5 | 2/2 | Complete | 2026-08-29 |
 | 6. 习惯打磨与偏差批量修 | v0.5 | 3/3 | Complete | 2026-08-29 |
-| 7. 无障碍与动态字体 | v1.0 | 0/2 | Not started | - |
+| 7. 无障碍与动态字体 | v1.0 | 2/2 | Complete | 2026-08-29 |
 | 8. Provider 稳定性 | v1.0 | 2/2 | Complete | 2026-08-29 |
 | 9. Bench LLM 评审与回归纪律 | v1.0 | 0/2 | Not started | - |
 | 10. 发布工程与合规 | v1.0 | 0/2 | Not started | - |
