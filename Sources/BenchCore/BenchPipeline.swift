@@ -73,6 +73,9 @@ public struct BenchSampleRun: Codable, Sendable {
     public let usage: BenchUsageSummary?
     public let promptCharacterCount: Int
     public let expectedFeedbackNotes: [String]
+    /// LLM-as-judge scoring section (BENCH-03); nil when judging was off or the
+    /// sample was beyond `--judge-limit`.
+    public var judge: BenchSampleJudgeResult?
 
     public static func failed(id: String, index: Int, sample: BenchSample, message: String) -> BenchSampleRun {
         BenchSampleRun(
