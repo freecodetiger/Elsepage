@@ -35,13 +35,17 @@ public enum BenchError: Error, LocalizedError, Sendable {
 /// Real runs go through `OpenAICompatibleModelClient` — the exact client the app
 /// uses — so wire format, headers and DeepSeek-specific fields are identical.
 /// Dry runs use `FakeModelClient` (no network, deterministic).
+///
+/// `modelOverride` lets secondary callers (the LLM-as-judge factory) reuse the
+/// same key/base-URL handling with a different model id.
 public enum BenchModelClientFactory {
     public static let defaultBaseURL = "https://api.deepseek.com/v1"
     public static let defaultModel = "deepseek-chat"
 
     public static func make(
         dryRun: Bool,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        modelOverride: String? = nil
     ) throws -> (client: any ModelClient, info: BenchModelInfo) {
         if dryRun {
             let client = FakeModelClient(events: [
@@ -57,8 +61,13 @@ public enum BenchModelClientFactory {
         guard !key.isEmpty else { throw BenchError.missingAPIKey }
         let baseURLString = environment["DEEPSEEK_BASE_URL"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let model = environment["DEEPSEEK_MODEL"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let model: String?
+        if let modelOverride, !modelOverride.isEmpty {
+            model = modelOverride
+        } else {
+            model = environment["DEEPSEEK_MODEL"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         guard let baseURLString, !baseURLString.isEmpty, let baseURL = URL(string: baseURLString),
               baseURL.scheme == "https" || baseURL.scheme == "http" else {
             throw BenchError.invalidBaseURL

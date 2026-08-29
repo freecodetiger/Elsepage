@@ -1,3 +1,4 @@
+import AgentRuntime
 import Foundation
 import LibraryCore
 
@@ -13,6 +14,9 @@ public struct BenchRunReport: Codable, Sendable {
     public let sampleCount: Int
     public let samples: [BenchSampleRun]
     public let totals: BenchTotals
+    /// Present only when the run was started with `--judge` (BENCH-03).
+    /// Old reports without this field keep decoding (optional key).
+    public var judge: BenchJudgeRunSummary?
 }
 
 public struct BenchTotals: Codable, Sendable {
@@ -38,16 +42,24 @@ public struct BenchRunOptions: Sendable {
     public var outputURL: URL
     public var dryRun: Bool
     public var limit: Int?
+    /// BENCH-03: run the LLM-as-judge scoring pass after the pipeline.
+    public var judgeEnabled: Bool
+    /// BENCH-03: judge at most N samples (cheap smokes). Counts judge calls;
+    /// samples skipped for lack of a response do not consume the budget.
+    public var judgeLimit: Int?
     public var environment: [String: String]
 
     public init(
         samplesDirectory: URL, outputURL: URL, dryRun: Bool = false,
-        limit: Int? = nil, environment: [String: String] = ProcessInfo.processInfo.environment
+        limit: Int? = nil, judgeEnabled: Bool = false, judgeLimit: Int? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.samplesDirectory = samplesDirectory
         self.outputURL = outputURL
         self.dryRun = dryRun
         self.limit = limit
+        self.judgeEnabled = judgeEnabled
+        self.judgeLimit = judgeLimit
         self.environment = environment
     }
 }
@@ -61,7 +73,8 @@ public struct BenchRunSummary: Sendable {
 /// Loads samples, runs them sequentially through `BenchPipeline` with one model
 /// client, and writes:
 ///   1. a timestamped structured JSON run report (per-sample response, citations,
-///      evidence used, routing info, timings, usage), and
+///      evidence used, routing info, timings, usage — plus per-sample LLM-as-judge
+///      scores and aggregate dimension averages when `--judge` is on), and
 ///   2. a human scoring template (CSV) with the 11 PRD §16 dimensions as columns.
 public enum BenchRunner {
     public static func run(options: BenchRunOptions, now: Date = Date()) async throws -> BenchRunSummary {
@@ -71,6 +84,15 @@ public enum BenchRunner {
         }
 
         let (client, modelInfo) = try BenchModelClientFactory.make(dryRun: options.dryRun, environment: options.environment)
+        // Judge client is created up front so a missing key fails before any
+        // pipeline call is spent on a run that could not be scored.
+        var judgeClient: (any ModelClient)?
+        var judgeModelInfo: BenchModelInfo?
+        if options.judgeEnabled {
+            let judgeFactoryResult = try BenchJudgeModelFactory.make(dryRun: options.dryRun, environment: options.environment)
+            judgeClient = judgeFactoryResult.client
+            judgeModelInfo = judgeFactoryResult.info
+        }
         let pipeline = BenchPipeline()
 
         var runs: [BenchSampleRun] = []
@@ -81,8 +103,37 @@ public enum BenchRunner {
             runs.append(run)
         }
 
+        // --- LLM-as-judge pass (BENCH-03) ---
+        // A judge failure (call or parse) marks the sample's judge section as
+        // `.failed` and never aborts the run; skipped samples (no response)
+        // don't consume the --judge-limit budget.
+        if options.judgeEnabled, let judgeClient {
+            let judge = BenchJudge()
+            var judgeCalls = 0
+            for index in runs.indices {
+                if let judgeLimit = options.judgeLimit, judgeCalls >= judgeLimit { break }
+                guard runs[index].status == .completed, runs[index].response != nil else {
+                    runs[index].judge = .skipped(reason: "样本管线未产出回应,无可评分")
+                    continue
+                }
+                judgeCalls += 1
+                let input = BenchJudgeInput(sample: samples[index], run: runs[index])
+                runs[index].judge = await judge.run(input: input, client: judgeClient)
+            }
+        }
+
         let totalSeconds = runs.reduce(0.0) { $0 + $1.timings.totalSeconds }
-        let report = BenchRunReport(
+        let judgeSummary: BenchJudgeRunSummary?
+        if options.judgeEnabled, let judgeModelInfo {
+            judgeSummary = BenchJudgeRunSummary(
+                model: judgeModelInfo,
+                promptVersion: JudgePrompt.version,
+                aggregate: BenchJudgeAggregator.aggregate(runs: runs)
+            )
+        } else {
+            judgeSummary = nil
+        }
+        var report = BenchRunReport(
             runID: stableUUID("run:\(now.timeIntervalSince1970):\(samples.count)").description,
             startedAt: now,
             completedAt: Date(),
@@ -97,6 +148,7 @@ public enum BenchRunner {
                 totalSeconds: totalSeconds
             )
         )
+        report.judge = judgeSummary
 
         // Write the JSON report and the scoring CSV next to it.
         let output = options.outputURL
@@ -120,10 +172,13 @@ public enum BenchRunner {
 
     /// CSV: one row per sample; the 11 PRD dimensions are empty columns for the
     /// human scorer to fill (suggested scale 0–2, see docs/bench/README.md).
+    /// When the run was judged, the trailing `judge_status` / `judge_total_0_22`
+    /// columns carry the automated score for reference; the human columns stay
+    /// human.
     static func scoringTemplate(report: BenchRunReport) -> String {
         var header = ["sample_id", "category", "status"]
         header.append(contentsOf: BenchScoringDimensions.all)
-        header.append(contentsOf: ["overall_0_10", "notes"])
+        header.append(contentsOf: ["overall_0_10", "notes", "judge_status", "judge_total_0_22"])
 
         var lines = [header.map(Self.csvField).joined(separator: ",")]
         for sample in report.samples {
@@ -131,6 +186,17 @@ public enum BenchRunner {
             row.append(contentsOf: BenchScoringDimensions.all.map { _ in "" })
             row.append("")
             row.append("")
+            if let judge = sample.judge {
+                row.append(judge.status.rawValue)
+                if let total = judge.total {
+                    row.append(String(total))
+                } else {
+                    row.append("")
+                }
+            } else {
+                row.append("")
+                row.append("")
+            }
             lines.append(row.map(Self.csvField).joined(separator: ","))
         }
         // UTF-8 BOM so Chinese headers open correctly in Excel/Numbers.

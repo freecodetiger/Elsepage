@@ -1,0 +1,4 @@
+﻿sample_id,category,status,理解用户,理解书籍,知识准确,知识增量,连接质量,个性化,追问质量,克制,恭维控制,可追溯性,用户自主,overall_0_10,notes,judge_status,judge_total_0_22
+01-restatement-chaxu-geju,复述,completed,,,,,,,,,,,,,,ok,21
+02-opinion-hidden-premise,观点,completed,,,,,,,,,,,,,,ok,22
+03-emotion-tired,情绪,completed,,,,,,,,,,,,,,ok,19
