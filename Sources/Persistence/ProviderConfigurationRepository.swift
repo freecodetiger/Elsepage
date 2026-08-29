@@ -30,7 +30,6 @@ public final class GRDBProviderConfigurationRepository: ProviderConfigurationRep
 private struct ProviderConfigurationRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "providerConfigurations"
     let id, provider, baseURL, modelID, secretReference: String
-    let streamingEnabled: Bool
     let embeddingModelID: String?
     let embeddingBaseURL: String?
     let embeddingSecretReference: String?
@@ -44,7 +43,6 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
         baseURL = configuration.baseURL.absoluteString
         modelID = configuration.modelID
         secretReference = configuration.secretReference.rawValue
-        streamingEnabled = configuration.streamingEnabled
         embeddingModelID = configuration.embeddingModelID
         embeddingBaseURL = configuration.embeddingBaseURL?.absoluteString
         embeddingSecretReference = configuration.embeddingSecretReference?.rawValue
@@ -67,7 +65,6 @@ private struct ProviderConfigurationRecord: Codable, FetchableRecord, Persistabl
             baseURL: baseURL,
             modelID: modelID,
             secretReference: .init(rawValue: secretReference),
-            streamingEnabled: streamingEnabled,
             embeddingModelID: embeddingModelID,
             embeddingBaseURL: embeddingBaseURL.flatMap { URL(string: $0) },
             embeddingSecretReference: embeddingSecretReference.map { .init(rawValue: $0) },

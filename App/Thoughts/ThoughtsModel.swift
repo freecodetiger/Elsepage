@@ -22,6 +22,9 @@ final class ThoughtsModel {
     private let reflections: any ReflectionRepository
     private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     let achievements: AchievementModel?
+    /// FIX-01: counts user-initiated follow-ups in conversations opened from the
+    /// archive against the reflection's reading session.
+    let recordAgentDiscussion: AgentDiscussionRecorder?
 
     private(set) var entries: [ReflectionArchiveEntry] = []
     private(set) var journalEntries: [JournalEntry] = []
@@ -42,7 +45,8 @@ final class ThoughtsModel {
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
         memoryRepository: (any MemoryRepository)? = nil,
-        achievements: AchievementModel? = nil
+        achievements: AchievementModel? = nil,
+        recordAgentDiscussion: AgentDiscussionRecorder? = nil
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
         journalService = JournalEntryService(
@@ -55,6 +59,7 @@ final class ThoughtsModel {
         self.makePolishService = makePolishService
         self.traceRepository = traceRepository
         self.achievements = achievements
+        self.recordAgentDiscussion = recordAgentDiscussion
     }
 
     func reload() async {
@@ -94,8 +99,8 @@ final class ThoughtsModel {
             case .contextPrepared(let connection):
                 if let connection, let achievements,
                    let connected = try? await reflections.reflection(id: connection.sourceReflectionID) {
-                    await achievements.handle(.init(
-                        reflection: reflection,
+                    await achievements.handle(.reflection(
+                        reflection,
                         connectedSource: .init(reflection: connected, bookID: connected.bookID),
                         now: Date()
                     ))
@@ -112,7 +117,8 @@ final class ThoughtsModel {
             repository: reflections,
             readerAgent: readerAgent,
             makePolishService: makePolishService,
-            achievements: achievements
+            achievements: achievements,
+            recordAgentDiscussion: recordAgentDiscussion
         )
     }
 

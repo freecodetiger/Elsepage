@@ -20,6 +20,7 @@ struct MyMindView: View {
     @State private var showsClearAll = false
     @State private var showsSettings = false
     @State private var evidenceByMemory: [UUID: MemoryEvidence] = [:]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         model: MyMindModel,
@@ -40,11 +41,16 @@ struct MyMindView: View {
                     ProgressView("正在整理对你的理解…")
                 } else if model.allMemories.isEmpty {
                     emptyState
+                        .transition(.moment(reduceMotion))
                 } else {
                     content
+                        .transition(.moment(reduceMotion))
                 }
             }
             .background(Color.elsepageBackground)
+            // 思想沉淀 (PRD §10.3): the first memories forming (and the empty state
+            // handing over to them) land as a quiet cross-fade.
+            .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.allMemories.isEmpty)
             .navigationTitle("我的头脑")
             .navigationBarTitleDisplayMode(.large)
             .task { await model.reload() }
@@ -67,6 +73,7 @@ struct MyMindView: View {
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)
             }
+            .achievementToast(achievements)
             .alert("暂时无法完成操作", isPresented: errorBinding) {
                 Button("好") {}
             } message: {
@@ -99,6 +106,8 @@ struct MyMindView: View {
             }
             .padding(ElsepageTheme.Spacing.page)
         }
+        // Memory 更新 (PRD §10.3): confirmations/edits settle without a jump cut.
+        .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.allMemories.map(\.id))
         .refreshable { await model.reload() }
     }
 
@@ -250,6 +259,7 @@ struct MyMindView: View {
             withAnimation(.snappy(duration: 0.24)) { expandedMemoryID = nil }
         } else {
             withAnimation(.snappy(duration: 0.24)) { expandedMemoryID = memory.id }
+            Haptics.cardExpanded()
             if evidenceByMemory[memory.id] == nil {
                 Task { await loadEvidence(for: memory) }
             }

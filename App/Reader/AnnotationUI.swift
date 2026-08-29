@@ -356,12 +356,13 @@ struct TransientNoticePill: View {
         case .copied: "已复制"
         case .deletedHighlight: "已删除高亮"
         case .deletedNote: "已删除笔记"
+        case .returnedToSource: "已回到原文"
         }
     }
 
     private var canUndo: Bool {
         switch notice.kind {
-        case .copied: false
+        case .copied, .returnedToSource: false
         case .deletedHighlight, .deletedNote: true
         }
     }

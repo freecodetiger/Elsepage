@@ -97,6 +97,9 @@ final class LibraryModel {
             case .imported(let book):
                 await reload()
                 indexCoordinator.enqueue(book)
+                // 导入完成 (PRD §10.4) — only for a genuinely new book, never for
+                // the duplicate path.
+                Haptics.importCompleted()
                 return book
             case .duplicate(let book):
                 duplicateTitle = book.title

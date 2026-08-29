@@ -1,4 +1,5 @@
 import ReaderCore
+import ReflectionCore
 import SwiftUI
 
 struct ReaderScreen: View {
@@ -79,14 +80,14 @@ struct ReaderScreen: View {
         }
         .sheet(item: $model.contextReflection) { reflection in
             SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
-                if let locator = evidence.locator { model.jump(to: locator) }
+                jumpToCitation(evidence)
             }
         }
         .sheet(item: $reflectionPrompt, onDismiss: {
             if dismissAfterReflection { dismiss() }
         }) { reflection in
             SessionReflectionSheet(model: reflection, onSaved: { _ in onReflectionSaved() }) { evidence in
-                if let locator = evidence.locator { model.jump(to: locator) }
+                jumpToCitation(evidence)
             }
         }
         .alert("无法完成操作", isPresented: Binding(
@@ -193,9 +194,19 @@ struct ReaderScreen: View {
                 reflectionRepository: model.reflectionRepository,
                 readerAgent: model.readerAgent,
                 makePolishService: model.makePolishService,
-                achievements: model.achievements
+                achievements: model.achievements,
+                recordAgentDiscussion: model.agentDiscussionRecorder
             )
         }
+    }
+
+    /// 从 Agent Citation 跳回原文 (PRD §10.3): performs the jump and lands a
+    /// chrome-level pill so the arrival is acknowledged without ever animating
+    /// the EPUB content itself (P1).
+    private func jumpToCitation(_ evidence: AgentResponseEvidence) {
+        guard let locator = evidence.locator else { return }
+        model.jump(to: locator)
+        model.showNotice(.returnedToSource)
     }
 
     private var themeBackground: Color {

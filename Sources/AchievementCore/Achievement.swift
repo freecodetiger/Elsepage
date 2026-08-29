@@ -4,14 +4,11 @@ import ReflectionCore
 
 /// Deterministic, low-key achievement badges (PRD F13). They reward meaningful
 /// thinking behaviors and never influence the Agent's content judgment.
-///
-/// Questioner / Changed My Mind need content judgment (Agent structured output);
-/// they are deliberately not part of the first deterministic batch and can be
-/// added as new `AchievementID` cases plus an `AchievementEvent` extension once
-/// the ReaderAgentBench harness exists.
 public enum AchievementID: String, CaseIterable, Hashable, Codable, Sendable {
     case firstReflection
     case connector
+    case questioner
+    case changedMyMind
     case sevenDaysThinking
     case returnToAnIdea
 }
@@ -34,6 +31,8 @@ public extension Achievement {
     static let all: [Achievement] = [
         Achievement(id: .firstReflection, title: "第一次留下想法", systemImage: "quote.bubble", blurb: "完成第一次阅读反思"),
         Achievement(id: .connector, title: "连接两本书", systemImage: "link", blurb: "第一次把当前读到的东西和另一本书联系起来"),
+        Achievement(id: .questioner, title: "第一次质疑作者", systemImage: "questionmark.circle", blurb: "第一次明确质疑作者的说法"),
+        Achievement(id: .changedMyMind, title: "改变了想法", systemImage: "arrow.triangle.2.circlepath", blurb: "主动修改了自己先前的一个观点"),
         Achievement(id: .sevenDaysThinking, title: "连续思考七天", systemImage: "calendar", blurb: "连续 7 天完成有效反思"),
         Achievement(id: .returnToAnIdea, title: "回到一个旧想法", systemImage: "clock.arrow.circlepath", blurb: "重新讨论了 30 天前的想法"),
     ]
@@ -75,17 +74,40 @@ public struct ConnectedSource: Hashable, Sendable {
 }
 
 /// A behavior moment the achievement system reacts to. Emitted from the App layer
-/// at the exact places a reflection is saved or a cross-reflection connection is
-/// established — the ReaderAgent pipeline itself is untouched.
-public struct AchievementEvent: Sendable {
-    public let reflection: Reflection
-    public let connectedSource: ConnectedSource?
-    public let now: Date
+/// at the exact places a reflection is saved, a user message is sent, a
+/// cross-reflection connection is established, or the user revises a memory —
+/// the ReaderAgent pipeline itself is untouched.
+public enum AchievementEvent: Sendable {
+    /// A reflection moment: the user's output exists (and optionally connects to
+    /// a past reflection the Agent surfaced during this discussion).
+    case reflection(Reflection, connectedSource: ConnectedSource?, now: Date)
+    /// The user revised or retired a memory themselves (My Mind 修改 / 不准确).
+    /// Deterministic on the user action — never on Agent inference (FIX-03).
+    case userMemoryRevision(now: Date)
+}
 
-    public init(reflection: Reflection, connectedSource: ConnectedSource?, now: Date) {
-        self.reflection = reflection
-        self.connectedSource = connectedSource
-        self.now = now
+/// Conservative, documented trigger for the Questioner badge (PRD F13
+/// 「第一次明确质疑作者」). Deliberately a narrow keyword heuristic, not NLP:
+/// only explicit, hard-to-misread challenge markers count, and they are only ever
+/// matched against the user's own words (the Reflection text and the user's
+/// follow-up messages) — never against Agent output (F13: achievements do not
+/// judge content quality). Chinese-only because the product language is Chinese;
+/// false negatives are preferred over false positives by design.
+public enum QuestionerHeuristic {
+    /// Explicit disagreement/challenge markers.
+    static let markers: [String] = [
+        // Direct first-person disagreement.
+        "不认同", "不同意", "不敢苟同", "恰恰相反",
+        // Generic challenge.
+        "质疑",
+        // Author-directed objections.
+        "作者错了", "作者说错", "作者搞错", "作者忽略", "作者忽视",
+        "怀疑作者", "反驳作者",
+    ]
+
+    public static func expressesExplicitChallenge(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        return markers.contains { lowered.contains($0) }
     }
 }
 
@@ -118,7 +140,7 @@ public struct AchievementService: Sendable {
             if try await triggers(definition.id, event: event) {
                 let record = AchievementRecord(
                     id: definition.id,
-                    unlockedAt: event.now,
+                    unlockedAt: eventDate(event),
                     source: source(for: definition.id, event: event)
                 )
                 try await repository.insert(record)
@@ -131,26 +153,58 @@ public struct AchievementService: Sendable {
     private func triggers(_ id: AchievementID, event: AchievementEvent) async throws -> Bool {
         switch id {
         case .firstReflection:
+            guard case .reflection = event else { return false }
             return try await reflections.allReflections().count == 1
         case .sevenDaysThinking:
+            guard case .reflection = event else { return false }
             let dates = try await reflections.allReflections().map(\.createdAt)
-            return StreakCalculator.thinkingStreak(reflectionDates: dates, now: event.now, calendar: .current).days >= 7
+            return StreakCalculator.thinkingStreak(reflectionDates: dates, now: eventDate(event), calendar: .current).days >= 7
         case .connector:
-            guard let source = event.connectedSource else { return false }
-            return source.bookID != event.reflection.bookID
+            guard case .reflection(_, let connectedSource, _) = event, let connectedSource else { return false }
+            return connectedSource.bookID != eventReflection(event).bookID
         case .returnToAnIdea:
-            guard let source = event.connectedSource else { return false }
-            return event.now.timeIntervalSince(source.reflection.createdAt) >= Self.thirtyDays
+            guard case .reflection(_, let connectedSource, _) = event, let connectedSource else { return false }
+            return eventDate(event).timeIntervalSince(connectedSource.reflection.createdAt) >= Self.thirtyDays
+        case .questioner:
+            guard case .reflection(let reflection, _, _) = event else { return false }
+            // Only the user's own words qualify: the Reflection text (both the raw
+            // transcript and the kept version) plus the user's follow-up messages.
+            var texts = [reflection.originalText, reflection.displayText]
+            let messages = try await reflections.messages(for: reflection.id)
+            texts += messages.filter { $0.author == .user }.map(\.content)
+            return texts.contains { QuestionerHeuristic.expressesExplicitChallenge($0) }
+        case .changedMyMind:
+            // Exclusively the user's own revise/supersede action in My Mind.
+            guard case .userMemoryRevision = event else { return false }
+            return true
         }
     }
 
     private func source(for id: AchievementID, event: AchievementEvent) -> AchievementSource? {
         switch id {
-        case .firstReflection, .sevenDaysThinking:
-            return AchievementSource(reflectionID: event.reflection.id, bookID: event.reflection.bookID)
+        case .firstReflection, .sevenDaysThinking, .questioner:
+            let reflection = eventReflection(event)
+            return AchievementSource(reflectionID: reflection.id, bookID: reflection.bookID)
         case .connector, .returnToAnIdea:
-            guard let connected = event.connectedSource else { return nil }
-            return AchievementSource(reflectionID: connected.reflection.id, bookID: connected.bookID)
+            guard case .reflection(_, let connectedSource, _) = event, let connectedSource else { return nil }
+            return AchievementSource(reflectionID: connectedSource.reflection.id, bookID: connectedSource.bookID)
+        case .changedMyMind:
+            // A pure user action; no reflection needs to be attached.
+            return nil
+        }
+    }
+
+    private func eventReflection(_ event: AchievementEvent) -> Reflection {
+        guard case .reflection(let reflection, _, _) = event else {
+            preconditionFailure("Reflection event field accessed for a non-reflection event")
+        }
+        return reflection
+    }
+
+    private func eventDate(_ event: AchievementEvent) -> Date {
+        switch event {
+        case .reflection(_, _, let now): now
+        case .userMemoryRevision(let now): now
         }
     }
 

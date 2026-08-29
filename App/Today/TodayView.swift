@@ -84,6 +84,7 @@ struct TodayView: View {
     /// saving can be recorded as an explicit "今天先不了" for exactly that session.
     @State private var presentedReflectionSessionID: ReadingSessionID?
     @State private var didSaveReflectionInSheet = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let openBook: (Book) -> Void
     let openLibrary: () -> Void
     let achievements: AchievementModel?
@@ -108,6 +109,9 @@ struct TodayView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.elsepageBackground)
+            // 阅读完成 / Reflection 完成 state swaps land as a quiet cross-fade
+            // (PRD §10.3); instant under Reduce Motion.
+            .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.state)
             .navigationTitle("今天")
             .navigationBarTitleDisplayMode(.large)
             .task { await model.reload() }
@@ -136,6 +140,7 @@ struct TodayView: View {
         switch model.state {
         case .noCurrentBook:
             ContentUnavailableView("带一本书进来", systemImage: "books.vertical", description: Text("从书架导入 EPUB，今天就可以从一页开始。"))
+                .transition(.moment(reduceMotion))
         case .continueReading(let book):
             todayCard(book: book, title: "今天，读一点就好。", action: "继续阅读") { openBook(book) }
         case .offerReflection(let book, let session):
@@ -152,7 +157,11 @@ struct TodayView: View {
                     reflectionRepository: model.library.reflectionRepository,
                     readerAgent: model.library.readerAgent,
                     makePolishService: model.library.makePolishService,
-                    achievements: achievements
+                    achievements: achievements,
+                    recordAgentDiscussion: { sessionID in
+                        // 补写 reopen the same session's discussion thread (FIX-01).
+                        try? await model.library.sessionService.recordAgentDiscussion(id: sessionID)
+                    }
                 )
             }
         case .reflectionComplete(let book):
@@ -171,6 +180,7 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ElsepageTheme.Spacing.xLarge)
         .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
+        .transition(.moment(reduceMotion))
     }
 
     private var streaksView: some View {
@@ -178,6 +188,9 @@ struct TodayView: View {
             streakBadge(label: "连续阅读", days: model.readingStreak.days, emphasized: false)
             streakBadge(label: "连续思考", days: model.thinkingStreak.days, emphasized: true)
         }
+        // Streak 延续 (PRD §10.3): the day counter rolls over quietly.
+        .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.readingStreak.days)
+        .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.thinkingStreak.days)
     }
 
     private func streakBadge(label: String, days: Int, emphasized: Bool) -> some View {
@@ -185,6 +198,7 @@ struct TodayView: View {
             Image(systemName: emphasized ? "brain.head.profile" : "book")
             Text("\(label) \(days) 天")
                 .font(emphasized ? .subheadline.weight(.semibold) : .footnote)
+                .contentTransition(reduceMotion ? .identity : .numericText())
         }
         .foregroundStyle(emphasized ? Color.elsepageAccent : Color.secondary)
         .padding(.horizontal, emphasized ? ElsepageTheme.Spacing.medium : ElsepageTheme.Spacing.small)

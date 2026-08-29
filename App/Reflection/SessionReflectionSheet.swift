@@ -415,6 +415,11 @@ private struct ReflectionUIKitTextView: UIViewRepresentable {
     }
 }
 
+/// FIX-01 (PRD §21.5): counts one user-initiated agent discussion against the
+/// reflection's reading session. Backed by `ReadingSessionService` in the app
+/// graph; optional so previews and tests can omit it.
+typealias AgentDiscussionRecorder = @MainActor (ReadingSessionID) async -> Void
+
 /// Feature-scoped state for the local-first reflection prompt.
 /// Construction happens after the caller has ended a `ReadingSession`.
 @MainActor @Observable
@@ -436,6 +441,9 @@ final class SessionReflectionModel: Identifiable {
     private let readerAgent: ReaderAgent
     private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     let achievements: AchievementModel?
+    /// Persisted against the session the moment the user's submission opens the
+    /// Agent conversation (FIX-01).
+    let recordAgentDiscussion: AgentDiscussionRecorder?
     /// Built lazily by `refreshPolish()` whenever the sheet appears, so a provider
     /// configured after launch is picked up on the next reflection sheet.
     private(set) var polishService: TranscriptPolishService?
@@ -469,7 +477,8 @@ final class SessionReflectionModel: Identifiable {
         reflectionRepository: any ReflectionRepository,
         readerAgent: ReaderAgent,
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
-        achievements: AchievementModel? = nil
+        achievements: AchievementModel? = nil,
+        recordAgentDiscussion: AgentDiscussionRecorder? = nil
     ) {
         self.book = book
         self.summary = summary
@@ -479,6 +488,7 @@ final class SessionReflectionModel: Identifiable {
         self.readerAgent = readerAgent
         self.makePolishService = makePolishService
         self.achievements = achievements
+        self.recordAgentDiscussion = recordAgentDiscussion
         submission = TextReflectionSubmissionService(repository: reflectionRepository)
         voiceSubmission = VoiceReflectionSubmissionService(repository: reflectionRepository)
     }
@@ -578,11 +588,17 @@ final class SessionReflectionModel: Identifiable {
                 repository: reflectionRepository,
                 readerAgent: readerAgent,
                 makePolishService: makePolishService,
-                achievements: achievements
+                achievements: achievements,
+                recordAgentDiscussion: recordAgentDiscussion
             )
             state = .saved
+            // Reflection 完成 (PRD §10.4): the output is durable, celebrate quietly.
+            Haptics.reflectionSaved()
+            // The submission opens the Agent conversation: one user-initiated
+            // discussion (FIX-01). Local-first — the save above is already durable.
+            await recordAgentDiscussion?(summary.session.id)
             if let achievements {
-                await achievements.handle(.init(reflection: reflection, connectedSource: nil, now: Date()))
+                await achievements.handle(.reflection(reflection, connectedSource: nil, now: Date()))
             }
             return reflection
         } catch is CancellationError {
@@ -618,6 +634,8 @@ final class ReflectionConversationModel: Identifiable {
     private let achievements: AchievementModel?
     private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     private var polishService: TranscriptPolishService?
+    /// Persisted each time the user sends a follow-up (FIX-01).
+    let recordAgentDiscussion: AgentDiscussionRecorder?
 
     private(set) var messages: [ReflectionMessage] = []
     private(set) var responseProvenance: [UUID: AgentResponseProvenance] = [:]
@@ -642,7 +660,8 @@ final class ReflectionConversationModel: Identifiable {
         repository: any ReflectionRepository,
         readerAgent: ReaderAgent,
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
-        achievements: AchievementModel? = nil
+        achievements: AchievementModel? = nil,
+        recordAgentDiscussion: AgentDiscussionRecorder? = nil
     ) {
         id = reflection.id
         self.reflection = reflection
@@ -650,6 +669,7 @@ final class ReflectionConversationModel: Identifiable {
         self.readerAgent = readerAgent
         self.makePolishService = makePolishService
         self.achievements = achievements
+        self.recordAgentDiscussion = recordAgentDiscussion
     }
 
     var latestUserMessageID: UUID? {
@@ -716,6 +736,14 @@ final class ReflectionConversationModel: Identifiable {
         await consume(readerAgent.continueDiscussion(on: reflection.id, messageID: id, text: text))
         if messages.contains(where: { $0.id == id }) {
             pendingUserMessage = nil
+            // The follow-up persisted: one user-initiated discussion (FIX-01), and
+            // the user's own words are now in the thread (Questioner signal).
+            if let sessionID = reflection.sessionID {
+                await recordAgentDiscussion?(sessionID)
+            }
+            if let achievements {
+                await achievements.handle(.reflection(reflection, connectedSource: nil, now: Date()))
+            }
         } else if pendingUserMessage?.id == id {
             pendingUserMessage?.deliveryState = .failed
         }
@@ -759,8 +787,8 @@ final class ReflectionConversationModel: Identifiable {
                 if let connection {
                     connectedReflection = try? await repository.reflection(id: connection.sourceReflectionID)
                     if let connectedReflection, let achievements {
-                        await achievements.handle(.init(
-                            reflection: reflection,
+                        await achievements.handle(.reflection(
+                            reflection,
                             connectedSource: .init(reflection: connectedReflection, bookID: connectedReflection.bookID),
                             now: Date()
                         ))
@@ -833,6 +861,7 @@ final class ReflectionConversationModel: Identifiable {
 
 struct SessionReflectionSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var model: SessionReflectionModel
     let onSaved: @MainActor (Reflection) -> Void
     var openCitation: ((AgentResponseEvidence) -> Void)?
@@ -867,6 +896,7 @@ struct SessionReflectionSheet: View {
                     .padding(.horizontal, ElsepageTheme.Spacing.page)
                     .padding(.vertical, ElsepageTheme.Spacing.medium)
                     .background(Color.elsepageBackground)
+                    .transition(.moment(reduceMotion))
                 } else if let conversation = model.conversation {
                     ReflectionConversationView(
                         model: conversation,
@@ -874,8 +904,12 @@ struct SessionReflectionSheet: View {
                         openCitation: openCitation,
                         onConversationDeleted: { dismiss() }
                     )
+                    .transition(.moment(reduceMotion))
                 }
             }
+            // Reflection 完成 (PRD §10.3): the editor hands over to the saved
+            // conversation with a quiet cross-fade.
+            .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.reflection?.id)
             .navigationTitle("留下些什么")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1336,7 +1370,7 @@ private struct ReflectionComposer: View {
 
     private var sendButton: some View {
         Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Haptics.followUpSent()
             Task { await model.send() }
         } label: {
             Image(systemName: "arrow.up")

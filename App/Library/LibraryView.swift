@@ -127,16 +127,21 @@ struct LibraryView: View {
                 columnSpacing: ElsepageTheme.Spacing.medium
             )
 
-            ScrollView {
-                // Fixed columns prevent SwiftUI from using a cover's ideal width
-                // during grid measurement. Every cell gets the same finite width.
-                LazyVGrid(
-                    columns: Array(
-                        repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
-                        count: LibraryGridLayout.columnCount
-                    ),
-                    spacing: ElsepageTheme.Spacing.xLarge
-                ) {
+            if model.visibleBooks.isEmpty {
+                // 书架搜索无结果：明确但不责备。
+                ContentUnavailableView.search(text: model.searchQuery)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    // Fixed columns prevent SwiftUI from using a cover's ideal width
+                    // during grid measurement. Every cell gets the same finite width.
+                    LazyVGrid(
+                        columns: Array(
+                            repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
+                            count: LibraryGridLayout.columnCount
+                        ),
+                        spacing: ElsepageTheme.Spacing.xLarge
+                    ) {
                 ForEach(model.visibleBooks) { book in
                     Button { selectedBook = book } label: {
                         VStack(alignment: .leading, spacing: 10) {
@@ -199,6 +204,7 @@ struct LibraryView: View {
                 }
                 }
                 .padding(ElsepageTheme.Spacing.page)
+                }
             }
         }
     }

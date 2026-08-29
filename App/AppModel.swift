@@ -176,12 +176,16 @@ final class AppModel {
                 makePolishService: makePolishService,
                 traceRepository: routingTraces,
                 memoryRepository: memories,
-                achievements: achievements
+                achievements: achievements,
+                recordAgentDiscussion: { [library] sessionID in
+                    try? await library?.sessionService.recordAgentDiscussion(id: sessionID)
+                }
             )
             myMind = MyMindModel(
                 memories: memories,
                 reflections: reflections,
-                books: books
+                books: books,
+                achievements: achievements
             )
             self.achievements = achievements
             await settings?.loadAll()

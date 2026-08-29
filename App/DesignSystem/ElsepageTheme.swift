@@ -38,6 +38,22 @@ enum ElsepageTheme {
 
     enum Motion {
         static let quick = Animation.easeInOut(duration: 0.18)
+
+        /// One-off key-moment animation (PRD §10.3: 阅读完成 / Reflection 完成 /
+        /// 思想沉淀 / Memory 更新 / Streak 延续 / Achievement / 引用回跳). Always
+        /// brief and quiet; under Reduce Motion it is suppressed entirely
+        /// (nil = no animation). Reading content itself never animates (P1).
+        static func moment(_ reduceMotion: Bool) -> Animation? {
+            reduceMotion ? nil : .snappy(duration: 0.3)
+        }
+    }
+}
+
+extension AnyTransition {
+    /// The matching quiet transition for `ElsepageTheme.Motion.moment`; under
+    /// Reduce Motion the swap is instant.
+    static func moment(_ reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .identity : .opacity
     }
 }
 

@@ -15,8 +15,7 @@ import Testing
         provider: .openAICompatible,
         baseURL: URL(string: "https://api.example.com/v1")!,
         modelID: "example-chat",
-        secretReference: reference,
-        streamingEnabled: false
+        secretReference: reference
     )
 
     try await repository.save(configuration)
@@ -29,8 +28,10 @@ import Testing
     #expect(columns.sorted() == [
         "baseURL", "embeddingBaseURL", "embeddingModelID", "embeddingSecretReference",
         "id", "modelID", "provider", "rerankerBaseURL", "rerankerModelID",
-        "rerankerSecretReference", "secretReference", "streamingEnabled"
+        "rerankerSecretReference", "secretReference"
     ])
+    // The fake streaming toggle is fully removed (PRD §21.3 / FIX-02).
+    #expect(!columns.contains("streamingEnabled"))
     #expect(!columns.contains("apiKey"))
 
     try await repository.deleteCurrentConfiguration()
@@ -60,8 +61,37 @@ import Testing
         "v7_local_book_retrieval", "v8_agent_citations", "v9_routing_trace", "v10_journal",
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
         "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference",
-        "v19_journal_user_edited_thoughts"
+        "v19_journal_user_edited_thoughts", "v20_drop_streaming_flag"
     ])
+}
+
+@Test func migratesV19DatabaseToV20DroppingStreamingFlagWithoutLosingConfiguration() async throws {
+    // A v19 database still carries the streamingEnabled column. v20 must drop the
+    // column cleanly while keeping the saved provider row (and its role fields)
+    // usable — the configuration round-trips without a streaming flag at all.
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v19_journal_user_edited_thoughts")
+
+    let reference = SecretReference(rawValue: "legacy-streaming-key")
+    try await queue.write { db in
+        try db.execute(
+            sql: "INSERT INTO providerConfigurations (id, provider, baseURL, modelID, secretReference, streamingEnabled, embeddingModelID) VALUES (?,?,?,?,?,?,?)",
+            arguments: ["00000000-0000-0000-0000-000000000010", "openAICompatible", "https://api.example.com/v1", "legacy-chat", reference.rawValue, 1, "BAAI/bge-m3"]
+        )
+    }
+
+    try AppDatabase.migrator.migrate(queue)
+    let database = try AppDatabase(writer: queue)
+    let columns = try await database.writer.read { db in
+        try Row.fetchAll(db, sql: "PRAGMA table_info(providerConfigurations)")
+            .map { row in String.fromDatabaseValue(row["name"])! }
+    }
+    #expect(!columns.contains("streamingEnabled"))
+
+    let config = try await GRDBProviderConfigurationRepository(database: database).currentConfiguration()
+    #expect(config?.modelID == "legacy-chat")
+    #expect(config?.embeddingModelID == "BAAI/bge-m3")
 }
 
 @Test func ragRoleEndpointsAndKeysPersistAndFallBackToChat() async throws {

@@ -50,6 +50,16 @@ public final class GRDBReadingSessionRepository: ReadingSessionRepository, @unch
     public func delete(id: ReadingSessionID) async throws {
         _ = try await db.writer.write { db in try SessionRecord.deleteOne(db, key: id.description) }
     }
+
+    public func incrementAgentDiscussionCount(id: ReadingSessionID, by count: Int) async throws {
+        try await db.writer.write { db in
+            guard count != 0 else { return }
+            try db.execute(
+                sql: "UPDATE readingSessions SET agentDiscussionCount = agentDiscussionCount + ? WHERE id = ?",
+                arguments: [max(0, count), id.description]
+            )
+        }
+    }
 }
 
 public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Sendable {

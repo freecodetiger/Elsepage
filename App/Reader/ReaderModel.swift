@@ -45,6 +45,9 @@ struct ReaderTransientNotice: Equatable, Identifiable {
         case copied
         case deletedHighlight(Highlight, notes: [Note])
         case deletedNote(Note)
+        /// 从 Agent Citation 跳回原文 (PRD §10.3) — chrome-level acknowledgment
+        /// only; the EPUB content itself never animates (P1).
+        case returnedToSource
     }
 
     let id = UUID()
@@ -392,7 +395,7 @@ final class ReaderModel {
 
     func undoNotice() {        guard let notice = transientNotice else { return }
         switch notice.kind {
-        case .copied:
+        case .copied, .returnedToSource:
             clearNotice()
         case .deletedHighlight(let highlight, let removedNotes):
             clearNotice()
@@ -650,6 +653,15 @@ final class ReaderModel {
         }
     }
 
+    /// FIX-01: hook that counts one user-initiated agent discussion (reflection
+    /// submission or follow-up send) against the reading session.
+    var agentDiscussionRecorder: AgentDiscussionRecorder? {
+        let sessions = sessions
+        return { sessionID in
+            try? await sessions.recordAgentDiscussion(id: sessionID)
+        }
+    }
+
     func reflect(on locator: BookLocator) async {
         do {
             let session: ReadingSession
@@ -667,7 +679,8 @@ final class ReaderModel {
                 reflectionRepository: reflectionRepository,
                 readerAgent: readerAgent,
                 makePolishService: makePolishService,
-                achievements: achievements
+                achievements: achievements,
+                recordAgentDiscussion: agentDiscussionRecorder
             )
         } catch is CancellationError {
             return
@@ -737,13 +750,13 @@ extension Note {
 }
 
 /// Restrained haptics for annotation moments only (PRD 10.4); page turns and
-/// ordinary reading never vibrate.
-enum AnnotationHaptics {
+/// ordinary reading never vibrate. The vocabulary itself lives in Haptics.
+private enum AnnotationHaptics {
     static func highlightCreated() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptics.highlightCreated()
     }
 
     static func annotationDeleted() {
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        Haptics.annotationDeleted()
     }
 }

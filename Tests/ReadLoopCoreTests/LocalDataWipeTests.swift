@@ -85,7 +85,6 @@ private func seedFullUserData(database: AppDatabase) async throws {
         baseURL: URL(string: "https://api.example.com/v1")!,
         modelID: "example-chat",
         secretReference: SecretReference(rawValue: "wipe-provider-key"),
-        streamingEnabled: false
     ))
 }
 

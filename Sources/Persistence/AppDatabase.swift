@@ -430,6 +430,16 @@ public final class AppDatabase: @unchecked Sendable {
             }
             try db.execute(sql: "UPDATE journalThoughts SET agentOriginalText = thought")
         }
+
+        // FIX-02 (PRD §21.3): the streaming toggle is gone. The request path always
+        // sends `stream: false`, so the persisted flag only promised what never
+        // existed. The column is dropped cleanly; no table (and thus no wipe-order
+        // entry) is affected.
+        migrator.registerMigration("v20_drop_streaming_flag") { db in
+            try db.alter(table: "providerConfigurations") { t in
+                t.drop(column: "streamingEnabled")
+            }
+        }
         return migrator
     }
 

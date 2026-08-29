@@ -83,13 +83,14 @@ public struct SecretReference: Hashable, Codable, Sendable, RawRepresentable, Cu
 }
 
 /// This is safe to persist in SQLite. The API key itself is intentionally absent.
+/// Note: the former `streamingEnabled` debug flag is gone (PRD §21.3) — requests
+/// are always non-streaming, so there is nothing to configure.
 public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
     public let provider: ModelProviderKind
     public let baseURL: URL
     public let modelID: String
     public let secretReference: SecretReference
-    public let streamingEnabled: Bool
     /// Separate embedding model for the semantic retrieval layer. Nil means the
     /// RAG stays lexical-only. Non-nil enables the `/embeddings` path.
     public let embeddingModelID: String?
@@ -115,7 +116,7 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
     public init(
         id: UUID = UUID(), provider: ModelProviderKind, baseURL: URL,
         modelID: String, secretReference: SecretReference,
-        streamingEnabled: Bool = true, embeddingModelID: String? = nil,
+        embeddingModelID: String? = nil,
         embeddingBaseURL: URL? = nil, embeddingSecretReference: SecretReference? = nil,
         rerankerModelID: String? = nil,
         rerankerBaseURL: URL? = nil, rerankerSecretReference: SecretReference? = nil
@@ -125,7 +126,6 @@ public struct ProviderConfiguration: Hashable, Codable, Sendable, Identifiable {
         self.baseURL = baseURL
         self.modelID = modelID
         self.secretReference = secretReference
-        self.streamingEnabled = streamingEnabled
         self.embeddingModelID = embeddingModelID
         self.embeddingBaseURL = embeddingBaseURL
         self.embeddingSecretReference = embeddingSecretReference

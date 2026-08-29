@@ -101,7 +101,6 @@ private func makeConfiguration(embeddingModel: String?) -> ProviderConfiguration
         baseURL: URL(string: "https://api.example.com/v1")!,
         modelID: "chat-model",
         secretReference: .init(rawValue: "ref"),
-        streamingEnabled: false,
         embeddingModelID: embeddingModel
     )
 }
