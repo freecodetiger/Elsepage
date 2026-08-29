@@ -46,139 +46,166 @@ struct MyMindView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if model.isLoading && isEmpty {
-                    ProgressView("正在整理对你的理解…")
-                } else if isEmpty {
-                    emptyState
-                        .transition(.moment(reduceMotion))
-                } else {
-                    content
-                        .transition(.moment(reduceMotion))
-                }
-            }
-            .background(Color.elsepageBackground)
-            // 思想沉淀 (PRD §10.3): the first memories forming (and the empty state
-            // handing over to them) land as a quiet cross-fade.
-            .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.allMemories.isEmpty)
-            .navigationTitle("我的头脑")
-            .navigationBarTitleDisplayMode(.large)
-            .task { await model.reload() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showsSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("设置")
-                }
-                if !model.allMemories.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(role: .destructive) { showsClearAll = true } label: {
-                            Image(systemName: "trash")
-                        }
-                        .accessibilityLabel("清除全部记忆")
-                    }
-                }
-            }
-            .sheet(isPresented: $showsSettings) {
-                SettingsView(model: settings)
-            }
-            .achievementToast(achievements)
-            .alert("暂时无法完成操作", isPresented: errorBinding) {
-                Button("好") {}
-            } message: {
-                Text(model.errorMessage ?? "")
-            }
-            .alert("修改这条记忆", isPresented: editingBinding) {
-                TextField("新的说法", text: $editText)
-                Button("取消", role: .cancel) {}
-                Button("保存") {
-                    let claim = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard let memory = editingMemory, !claim.isEmpty else { return }
-                    Task { await model.edit(memory, newClaim: claim) }
-                }
-            }
-            .sheet(isPresented: editingThoughtBinding) {
-                if let thought = editingThought {
-                    BrainItemEditorSheet(
-                        title: "修改这个想法",
-                        textTitle: "想法",
-                        initialText: thought.statement,
-                        secondaryTitle: "标题",
-                        initialSecondaryText: thought.title,
-                        stages: ThoughtStage.allCases,
-                        selectedStage: thought.stage,
-                        stageLabel: { brainStageLabel($0) },
-                        onSave: { title, statement, stage in
-                            Task { await model.editThought(thought, title: title, statement: statement, stage: stage) }
-                        }
-                    )
-                }
-            }
-            .sheet(isPresented: editingQuestionBinding) {
-                if let question = editingQuestion {
-                    BrainItemEditorSheet(
-                        title: "修改这个问题",
-                        textTitle: "问题",
-                        initialText: question.question,
-                        secondaryTitle: nil,
-                        initialSecondaryText: nil,
-                        stages: QuestionState.allCases,
-                        selectedStage: question.state,
-                        stageLabel: { brainStateLabel($0) },
-                        onSave: { _, text, state in
-                            Task { await model.editQuestion(question, text: text, state: state) }
-                        }
-                    )
-                }
-            }
-            .confirmationDialog("清除全部记忆？", isPresented: $showsClearAll, titleVisibility: .visible) {
-                Button("清除全部记忆", role: .destructive) { Task { await model.deleteAll() } }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("这会删除 Agent 记住的每一条内容，且无法撤销。")
+            stateView
+                .background(Color.elsepageBackground)
+                // 思想沉淀 (PRD §10.3): the first memories forming (and the empty state
+                // handing over to them) land as a quiet cross-fade.
+                .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.allMemories.isEmpty)
+                .navigationTitle("我的头脑")
+                .navigationBarTitleDisplayMode(.large)
+                .task { await model.reload() }
+                .toolbar { toolbarContent }
+        }
+        .sheet(isPresented: $showsSettings) {
+            SettingsView(model: settings)
+        }
+        .achievementToast(achievements)
+        .alert("暂时无法完成操作", isPresented: errorBinding) {
+            Button("好") {}
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
+        .alert("修改这条记忆", isPresented: editingBinding) {
+            TextField("新的说法", text: $editText)
+            Button("取消", role: .cancel) {}
+            Button("保存") { commitMemoryEdit() }
+        }
+        .sheet(isPresented: editingThoughtBinding) { thoughtEditor }
+        .sheet(isPresented: editingQuestionBinding) { questionEditor }
+        .confirmationDialog("清除全部记忆？", isPresented: $showsClearAll, titleVisibility: .visible) {
+            Button("清除全部记忆", role: .destructive) { Task { await model.deleteAll() } }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会删除 Agent 记住的每一条内容，且无法撤销。")
+        }
+    }
+
+    /// The body expression is deliberately split into small sub-expressions —
+    /// the single-expression form outgrew the type-checker budget.
+    private var stateView: some View {
+        Group {
+            if model.isLoading && isEmpty {
+                ProgressView("正在整理对你的理解…")
+            } else if isEmpty {
+                emptyState
+                    .transition(.moment(reduceMotion))
+            } else {
+                content
+                    .transition(.moment(reduceMotion))
             }
         }
     }
 
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showsSettings = true } label: {
+                Image(systemName: "gearshape")
+            }
+            .accessibilityLabel("设置")
+        }
+        if !model.allMemories.isEmpty {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) { showsClearAll = true } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel("清除全部记忆")
+            }
+        }
+    }
+
+    private var thoughtEditor: some View {
+        Group {
+            if let thought = editingThought {
+                BrainItemEditorSheet(
+                    title: "修改这个想法",
+                    textTitle: "想法",
+                    initialText: thought.statement,
+                    secondaryTitle: "标题",
+                    initialSecondaryText: thought.title,
+                    stages: ThoughtStage.allCases,
+                    selectedStage: thought.stage,
+                    stageLabel: { brainStageLabel($0) },
+                    onSave: { title, statement, stage in
+                        Task { await model.editThought(thought, title: title, statement: statement, stage: stage) }
+                    }
+                )
+            }
+        }
+    }
+
+    private var questionEditor: some View {
+        Group {
+            if let question = editingQuestion {
+                BrainItemEditorSheet(
+                    title: "修改这个问题",
+                    textTitle: "问题",
+                    initialText: question.question,
+                    secondaryTitle: nil,
+                    initialSecondaryText: nil,
+                    stages: QuestionState.allCases,
+                    selectedStage: question.state,
+                    stageLabel: { brainStateLabel($0) },
+                    onSave: { _, text, state in
+                        Task { await model.editQuestion(question, text: text, state: state) }
+                    }
+                )
+            }
+        }
+    }
+
+    private func commitMemoryEdit() {
+        let claim = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let memory = editingMemory, !claim.isEmpty else { return }
+        Task { await model.edit(memory, newClaim: claim) }
+    }
+
     private var content: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-                achievementsSection
-                thoughtsSection
-                questionsSection
-                profileSection
-                memoriesSection
-            }
-            .padding(ElsepageTheme.Spacing.page)
+            sectionsList
         }
-        .navigationDestination(item: $selectedThought) { thought in
-            BrainThoughtDetailView(
-                thought: thought,
-                onEdit: { editingThought = thought },
-                onDelete: {
-                    Task {
-                        await model.deleteThought(thought)
-                        selectedThought = nil
-                    }
-                }
-            )
-        }
-        .navigationDestination(item: $selectedQuestion) { question in
-            BrainQuestionDetailView(
-                question: question,
-                onEdit: { editingQuestion = question },
-                onDelete: {
-                    Task {
-                        await model.deleteQuestion(question)
-                        selectedQuestion = nil
-                    }
-                }
-            )
-        }
+        .navigationDestination(item: $selectedThought) { brainThoughtDestination($0) }
+        .navigationDestination(item: $selectedQuestion) { brainQuestionDestination($0) }
         // Memory 更新 (PRD §10.3): confirmations/edits settle without a jump cut.
         .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.allMemories.map(\.id))
         .refreshable { await model.reload() }
+    }
+
+    private var sectionsList: some View {
+        LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
+            achievementsSection
+            thoughtsSection
+            questionsSection
+            profileSection
+            memoriesSection
+        }
+        .padding(ElsepageTheme.Spacing.page)
+    }
+
+    private func brainThoughtDestination(_ thought: Thought) -> some View {
+        BrainThoughtDetailView(
+            thought: thought,
+            onEdit: { editingThought = thought },
+            onDelete: {
+                Task {
+                    await model.deleteThought(thought)
+                    selectedThought = nil
+                }
+            }
+        )
+    }
+
+    private func brainQuestionDestination(_ question: Question) -> some View {
+        BrainQuestionDetailView(
+            question: question,
+            onEdit: { editingQuestion = question },
+            onDelete: {
+                Task {
+                    await model.deleteQuestion(question)
+                    selectedQuestion = nil
+                }
+            }
+        )
     }
 
     // MARK: - Thoughts / Questions (brain.md §14)
