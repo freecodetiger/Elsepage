@@ -22,7 +22,7 @@ Brain Item 获得来源与关系:brainItemEvidence(item ↔ 外部证据)、brai
 - **不设代理主键**:evidence 身份 = (item, source, relation),关系身份 = (source, target, relation) —— attach 天然幂等,重复关联不产生重复行。
 
 ### 仓储(锁定)
-- 扩展 `BrainRepository`(唯一实现方是 GRDBBrainRepository,无兼容负担):`evidence(for:)` / `attachEvidence(itemID:source:relation:weight:)` / `relations(of:)`(双向归一为 source→target)/ `relate(source:target:relation:weight:)`。
+- 扩展 `BrainRepository`(唯一实现方是 GRDBBrainRepository,无兼容负担):`evidence(for:)` / `attachEvidence(itemID:source:relation:weight:)` / `relate(source:target:relation:weight:)` / `relations(of:)`(返回存储的规范方向——relate 写入谁 addresses 谁就是谁,查询另一端不翻转,保语义)。
 
 ### 持久化(锁定 + 有据决策)
 - v22 迁移建 `brainItemEvidence`(brainItemID FK→brainItems ON DELETE CASCADE;UNIQUE(brainItemID, sourceType, sourceID, relation);CHECK relation/sourceType 枚举)与 `brainItemRelations`(双 FK CASCADE;PK=(source,target,relation);CHECK source≠target;双向索引)。

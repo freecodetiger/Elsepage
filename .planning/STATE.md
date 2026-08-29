@@ -66,15 +66,15 @@ v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单�
 ## Session Continuity
 
 Last session: 2026-08-29
-Stopped at: v1.1 Personal Brain — Phase 12/13 完成(Domain+Persistence、三分区 UI);下一阶段 Phase 14/15 可并行;App 层 xcodebuild 编译验证待用户
-Resume file: .planning/phases/13-brain-ui/13-SUMMARY.md
+Stopped at: v1.1 Personal Brain — Phase 12/13/14 完成(Domain+Persistence、三分区 UI、Evidence/Relation);下一阶段 Phase 15(持久化 embedding + BrainRetriever);App 层 xcodebuild 编译验证待用户(Phase 13+14 累计)
+Resume file: .planning/phases/14-brain-evidence/14-SUMMARY.md
 
 ### v1.1 Brain 里程碑进度
 
 - [x] Phase 12: Brain Domain + Persistence(BrainCore 模块 / brainItems v21 迁移 / memories 回填 / 6 测试)
 - [x] Phase 13: Brain UI(三分区 + 详情/编辑 + Memory 来源性质;App xcodebuild 编译验证待用户)
-- [ ] Phase 14: Evidence / Relation(brainItemEvidence + brainItemRelations)
-- [ ] Phase 15: Persistent Embedding + BrainRetriever
+- [x] Phase 14: Evidence / Relation(brainItemEvidence/Relations + Reflection 删除清理 + 详情页来源区块)
+- [ ] Phase 15: Persistent Embedding + BrainRetriever(下一步)
 - [ ] Phase 16: Agent Bridge(BrainContextProvider → ContextCandidate → ContextAssembler)
 - [ ] Phase 17: BrainProjectionService(LLM 提议,代码执行;attach > update > create)
 - [ ] Phase 18: Revision / Evolution(brainItemRevisions 演化时间线)
