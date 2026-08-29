@@ -19,6 +19,8 @@ let package = Package(
         .library(name: "ModelProviders", targets: ["ModelProviders"]),
         .library(name: "Persistence", targets: ["Persistence"]),
         .library(name: "AppInfrastructure", targets: ["AppInfrastructure"]),
+        .library(name: "BenchCore", targets: ["BenchCore"]),
+        .executable(name: "readloop-bench", targets: ["readloop-bench"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
@@ -44,6 +46,14 @@ let package = Package(
             ]
         ),
         .target(name: "AppInfrastructure", dependencies: ["LibraryCore", "ReaderCore"]),
+        .target(
+            name: "BenchCore",
+            dependencies: [
+                "AgentRuntime", "ContextEngineering", "ContextRouting", "LibraryCore",
+                "ModelProviders", "ReaderAgent", "ReaderCore", "ReflectionCore", "RetrievalCore",
+            ]
+        ),
+        .executableTarget(name: "readloop-bench", dependencies: ["BenchCore"]),
         .testTarget(
             name: "ReadLoopCoreTests",
             dependencies: [
@@ -60,6 +70,10 @@ let package = Package(
         .testTarget(
             name: "AgentRuntimeTests",
             dependencies: ["AgentRuntime"]
+        ),
+        .testTarget(
+            name: "BenchCoreTests",
+            dependencies: ["BenchCore", "AgentRuntime", "ReaderAgent", "ContextEngineering", "ContextRouting", "ReflectionCore"]
         ),
     ]
 )

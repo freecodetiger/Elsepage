@@ -1,0 +1,36 @@
+{
+  "id": "06-counter-example-rumor-transparency",
+  "category": "反例",
+  "book": {
+    "title": "谎言与错觉",
+    "author": "（示意书目）",
+    "chapter": "重复如何变成真相",
+    "excerpt": "（评分者背景：本章综述「重复引发真实感」（illusory truth）研究。书名为示意占位，段落为仿写。）"
+  },
+  "currentLocator": {
+    "href": "chapter04.xhtml",
+    "progression": 0.33,
+    "textBefore": "辟谣平台把同一句谣言和反驳反复推送给用户；",
+    "textHighlight": "但心理学实验一再发现：仅仅重复一个说法，就会让它显得更可信——哪怕听者本来知道它是错的，重复接触也会慢慢磨损那份确信。",
+    "textAfter": "信息流通得越快，重复发生得越多；这意味着透明度并不天然站在真话这一边。"
+  },
+  "userHistory": {
+    "pastReflections": [],
+    "memoryClaims": []
+  },
+  "currentReflection": "看到社交平台上的辟谣机制，我越来越相信：只要事实足够透明、信息足够流通，谣言自己就活不下去。",
+  "retrievalEvidence": [
+    {
+      "chapterTitle": "重复如何变成真相",
+      "sectionTitle": "重复效应",
+      "text": "在一组实验中，同一句虚假陈述被重复呈现三次后，受试者对它的可信度评分显著上升；反驳贴文本身也被重复，于是同样获得了「熟悉感红利」。",
+      "href": "chapter04.xhtml"
+    }
+  ],
+  "expectedFeedbackNotes": [
+    "知识增量：证据里有一个直接反例——重复提升可信度，而信息越流通重复越多；好回应应该把这个反例摆到他面前并句末加 [E1]",
+    "理解用户：先承认他对透明度的合理直觉，再指出反例，不要一上来否定",
+    "用户自主：摆出反例后停止，不要替他把结论改写成「所以透明没用」",
+    "知识准确：只用证据中的实验事实，不要外推成普适定律；不引入证据之外的传播学理论"
+  ]
+}

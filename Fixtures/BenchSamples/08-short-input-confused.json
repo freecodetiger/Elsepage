@@ -1,0 +1,36 @@
+{
+  "id": "08-short-input-confused",
+  "category": "短句",
+  "book": {
+    "title": "万历十五年",
+    "author": "黄仁宇",
+    "chapter": "万历皇帝",
+    "excerpt": "（评分者背景：本章讲万历在礼制与文官集团夹缝中的「无为」。本节原文为仿写示意。）"
+  },
+  "currentLocator": {
+    "href": "chapter02.xhtml",
+    "progression": 0.26,
+    "textBefore": "皇帝的每一项仪节都有成宪可循，",
+    "textHighlight": "他渐渐明白，自己虽然端坐御座，能做的不过是在别人拟好的方案上画圈；连立储这样的事，也要看文官的脸色。",
+    "textAfter": "于是他用消极的方式行使积极的意义：不上朝，不补缺，不批红。"
+  },
+  "userHistory": {
+    "pastReflections": [],
+    "memoryClaims": []
+  },
+  "currentReflection": "这段没太看懂，先记一笔。",
+  "retrievalEvidence": [
+    {
+      "chapterTitle": "万历皇帝",
+      "sectionTitle": "画圈的皇帝",
+      "text": "文官集团需要的不是一个有主见的皇帝，而是一个按礼制行事的象征；冲突不在于某个具体政策，而在于「谁拥有解释礼制的权力」。",
+      "href": "chapter02.xhtml"
+    }
+  ],
+  "expectedFeedbackNotes": [
+    "克制：回应也要短（60 字以内），不要因为输入只有一句就展开长分析（PRD 行为规范 §11.6）",
+    "追问质量：默认不提问；如果确有值得一提的卡点，至多一个极短且直接相关的问题（例如卡在礼制还是权力），绝不能像作业",
+    "理解用户：他在「记一笔」而不是求助，尊重这个意图，不强行开讲",
+    "恭维控制：不夸「会做笔记」"
+  ]
+}

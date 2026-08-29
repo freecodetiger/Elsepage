@@ -1,0 +1,36 @@
+{
+  "id": "04-question-system2-laziness",
+  "category": "提问",
+  "book": {
+    "title": "思考，快与慢",
+    "author": "丹尼尔·卡尼曼",
+    "chapter": "两个系统",
+    "excerpt": "（评分者背景：本章介绍系统1的自动反应与系统2的费力控制。本节原文为仿写示意。）"
+  },
+  "currentLocator": {
+    "href": "chapter01.xhtml",
+    "progression": 0.55,
+    "textBefore": "系统1 冲上来给答案，快而不假思索；",
+    "textHighlight": "系统2 负责监督，但它天生懒散，能不接管就不接管，最省力的路径往往是直接采纳系统1 的直觉。",
+    "textAfter": "于是「我认真想过」常常只是「我觉得想过了」：监督者签了字，却没真正查过账。"
+  },
+  "userHistory": {
+    "pastReflections": [],
+    "memoryClaims": []
+  },
+  "currentReflection": "系统1 和系统2 的分工我懂了，但我不明白：如果系统2 这么懒，我们凭什么相信自己做过「深思熟虑」？",
+  "retrievalEvidence": [
+    {
+      "chapterTitle": "两个系统",
+      "sectionTitle": "认知放松",
+      "text": "熟悉的、流畅的、易读的想法会带来认知放松，而放松的感觉常被误读为「这件事靠谱」「我已经想清楚了」。",
+      "href": "chapter01.xhtml"
+    }
+  ],
+  "expectedFeedbackNotes": [
+    "追问质量：他问的是「凭什么相信」，好回应给一个关键区分而不是结论——「深思的感觉」可能恰恰是系统1 的认知放松，不是系统2 的工作凭证",
+    "理解书籍：用本章语言回答（认知放松/监督者），不要跳到「元认知」等书外术语",
+    "可追溯性：使用证据时句末加 [E1]",
+    "克制：最多一个问题或不问；他的问题已经包含方向，不需要再反问"
+  ]
+}
