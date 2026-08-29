@@ -8,7 +8,7 @@
 
 - ✅ **v0.5 TestFlight 就绪** — Phases 1-6 (代码完成 2026-08-29,待用户真机验收)
 - 🚧 **v1.0 App Store 首发** — Phases 7-11 (进行中;代码侧完成,待用户验收)
-- 📋 **v1.1 Personal Brain(我的大脑)** — Phases 12-19 (规划完成;来源 `docs/brain.md`,与 Phase 11 用户验收可并行)
+- ✅ **v1.1 Personal Brain(我的大脑)** — Phases 12-19 (代码完成 2026-08-29,待用户 xcodebuild/真机验收)
 
 ## Phases
 
@@ -174,7 +174,7 @@ Plans:
 - [x] 11-01: UAT/崩溃恢复 checklist 与最终验证
 - [ ] 11-02: TestFlight 流程与发布确认
 
-### 📋 v1.1 Personal Brain — 我的大脑 (Planned)
+### ✅ v1.1 Personal Brain — 我的大脑 (Code complete 2026-08-29)
 
 **Milestone Goal:** 按 `docs/brain.md` 落地 Brain Domain——Thought/Question/Memory 三类一级对象 + Evidence 基础设施,成为现有 Context Engineering 的上层个人思想模型。原则:LLM 提议,代码执行;Brain 维护路径不阻塞 ReaderAgent;Evidence 是事实,Brain Item 是解释。
 
@@ -287,4 +287,4 @@ v1.1: 12 → 13 ‖ 14 ‖ 15(并行)→ 16 → 17 → 18 → 19
 | 16. Agent Bridge | v1.1 | 1/1 | Complete | 2026-08-29 |
 | 17. BrainProjectionService | v1.1 | 1/1 | Complete | 2026-08-29 |
 | 18. Revision / Evolution | v1.1 | 1/1 | Complete | 2026-08-29 |
-| 19. Evaluation / Observability | v1.1 | 0/1 | Planned | - |
+| 19. Evaluation / Observability | v1.1 | 1/1 | Complete | 2026-08-29 |

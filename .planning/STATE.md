@@ -66,8 +66,8 @@ v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单�
 ## Session Continuity
 
 Last session: 2026-08-29
-Stopped at: v1.1 Personal Brain — Phase 12-18 完成;仅剩 Phase 19(Eval/Observability);投影服务已装配,大脑具备自动更新能力;「继续想想」按钮待 App 任务;App 层 xcodebuild 验证待用户(Phase 13/14/17/18 累计)
-Resume file: .planning/phases/17-brain-projection/17-SUMMARY.md
+Stopped at: v1.1 Personal Brain — Phase 12-19 全部完成,v1.1 代码收官(356 tests 全绿);待用户 xcodebuild + 真机验收(投影自动更新/继续想想/MyMind);v1.0 Phase 11 同样待用户验收
+Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 
 ### v1.1 Brain 里程碑进度
 
