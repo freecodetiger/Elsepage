@@ -2,7 +2,7 @@
 
 > 俯视图:从架构视角审视当前 Agent 编排。**忠实于代码现状**(截至 `develop` 分支),节点与边界均以源码为据。
 >
-> 结论先行:**3 个 LLM 子图**(ReaderAgent / ContextPlanner / Polish),共享 1 个有界执行运行时,背后是 2 个模型适配器(chat / embeddings / rerank)+ 本地 GRDB 持久化 + 1 个 **Context Engineering 层**(确定性检索/去重/预算/组装,非 LLM)。确定性服务(校验、策略编译、兜底路由、引用验证、small-to-big、candidate ranking)与 LLM 节点严格分离。Planner 协议 v2:**LLM 决定语义意图,代码决定执行策略**(`SemanticPlanValidator` + `ContextPolicyCompiler`)。
+> 结论先行:**4 个 LLM 子图**(ReaderAgent / ContextPlanner / Polish / BrainProjection),共享 1 个有界执行运行时,背后是 2 个模型适配器(chat / embeddings / rerank)+ 本地 GRDB 持久化 + 1 个 **Context Engineering 层**(确定性检索/去重/预算/组装,非 LLM)+ 1 个 **Personal Brain 域**(v1.1,brainItems 三对象 + 证据/关系/修订/向量)。确定性服务(校验、策略编译、兜底路由、引用验证、small-to-big、candidate ranking、Mutation 校验)与 LLM 节点严格分离。Planner 协议 v2:**LLM 决定语义意图,代码决定执行策略**(`SemanticPlanValidator` + `ContextPolicyCompiler`)。
 
 ---
 
@@ -12,10 +12,11 @@
 flowchart TD
     UI["用户层<br/>阅读 / 反思 / 语音口述 / 设置"]
 
-    subgraph AGENTS["Agent 编排层 (3 个 LLM 子图)"]
+    subgraph AGENTS["Agent 编排层 (4 个 LLM 子图)"]
         RA["ReaderAgent<br/>主回答 Agent<br/>budget: readerReply<br/>(1 call / 45s 墙钟 / 1000 output tok)"]
         ROUTER["LLMReaderContextRouter<br/>Context Planner 子图 (wire schema v2)<br/>budget: 1 call / 8s / 800 tok"]
         POLISH["TranscriptPolishService<br/>语音润色子图<br/>1 call / 无 output 上限"]
+        BRAINPROJ["BrainProjectionService<br/>大脑维护子图 (fire-and-forget)<br/>budget: 1 call / 20s / 600 tok"]
     end
 
     subgraph CTX["Context Engineering 层 (确定性, 非 LLM)"]
@@ -48,7 +49,12 @@ flowchart TD
     RA --> HYB
     RA --> ASM
     RA --> EXEC
+    RA -. fire-and-forget .-> BRAINPROJ
+    BRAINPROJ --> BR["BrainRetriever / BrainContextProvider"]
+    BR --> ASM
+    BRAINPROJ --> EXEC
     ROUTER --> EXEC
+    BRAINPROJ --> PERS
     POLISH --> CHAT
 
     EXEC --> BUDGET
@@ -63,7 +69,7 @@ flowchart TD
 ```
 
 **说明**
-- 三个 LLM 子图各自独立、边界清晰:Planner 是 ReaderAgent 的**前置子图**;Polish 完全独立。
+- 四个 LLM 子图各自独立、边界清晰:Planner 是 ReaderAgent 的**前置子图**;Polish 完全独立;BrainProjection 是 ReaderAgent 的**异步维护子图**(fire-and-forget,失败不影响回复,见子图 E 一节)。
 - **Context Engineering 是确定性层**:检索、扩展、防剧透、去重、预算、组装全部是代码,不押在 LLM 上。`AgentCitationValidator`、`SemanticPlanValidator`、`ContextPolicyCompiler`、`DeterministicReaderContextRouter`、`SmallToBigExpander`、`ContextCandidateRanker` 都是确定性服务。
 - `AgentExecutor` 是三个节点**共用**的有界执行器;`ModelClientFactory`(BYOK)在运行期解析密钥。
 - 防剧透边界(`ReadingBoundary`)在检索层与扩展层双重强制,不依赖 LLM 节点。
@@ -101,8 +107,13 @@ flowchart TD
     BOOK -->|是| BUILD["ReaderAgentContextBuilder.build<br/>→ 子图C: Child 检索 + Small-to-Big 扩展<br/>无边界 → 空证据(防剧透保守默认)"]
     BOOK -->|否| NOB
 
-    NOB --> ASM["ContextAssembler<br/>nearby/book/reflection/memory → ContextCandidates<br/>→ 去重 / source 优先级 / 预算打包 → ContextBundle"]
-    ASM --> REPLY["AgentExecutor.run(policy.input(...))<br/>ReaderAgentSystemPrompt.v3 + 证据块(带 [E1] 标记)"]
+    NOB --> BRAINLANE{"executionPlan.brain?"}
+    BRAINLANE -->|是| BCAND["BrainContextProvider<br/>BrainRetriever 候选 → ContextCandidate(.brain)"]
+    BRAINLANE -->|否| NOB2
+    BCAND --> ASM2["ContextAssembler<br/>nearby/book/reflection/memory/brain → ContextCandidates<br/>→ 去重 / source 优先级 / 预算打包(pinned 必进)"]
+    NOB2 --> ASM2
+    ASM2 --> REPLY["AgentExecutor.run(policy.input(...))<br/>ReaderAgentSystemPrompt.v3 + 证据块([E1])+ brain 区块(不可引用)"]
+    REPLY -. 回复持久化后 .-> PROJ["BrainProjectionService.observe<br/>(fire-and-forget, 见子图 E)"]
 
     REPLY --> EVT{"事件流"}
     EVT -->|.textDelta| TXT["yield .textDelta"]
@@ -218,7 +229,7 @@ flowchart TD
 
 ---
 
-## 5. 子图 D:Personal Brain 维护路径(v1.1,fire-and-forget)
+## 5. 子图 E:Personal Brain 维护路径(v1.1,fire-and-forget)
 
 与 ReaderAgent 主链**解耦**的异步维护路径:回复持久化完成后触发,失败绝不影响 Reflection/回复。
 
@@ -245,7 +256,7 @@ flowchart TD
 
 ---
 
-## 5. 子图 D:AgentRuntime 执行器(三个子图共用的底座)
+## 6. 子图 F:AgentRuntime 执行器(四个子图共用的底座)
 
 ```mermaid
 flowchart TD
@@ -272,7 +283,7 @@ flowchart TD
 
 ---
 
-## 6. 数据/持久化层(非 LLM,但支撑全部节点)
+## 7. 数据/持久化层(非 LLM,但支撑全部节点)
 
 | 数据 | 用途 | 关键点 |
 |---|---|---|
@@ -284,15 +295,17 @@ flowchart TD
 | `bookReflections` / `reflectionMessages` | 反思与对话 | agent 消息附带 evidence + citations |
 | `agentResponseEvidence` | 每次回复的证据快照 | 由 ContextAssembler 打包后的 bundle 映射而来 |
 | `reflectionConnections` | 过去想法连接 | 同书优先;relevance 由融合排序产生 |
-| `routingTraces` | 路由 + 管道可观测性 | `ContextPlanTrace` + `ContextPipelineMetrics`(全可选,旧行可解码) |
+| `routingTraces` | 路由 + 管道可观测性 | `ContextPlanTrace` + `ContextPipelineMetrics`(全可选,旧行可解码;v2 增 planSchemaVersion/corrections/decodeAttempts) |
+| `brainItems` / `brainItemEvidence` / `brainItemRelations` / `brainItemRevisions` / `brainItemEmbeddings` | Personal Brain(v1.1) | BrainItem 域(per-kind CHECK)+ 证据/关系/修订/持久化向量 |
+| `brainProjectionTraces` | 大脑投影观测 | action/applied/corrections/candidateCount,不含观察文本(ADR 0001) |
 | `memories` | 长期记忆 | 仅作为证据透出,不建连接 |
 
 ---
 
-## 7. 从俯视角度看到的边界与观察
+## 8. 从俯视角度看到的边界与观察
 
-1. **职责边界清晰**:三个 LLM 子图各管一段(计划 / 主回答 / 润色);Context Engineering 层把检索/扩展/防剧透/去重/预算/组装全部确定性化,ReaderAgent 不再手工竞争证据源。
+1. **职责边界清晰**:四个 LLM 子图各管一段(计划 / 主回答 / 润色 / 大脑投影);Context Engineering 层把检索/扩展/防剧透/去重/预算/组装全部确定性化,ReaderAgent 不再手工竞争证据源。
 2. **可靠性不押在 LLM 上**:计划有确定性兜底;检索层与扩展层双重防剧透;引用有确定性校验;截断有 `.truncated` 信号;语义检索失败回退纯词法。
 3. **Small-to-Big 解耦**:child(≈350)负责"找到"(FTS/embedding),parent(900-1400)负责"理解"(证据/扩展窗口),`BookEvidence` 锚定 parent。
-4. **可观测性成环**:`routingTraces` + `ContextDisclosure` + `ContextPipelineMetrics` 让计划/检索/扩展/去重/预算/语义缓存都可审计、可统计 fallback。
+4. **可观测性成环**:`routingTraces` + `ContextDisclosure` + `ContextPipelineMetrics` 让计划/检索/扩展/去重/预算/语义缓存都可审计、可统计 fallback;`brainProjectionTraces` 让大脑投影的验收率/碎片化拒绝率可量化。
 5. **语义混合是真召回**:Reflection/Memory 的有界 eligible 集整体嵌入,与 lexical 独立 top-K 经 RRF 融合——不是 lexical 召回后 rerank。

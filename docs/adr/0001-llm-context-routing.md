@@ -1,5 +1,7 @@
 # ADR 0001: LLM-planned, locally enforced Reader context routing
 
+> **修订(2026-08-30)**:Planner 协议已演进至 v2——`ContextPlanValidator` 拆分为 `SemanticPlanValidator`(语义校验)+ `ContextPolicyCompiler`(确定性策略编译);`ReaderContextPlan` 退役为持久化兼容形状,运行时真值是 `SemanticContextPlan`/`ContextExecutionPlan`。本 ADR 的核心原则(LLM decides what may be useful;Swift decides what is allowed)不变且被强化。见 `docs/exec-plans/active/context-planner-protocol-refactor.md` 与 `ARCHITECTURE.md` 子图 B。
+
 Status: accepted  
 Date: 2026-08-25
 

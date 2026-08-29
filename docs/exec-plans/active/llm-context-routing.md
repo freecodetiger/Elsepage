@@ -1,3 +1,5 @@
+> **状态:已被取代(2026-08-29)** — 本计划描述 Planner 协议 v1。v2 重构(`context-planner-protocol-refactor.md`)已实施:`ContextPlanValidator` 由 `SemanticPlanValidator` + `ContextPolicyCompiler` 取代;`allowQuestion`/`rationale`/`memoryRetrieval` 等字段退出 LLM 面。本文仅作历史参照。
+
 # LLM Context Routing — Implementation Record
 
 Status: implemented baseline  

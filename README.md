@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?style=for-the-badge&logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/Local%20first-No%20backend-9cb099?style=for-the-badge" alt="Local first">
   <img src="https://img.shields.io/badge/BYOK-Your%20key%2C%20your%20data-5f6e5f?style=for-the-badge" alt="BYOK">
-  <img src="https://img.shields.io/badge/tests-207%20passing-9cb099?style=for-the-badge" alt="207 tests">
+  <img src="https://img.shields.io/badge/tests-356%20passing-9cb099?style=for-the-badge" alt="356 tests">
 </p>
 
 <p align="center">
@@ -91,7 +91,7 @@ If you want an iOS reader that treats **what you thought** as the deliverable, y
 
 ## Status
 
-A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **207 tests green**, and an unsigned iOS build gate passes.
+A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **356 tests green**, and an unsigned iOS build gate passes.
 
 | Area | State |
 |------|-------|

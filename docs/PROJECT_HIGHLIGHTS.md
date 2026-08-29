@@ -21,9 +21,10 @@ ElsePage 是一个**本地优先（local-first）、自带密钥（BYOK）**的�
 
 - **一套小型但结构完整的 Agent 系统**：`AgentRuntime`（产品无关的运行层）+ `ContextRouting`（LLM 规划 + Swift 校验的上下文路由）+ `ReaderAgent`（产品 Agent）。
 - **一套真正落地的本地 RAG**：EPUB → 结构感知分块 → FTS5（lexical）→ 可选语义向量 + 交叉编码 Reranker → **read-so-far 防剧透边界** → 带可点击引用的 Agent 上下文。
+- **一个 Personal Brain 域（v1.1）**：Thought/Question/Memory 强类型三对象 + 证据/关系/修订/持久化向量，BrainProjectionService 让反思**自动反哺大脑**（LLM 提议、确定性校验、碎片化护栏），用户编辑同样可追溯。
 - **一个强约束的 AI 产品行为层**：628 行中文 System Prompt + 三层强制（路由提示词 / 校验器 / 输出策略），保证 AI 是「回应优先、提问稀缺、允许对话结束」的阅读伙伴。
 
-工程形态：Swift 6 · iOS 18 · Readium 3.3 · GRDB 7.11 · 12 个 SPM 模块 · **174 个 `@Test`（swift-testing）实测全绿**（README 徽章 149 与 CLAUDE.md 的 123 已过期）。
+工程形态：Swift 6 · iOS 18 · Readium 3.3 · GRDB 7.11 · 13 个 SPM 模块（含 BrainCore）· **356 个 `@Test`（swift-testing）实测全绿**。
 
 ---
 
@@ -141,9 +142,9 @@ flowchart LR
         A[ModelClient 契约] --> B[AgentExecutor · 有界执行]
         B --> C["AgentEvent 流 / ExecutionBudget / 错误归一化"]
     end
-    subgraph L2["ContextRouting（上下文决策）"]
-        D["LLMReaderContextRouter · 一次零温小调用"] --> E["ContextPlanValidator · Swift 硬策略"]
-        F["DeterministicReaderContextRouter · fallback"]
+    subgraph L2["ContextRouting（上下文决策，协议 v2）"]
+        D["LLMReaderContextRouter · 一次零温小调用<br/>wire schema v2 → PlannerWirePlan"] --> E["SemanticPlanValidator + ContextPolicyCompiler<br/>语义校验与确定性策略编译"]
+        F["DeterministicReaderContextRouter · fallback<br/>同一域模型，同一校验/编译路径"]
     end
     subgraph L3["ReaderAgent（产品 Agent）"]
         G["SessionContextBuilder · 会话上下文"]
@@ -167,8 +168,9 @@ flowchart LR
 
 | 调用 | 角色 | 温度 | 预算 | 输出 |
 |---|---|---|---|---|
-| ① Router | 决定需要哪些本地上下文 | 0 | 8s / 500 output tokens | 一个 JSON `ReaderContextPlan` |
-| ② Reader Agent | 生成对 Reflection 的回应 | 0.4 | 45s / 400 output tokens（`ExecutionBudget.readerReply`） | 自然语言 + 可选 `---CITATIONS---` 结构化块 |
+| ① Context Planner | 决定需要哪些本地上下文（语义意图） | 0 | 8s / 800 output tokens | 一个 JSON `PlannerWirePlan`（v2：无任何数值检索参数） |
+| ② Reader Agent | 生成对 Reflection 的回应 | 0.4 | 45s / 1000 output tokens（`ExecutionBudget.readerReply`） | 自然语言 + 可选 `---CITATIONS---` 结构化块 |
+| ③ Brain Projection（异步，fire-and-forget） | 决定本次反思是否更新个人大脑 | 0 | 20s / 600 output tokens | 一个 JSON `BrainMutationProposal`（单动作） |
 
 两次调用都走同一个 BYOK `ModelClient`（可能是 OpenAI / DeepSeek / Gemini / SiliconFlow…）。代价是延迟与 token 略增（ADR 0001 明示），换来：路由可独立测试、检索可严格验证、provenance 可预测、失败可确定性回退。
 
@@ -197,8 +199,8 @@ User Action
         └ 读取 Reflection + 会话消息
         └ models.makeClient()（Provider + Keychain 密钥，运行期才解析）
         └ 收集上下文：当前 Locator 附近原文、同书/跨书候选 Reflection、SessionContext、Top-2 记忆
-        └ ContextRoutingInput → LLMReaderContextRouter.route（8s/500 tokens）
-        └ ContextPlanValidator.validate（Swift 硬策略）
+        └ ContextRoutingInput → LLMReaderContextRouter.route（8s/800 tokens，wire v2）
+        └ SemanticPlanValidator.validate → ContextPolicyCompiler.compile（语义校验 + 确定性策略编译）
         └ 过去想法连接（ReflectionLexicalMatcher，同书 > 跨书 > 记忆）
         └ 若计划允许 → ReaderAgentContextBuilder.build（RAG 检索，read-so-far 边界）
         └ ReaderAgentPolicy.input（Prompt 组装 + 各角色字符预算）
@@ -255,7 +257,7 @@ fileImporter → LibraryModel.importBook
 
 | 层 | 机制 | 数值（默认） |
 |---|---|---|
-| 意图级上下文预算 | `ContextPlanValidator.budget(for:)` 按 intent 分拆 | total 6000 字符，emotionalRecord 不检索书籍 |
+| 意图级上下文预算 | `ContextPolicyCompiler.budget(for:)` 按 intent 分拆（v2 起） | total 6000 字符，emotionalRecord 不检索书籍 |
 | 证据截断 | 检索到的 evidence 按字符预算逐条截断（`ReaderAgentContextBuilder.build`） | `characterBudget` 4000（可覆盖） |
 | 会话/对话截断 | `boundedConversation` / `bounded`（从新到旧，超预算即停） | 见 6.1 表 |
 | 路由调用预算 | `ExecutionBudget(maxModelCalls:1, maxWallTime:8s, maxOutputTokens:500)` | — |
@@ -368,7 +370,7 @@ ElsePage 把「AI 是阅读伙伴而不是聊天机器人」当成**产品约束
    - **允许对话结束**：不要制造「还有下一题」的感觉；认知负担高时，作用是沉淀而不是消耗。
    - 不替用户下结论、不泛泛赞美、不炫耀知识（一次最多引入 1 个外部概念/书/过去想法）、不定义用户人格、区分「书的内容 / 用户观点 / AI 的推断」、克制长度（80–220 中文字）、按 6 种 Reflection 类型差异化回应、禁止行为清单（不自动总结章节、不评分、不强行升华、不编造原文、不用「作为 AI」措辞）。
 
-2. **校验器层**（`ContextPlanValidator`）：**上一轮 Agent 提问 → 强制 `allowQuestion=false` 且 `shouldNaturallyEnd=true`**；`responseGuidance` 的目标长度在 Reflection 模式把 long 压到 medium。即「提问稀缺」不是靠提示词自觉，而是**结构性强制**。
+2. **校验器层**（`SemanticPlanValidator`）：**上一轮 Agent 提问 → 强制 `posture = respondOnly`**（编译为 `allowQuestion=false` 且 `shouldNaturallyEnd=true`）；`responseGuidance` 的目标长度在 Reflection 模式把 long 压到 medium。即「提问稀缺」不是靠提示词自觉，而是**结构性强制**。
 
 3. **路由层**（Router prompt）：输入含 `previousAgentAskedQuestion`，路由规划时要求其遵守相同禁令。
 
@@ -396,9 +398,9 @@ ElsePage 把「AI 是阅读伙伴而不是聊天机器人」当成**产品约束
 **Problem**：需要语义决策（区分情绪记录 vs 概念疑问、判断附近原文是否足够、识别过去想法是否值得连接），纯关键词规则做不好。
 **Naive approach**：让 ReaderAgent 直接调用检索工具（function calling）。
 **Why it is insufficient**：耦合数据实现、削弱模块边界、让安全（read-so-far）依赖模型行为，且 provenance 不可预测。
-**ElsePage approach**：`LLM 提议一个严格 JSON 计划 → ContextPlanValidator 校验 → RetrievalCore 执行`。Router 无工具无数据权；一次最多一个书籍查询 + 一个过去想法查询；不得请求未读内容；失败走确定性最小 fallback。
+**ElsePage approach**：`LLM 提议一个严格 JSON 语义计划 → SemanticPlanValidator 校验 → ContextPolicyCompiler 编译执行策略 → RetrievalCore 执行`。Router 无工具无数据权；一次最多一个书籍查询 + 一个过去想法查询；不得请求未读内容；失败走确定性最小 fallback。
 **Trade-off**：一次回复变成两次顺序模型调用（成本/延迟略增）；路由结果仍可能不优（但被校验与预算兜底）。
-**Evidence**：`docs/adr/0001-llm-context-routing.md`、`LLMReaderContextRouter.swift`、`ContextPlanValidator.swift`。
+**Evidence**：`docs/adr/0001-llm-context-routing.md`、`LLMReaderContextRouter.swift`、`SemanticPlanValidator.swift`、`ContextPolicyCompiler.swift`。
 
 ### Decision D3：read-so-far 边界（防剧透门）
 
@@ -451,6 +453,16 @@ ElsePage 把「AI 是阅读伙伴而不是聊天机器人」当成**产品约束
 
 ## 12. Engineering Highlights
 
+#### Personal Brain(v1.1)—— 大脑域与自动投影
+
+**Problem**：反思、划线、对话散落各处;Agent 对用户的长期理解要么不存在,要么是不可信的黑盒画像。旧 memory 提案链路在实践中从未打通(格式契约错位),「我的大脑」一直为空。
+
+**ElsePage approach**:`BrainCore` 强类型域(Thought/Question/Memory tagged union,per-kind CHECK,非法状态不可表示)+ `brainItems` 等 6 张表(证据/关系/修订/持久化向量/观测)。**BrainProjectionService** 作为唯一生产写入方:反思后异步 `BrainRetriever` 取候选 → `brain-projection-v1` 单提案 → `BrainMutationValidator`(碎片化护栏:create 仅候选空;陈述 ≤200 字蒸馏纪律;target ∈ 候选)→ 事务执行 + 证据附着;`updateThought` 先把旧陈述降级为 `brainItemRevisions`——**变化可追溯**。记忆经 `proposeMemory` 以 needsReview/agentInferred 生命周期形成,用户在 MyMind 确认。「继续想想」= 基于旧想法写新反思(activeBrain 置顶直通 prompt,LLM 不可否决)。Brain 条目刻意**不进 [E] 引用体系**(自己的想法不是可校验外部证据)。
+
+**Evidence**:`Sources/BrainCore/`、`Sources/ReaderAgent/BrainProjectionService.swift`、`Sources/ContextEngineering/BrainRetriever.swift`、`docs/brain.md`、`docs/exec-plans/active/` Phase 12-19 summaries。
+
+#### 其余亮点
+
 > 以下为 **S 级**亮点，每个都满足「简历主 bullet 且面试可深聊 5–10 分钟」。
 
 ### Highlight 1 — LLM 规划 + Swift 强制的双层上下文路由（Context Routing）
@@ -472,13 +484,13 @@ Agent 需要语义级决策来决定「这次回应要取哪些本地上下文�
 - 一条消息边检索边回答 → 无法严格校验、无法稳定 fallback。
 
 #### Our Design
-`LLMReaderContextRouter` 以**零温一次小调用**读入 `ContextRoutingInput`（当前 Reflection、有界对话预览、阅读元数据、可用来源布尔位、`previousAgentAskedQuestion`），输出严格 JSON `ReaderContextPlan`（intent / nearbyPassage / bookRetrieval / pastThoughtRetrieval / responseGuidance / rationale）。`ContextPlanValidator` 再按**实际可用性**校验：必须有 Locator 才允许书检索、必须有索引才允许 book、必须有历史才允许 past、query 截断 240 字符、证据数钳制 `[1,4]`、预算按意图分账、上一轮提问则强制本轮止问。任何一步失败 → `DeterministicReaderContextRouter` 产生保守计划并标记 `usedFallback + fallbackDetail`。
+`LLMReaderContextRouter` 以**零温一次小调用**读入 `ContextRoutingInput`（当前 Reflection、有界对话预览、阅读元数据、可用来源布尔位、`previousAgentAskedQuestion`），输出严格 JSON `PlannerWirePlan`（v2：intent / nearbyPassage / bookRetrieval{query,purpose,scope,denseQuery?,lexicalTerms?} / pastThoughtRetrieval / brainRetrieval / response{length,posture}——**无任何数值检索参数，无 rationale**）。归一化后 `SemanticPlanValidator` 按**实际可用性**校验：必须有 Locator 才允许书检索、必须有索引才允许 book、必须有历史才允许 past、query 截断 240 字符、空 query 修复、上一轮提问则强制 `respondOnly`；`ContextPolicyCompiler` 再确定性地编译执行策略（证据数按 purpose 查表、retrievalMode/candidateLimit/reranker 常量化、预算按意图分账）。任何一步失败 → `DeterministicReaderContextRouter` 产生同一域模型的保守计划并标记 `usedFallback + fallbackDetail`。
 
 #### Implementation
-- `ContextRouting/LLMReaderContextRouter.swift:12 route(_:using:)`
-- `ContextRouting/ContextPlanValidator.swift:6 validate` / `:43 budget(for:)`
-- `ContextRouting/LLMReaderContextRouter.swift:72 DeterministicReaderContextRouter`
-- 完整调用见 `ReaderAgent.run`（`ReaderAgent.swift:184-210` 构建 input，`208` 路由，`210` 校验）
+- `ContextRouting/LLMReaderContextRouter.swift:12 route(_:using:)`（wire v2 + 修复重试）
+- `ContextRouting/SemanticPlanValidator.swift validate` / `ContextPolicyCompiler.swift compile` / `budget(for:)`
+- `ContextRouting/LLMReaderContextRouter.swift DeterministicReaderContextRouter`
+- 完整调用见 `ReaderAgent.run`（构建 input → 路由 → 语义校验 → 策略编译 → 执行）
 
 #### Trade-offs
 - 一次回复 = 两次顺序模型调用（成本/延迟略增，ADR 已记录）；
@@ -489,8 +501,8 @@ Agent 需要语义级决策来决定「这次回应要取哪些本地上下文�
 体现 **Agent Context Engineering + 确定性安全层**：把「AI 做决定、系统做裁决」落实为代码架构，并在模块边界上强制。这是与「一次 LLM 调用」式 Agent 的本质区别。
 
 #### Evidence
-- `Sources/ContextRouting/LLMReaderContextRouter.swift` / `ContextPlanValidator.swift` / `ContextRoutingModels.swift`
-- `docs/adr/0001-llm-context-routing.md`
+- `Sources/ContextRouting/LLMReaderContextRouter.swift` / `SemanticPlanValidator.swift` / `ContextPolicyCompiler.swift` / `ContextRoutingModels.swift`
+- `docs/adr/0001-llm-context-routing.md`（附 v2 修订注）
 
 #### Interview Depth
 - 为什么不让 Router 直接访问数据？边界如何维护？
@@ -608,13 +620,13 @@ System Prompt 写「少提问」。
 三明治强制：
 1. **Prompt 层**：628 行中文人格与行为规范（回应优先 70–80%、提问≤1、连续追问硬禁、允许结束、不定义人格、不炫耀知识、6 类 Reflection 差异化、禁止清单、示例好坏回应）。
 2. **状态层**：`ReaderAgent.previousAgentAskedQuestion` 从已持久化对话检测上一轮 Agent 是否含 `?/？`，进入路由输入。
-3. **结构层**：`ContextPlanValidator` 上一轮提问 → 本轮 `allowQuestion=false, shouldNaturallyEnd=true`；`ReaderAgentPolicy` 把该约束注入为独立 system 消息（「这一轮不要提出问题」）。
+3. **结构层**：`SemanticPlanValidator` 上一轮提问 → 本轮 `posture = respondOnly`（编译为 `allowQuestion=false, shouldNaturallyEnd=true`）；`ReaderAgentPolicy` 把该约束注入为独立 system 消息（「这一轮不要提出问题」）。
 另外：Agent 只在**用户主动邀请**时触发（保存后 / 继续聊聊 / 选中文字），绝不打断阅读主流程。
 
 #### Implementation
 - `ReaderAgent/ReaderAgentSystemPrompt.swift:2 v3`
 - `ReaderAgent/ReaderAgent.swift:404 previousAgentAskedQuestion` / `:204`（输入）
-- `ContextRouting/ContextPlanValidator.swift:10-17`（强制止问）
+- `ContextRouting/SemanticPlanValidator.swift`（强制止问 → posture respondOnly）
 - `ReaderAgent/ReaderAgentPolicy.swift:31-40`（本轮约束注入）
 
 #### Trade-offs
@@ -625,7 +637,7 @@ System Prompt 写「少提问」。
 体现 **AI Product / UX Engineering**：把「克制」从语气偏好变成 状态检测 + 结构性校验 + 提示约束 的三层工程，并用产品文案（「先保存，再决定是否邀请回应」）支撑。
 
 #### Evidence
-- `ReaderAgentSystemPrompt.swift`、`ReaderAgent.swift`、`ContextPlanValidator.swift`
+- `ReaderAgentSystemPrompt.swift`、`ReaderAgent.swift`、`SemanticPlanValidator.swift`
 
 #### Interview Depth
 - 为什么问号检测放在「已持久化对话」而不是内存状态？崩掉重开一致性？
@@ -771,8 +783,8 @@ Swift · SwiftUI · Readium · GRDB · LLM Agent · RAG · Embedding · Rerankin
 | 9 | 换 embedding 模型会发生什么？为什么不用重新分块？ | H2 / D4 | `BookIndexJob.embeddingModel`、`BookIndexPipeline.embed` | Deep |
 | 10 | 一次 Agent 回复调用几次 LLM？为什么？ | H1 / D2 | `ReaderAgent.run`、`LLMReaderContextRouter` | Medium |
 | 11 | 为什么不让 Router 直接访问数据？ | H1 / D2 | `docs/adr/0001` | Deep |
-| 12 | ContextPlanValidator 的硬策略有哪些？ | H1 | `ContextPlanValidator.swift` | Medium |
-| 13 | 意图级 token 预算如何设计？情绪记录为什么不检索？ | H1 / 6.3 | `ContextPlanValidator.budget(for:)` | Deep |
+| 12 | Planner 的硬策略有哪些？ | H1 | `SemanticPlanValidator.swift` + `ContextPolicyCompiler.swift` | Medium |
+| 13 | 意图级 token 预算如何设计？情绪记录为什么不检索？ | H1 / 6.3 | `ContextPolicyCompiler.budget(for:)` | Deep |
 | 14 | 上下文有哪几类？如何组合、如何截断？ | 6.1–6.3 | `ReaderAgentPolicy.input`、`SessionContextBuilder` | Medium |
 | 15 | 如何防止 Agent 编造引用？ | H3 | `AgentCitationValidator.swift` | Deep |
 | 16 | 无 JSON mode 的 Provider 引用校验如何降级？ | H3 | `AgentCitationValidator.swift:37-45` | Deep |
@@ -844,7 +856,7 @@ agent:
     - session context: 阅读区间/本段划线/本段批注/本书过往想法
     - user: reflection.originalText；conversation: 最近按字符预算回溯
   budget:
-    total_per_intent: 6000 字符（ContextPlanValidator.budget(for:)，按 intent 分账）
+    total_per_intent: 6000 字符（ContextPolicyCompiler.budget(for:)，按 intent 分账）
     routing_call: 8s / 500 output tokens / temp 0
     reply_call: 45s / 400 output tokens（ExecutionBudget.readerReply）/ temp 0.4
     max_evidence: 4（clamp [1,4]）；query 截断 240 字符
@@ -942,7 +954,8 @@ future_work:
 - `Sources/ContextRouting/ContextRoutingModels.swift` — `ReaderContextPlan/ContextBudget/ContextPlanTrace/RoutingTraceRepository`
 - `Sources/ContextRouting/LLMReaderContextRouter.swift:8` — `LLMReaderContextRouter.route` + Router prompt
 - `Sources/ContextRouting/LLMReaderContextRouter.swift:72` — `DeterministicReaderContextRouter`（fallback）
-- `Sources/ContextRouting/ContextPlanValidator.swift:3` — `ContextPlanValidator.validate/budget(for:)`
+- `Sources/ContextRouting/SemanticPlanValidator.swift` — 语义校验
+- `Sources/ContextRouting/ContextPolicyCompiler.swift` — `compile / budget(for:) / evidenceLimit(for:)`
 
 ### RAG
 - `Sources/RetrievalCore/RetrievalModels.swift:98` — `ReadingBoundary`；`:152` `BookIndexRepository`；`:182` `ReaderAgentContextBuilder`
