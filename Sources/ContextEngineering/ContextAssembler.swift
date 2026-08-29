@@ -49,6 +49,7 @@ public struct NearbyPassageCandidate: Hashable, Sendable {
 /// for ReaderAgent. ReaderAgent no longer competes sources by hand — this layer
 /// owns source competition, per-source token budgeting and dedup; ReaderAgent maps
 /// the result back to `AgentResponseEvidence` (E-numbered) for the citation path.
+/// Budgets come from the compiled `ContextExecutionPlan` (planner protocol v2).
 public struct ContextAssembler: Sendable {
     private let ranker: ContextCandidateRanker
 
@@ -66,7 +67,7 @@ public struct ContextAssembler: Sendable {
         previousReflection: Reflection?,
         memories: [ReaderMemory],
         reflectionBookID: BookID,
-        plan: ValidatedContextPlan
+        budget: ContextBudget
     ) -> EvidenceAssemblyResult {
         var candidates: [ContextCandidate] = []
         var provenance: [String: AssembledEvidence] = [:]
@@ -105,12 +106,12 @@ public struct ContextAssembler: Sendable {
         }
 
         let profile = ContextBudgetProfile(
-            totalCharacters: plan.budget.totalCharacters,
+            totalCharacters: budget.totalCharacters,
             perSource: [
-                .nearbyPassage: plan.budget.nearbyCharacters,
-                .bookPassage: plan.budget.bookEvidenceCharacters,
-                .pastReflection: plan.budget.pastThoughtCharacters,
-                .memory: Self.derivedMemoryCharacters(from: plan.budget.pastThoughtCharacters),
+                .nearbyPassage: budget.nearbyCharacters,
+                .bookPassage: budget.bookEvidenceCharacters,
+                .pastReflection: budget.pastThoughtCharacters,
+                .memory: Self.derivedMemoryCharacters(from: budget.pastThoughtCharacters),
             ]
         )
         let packed = ranker.build(from: candidates, budget: profile)

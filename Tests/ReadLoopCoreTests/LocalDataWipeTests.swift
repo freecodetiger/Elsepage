@@ -103,10 +103,9 @@ private func chunk(
 }
 
 private func makeTrace(reflectionID: String) -> ContextPlanTrace {
-    let proposed = ReaderContextPlan(
-        intent: .passageObservation, nearbyPassage: .include, bookRetrieval: nil,
-        pastThoughtRetrieval: nil,
-        responseGuidance: .init(targetLength: .short, allowQuestion: false, shouldNaturallyEnd: true)
+    let semantic = SemanticContextPlan(
+        intent: .passageObservation, requests: [],
+        response: SemanticResponsePlan(length: .short, posture: .respondOnly)
     )
     let input = ContextRoutingInput(
         interactionMode: .reflection,
@@ -116,11 +115,13 @@ private func makeTrace(reflectionID: String) -> ContextPlanTrace {
         availableSources: .init(hasNearbyPassage: false, hasBookIndex: false, hasPastThoughts: false),
         previousAgentAskedQuestion: false
     )
+    let (validated, _) = SemanticPlanValidator().validate(semantic, input: input)
+    let execution = ContextPolicyCompiler().compile(validated, input: input)
     return ContextPlanTrace(
         reflectionID: reflectionID,
         createdAt: Date(timeIntervalSince1970: 500),
-        proposedPlan: proposed,
-        validatedPlan: ContextPlanValidator().validate(proposed, input: input),
+        proposedPlan: execution.legacyProposal,
+        validatedPlan: execution.legacyValidatedPlan,
         usedFallback: false,
         fallbackReason: nil,
         fallbackDetail: nil,

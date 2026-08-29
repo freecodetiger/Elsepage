@@ -1,6 +1,7 @@
 import AgentRuntime
 import ContextRouting
 import Foundation
+import LibraryCore
 import Testing
 
 /// Model client returning a different scripted response per call, so router
@@ -36,7 +37,7 @@ private final class SequentialScriptedClient: ModelClient, @unchecked Sendable {
 }
 
 private let validPlanJSON = """
-{"intent":"unclear","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"memoryRetrieval":null,"responseGuidance":{"targetLength":"short","allowQuestion":true,"shouldNaturallyEnd":false},"rationale":null}
+{"intent":"unclear","nearbyPassage":"include","bookRetrieval":null,"pastThoughtRetrieval":null,"response":{"length":"short","posture":"respondOnly"}}
 """
 
 private func makeInput() -> ContextRoutingInput {
@@ -57,6 +58,15 @@ private func makeInput() -> ContextRoutingInput {
         #expect(client.calls == 2)
         #expect(!result.usedFallback)
         #expect(result.plan.intent == .unclear)
+        #expect(result.decodeAttempts == 2, "repair attempt must be instrumented")
+    }
+
+    @Test func cleanDecodeReportsSingleAttempt() async {
+        let client = SequentialScriptedClient(responses: [validPlanJSON])
+        let result = await LLMReaderContextRouter().route(makeInput(), using: client)
+        #expect(client.calls == 1)
+        #expect(!result.usedFallback)
+        #expect(result.decodeAttempts == 1)
     }
 
     @Test func fallsBackWithBoundedDecodeDetailAfterRepeatedFailures() async throws {
@@ -64,6 +74,7 @@ private func makeInput() -> ContextRoutingInput {
         let result = await LLMReaderContextRouter().route(makeInput(), using: client)
         #expect(result.usedFallback)
         #expect(result.fallbackReason == .invalidStructuredOutput)
+        #expect(result.decodeAttempts == 2)
         let detail = try #require(result.fallbackDetail)
         #expect(detail.hasPrefix("structuredDecodeFailed"))
         #expect(detail.count <= 180)
@@ -84,6 +95,33 @@ private func makeInput() -> ContextRoutingInput {
         let detail = LLMReaderContextRouter.structuredDecodeDetail(#"{"intent":"回忆","nearbyPassage":"include"}"#)
         #expect(detail.contains("intent"))
         #expect(detail.hasPrefix("structuredDecodeFailed"))
+    }
+
+    /// The fallback path must converge onto the same strict domain model as the
+    /// LLM path so validator + policy compiler semantics are shared.
+    @Test func fallbackProducesSemanticPlanReadyForValidationAndCompilation() {
+        let input = ContextRoutingInput(
+            interactionMode: .reflection,
+            currentReflection: "  兜底计划的查询文本  ",
+            recentConversation: [],
+            currentReading: .init(bookID: BookID(), hasCurrentLocator: true),
+            availableSources: .init(hasNearbyPassage: true, hasBookIndex: true, hasPastThoughts: true),
+            previousAgentAskedQuestion: true
+        )
+        let fallback = DeterministicReaderContextRouter().result(for: input, reason: .modelFailure, detail: "network")
+        #expect(fallback.usedFallback)
+        #expect(fallback.plan.intent == .unclear)
+        #expect(fallback.plan.nearbyRequested)
+        #expect(fallback.plan.bookRequest?.query == "兜底计划的查询文本")
+        #expect(fallback.plan.pastThoughtRequest != nil)
+        #expect(fallback.plan.response.posture == .respondOnly, "hard conversation rule baked into fallback")
+
+        let (validated, corrections) = SemanticPlanValidator().validate(fallback.plan, input: input)
+        #expect(corrections.isEmpty)
+        let executionPlan = ContextPolicyCompiler().compile(validated, input: input)
+        #expect(executionPlan.book?.evidenceLimit == ContextPolicyCompiler.evidenceLimit(for: .traceConcept))
+        #expect(executionPlan.pastThought?.evidenceLimit == 1)
+        #expect(executionPlan.responseGuidance.allowQuestion == false)
     }
 }
 

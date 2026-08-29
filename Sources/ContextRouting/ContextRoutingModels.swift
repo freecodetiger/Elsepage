@@ -137,6 +137,11 @@ public struct ResponseGuidance: Hashable, Codable, Sendable {
     }
 }
 
+/// Legacy persisted plan shape (planner schema v1). No longer produced by the
+/// LLM path — the router emits `SemanticContextPlan` — but kept intact because
+/// `ContextPlanTrace` embeds it, and every historical routingTraces row must
+/// keep decoding. New traces also carry this shape (compiled from the
+/// `ContextExecutionPlan`) so Settings diagnostics decode unchanged.
 public struct ReaderContextPlan: Hashable, Codable, Sendable {
     public let intent: ReflectionIntent
     public let nearbyPassage: NearbyPassagePlan
@@ -199,6 +204,9 @@ public struct ContextBudget: Hashable, Codable, Sendable {
     }
 }
 
+/// Legacy validated-plan shape (planner schema v1). Kept as the persisted
+/// trace representation of a `ContextExecutionPlan`; runtime code consumes the
+/// execution plan directly.
 public struct ValidatedContextPlan: Hashable, Codable, Sendable {
     public let intent: ReflectionIntent
     public let nearbyPassage: NearbyPassagePlan
@@ -221,7 +229,10 @@ public struct ValidatedContextPlan: Hashable, Codable, Sendable {
 
 public enum RoutingFallbackReason: String, Hashable, Codable, Sendable { case invalidStructuredOutput, modelFailure }
 public struct ContextRoutingResult: Hashable, Sendable {
-    public let plan: ReaderContextPlan
+    /// The strict semantic plan (v2): either decoded from the LLM's wire plan or
+    /// produced by the deterministic fallback. Both flow through the same
+    /// validator + policy compiler.
+    public let plan: SemanticContextPlan
     public let usedFallback: Bool
     public let fallbackReason: RoutingFallbackReason?
     /// Granular fallback cause (e.g. the underlying `AgentFailure` name) when
@@ -229,19 +240,24 @@ public struct ContextRoutingResult: Hashable, Sendable {
     /// independent of the AgentRuntime error type's identity.
     public let fallbackDetail: String?
     public let tokenUsage: TokenUsage?
+    /// Model calls spent decoding the plan (1 = clean decode, 2 = repair used).
+    /// Feeds repair/fallback-rate observability without expanding retries.
+    public let decodeAttempts: Int?
 
     public init(
-        plan: ReaderContextPlan,
+        plan: SemanticContextPlan,
         usedFallback: Bool,
         fallbackReason: RoutingFallbackReason?,
         fallbackDetail: String? = nil,
-        tokenUsage: TokenUsage? = nil
+        tokenUsage: TokenUsage? = nil,
+        decodeAttempts: Int? = nil
     ) {
         self.plan = plan
         self.usedFallback = usedFallback
         self.fallbackReason = fallbackReason
         self.fallbackDetail = fallbackDetail
         self.tokenUsage = tokenUsage
+        self.decodeAttempts = decodeAttempts
     }
 }
 
@@ -258,6 +274,11 @@ extension Duration {
 /// timing. Persisted as derived observability data — it intentionally stores plan
 /// summaries, statistics, durations, evidence IDs and token usage, never raw
 /// user text or the full Reflection body (ADR 0001).
+///
+/// Plan snapshots keep the v1 persisted shapes (`ReaderContextPlan` /
+/// `ValidatedContextPlan`) so every historical row keeps decoding; v2 adds the
+/// schema version, the validator's corrections and the router's decode-attempt
+/// count as optional fields (nil on legacy rows).
 public struct ContextPlanTrace: Hashable, Codable, Sendable {
     public let id: UUID
     /// `ReflectionID.description` of the reflection being replied to.
@@ -280,6 +301,12 @@ public struct ContextPlanTrace: Hashable, Codable, Sendable {
     public let routingTokenUsage: TokenUsage?
     public let replyTokenUsage: TokenUsage?
     public let pipelineMetrics: ContextPipelineMetrics?
+    /// Planner wire-schema version (v2 onward); nil on legacy rows.
+    public let planSchemaVersion: Int?
+    /// Corrections `SemanticPlanValidator` applied to the proposed plan.
+    public let validationCorrections: [String]?
+    /// Model calls the router spent decoding the plan (1 = clean, 2 = repaired).
+    public let routingDecodeAttempts: Int?
 
     public init(
         id: UUID = UUID(),
@@ -297,7 +324,10 @@ public struct ContextPlanTrace: Hashable, Codable, Sendable {
         connectedReflectionID: String? = nil,
         routingTokenUsage: TokenUsage? = nil,
         replyTokenUsage: TokenUsage? = nil,
-        pipelineMetrics: ContextPipelineMetrics? = nil
+        pipelineMetrics: ContextPipelineMetrics? = nil,
+        planSchemaVersion: Int? = nil,
+        validationCorrections: [String]? = nil,
+        routingDecodeAttempts: Int? = nil
     ) {
         self.id = id
         self.reflectionID = reflectionID
@@ -315,6 +345,9 @@ public struct ContextPlanTrace: Hashable, Codable, Sendable {
         self.routingTokenUsage = routingTokenUsage
         self.replyTokenUsage = replyTokenUsage
         self.pipelineMetrics = pipelineMetrics
+        self.planSchemaVersion = planSchemaVersion
+        self.validationCorrections = validationCorrections
+        self.routingDecodeAttempts = routingDecodeAttempts
     }
 }
 
@@ -325,6 +358,7 @@ extension ContextPlanTrace {
         case routingDurationSeconds, retrievalDurationSeconds, replyDurationSeconds
         case selectedBookEvidenceIDs, connectedReflectionID, routingTokenUsage, replyTokenUsage
         case pipelineMetrics
+        case planSchemaVersion, validationCorrections, routingDecodeAttempts
     }
 
     public init(from decoder: Decoder) throws {
@@ -345,6 +379,9 @@ extension ContextPlanTrace {
         routingTokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .routingTokenUsage)
         replyTokenUsage = try container.decodeIfPresent(TokenUsage.self, forKey: .replyTokenUsage)
         pipelineMetrics = try container.decodeIfPresent(ContextPipelineMetrics.self, forKey: .pipelineMetrics)
+        planSchemaVersion = try container.decodeIfPresent(Int.self, forKey: .planSchemaVersion)
+        validationCorrections = try container.decodeIfPresent([String].self, forKey: .validationCorrections)
+        routingDecodeAttempts = try container.decodeIfPresent(Int.self, forKey: .routingDecodeAttempts)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -365,6 +402,9 @@ extension ContextPlanTrace {
         try container.encodeIfPresent(routingTokenUsage, forKey: .routingTokenUsage)
         try container.encodeIfPresent(replyTokenUsage, forKey: .replyTokenUsage)
         try container.encodeIfPresent(pipelineMetrics, forKey: .pipelineMetrics)
+        try container.encodeIfPresent(planSchemaVersion, forKey: .planSchemaVersion)
+        try container.encodeIfPresent(validationCorrections, forKey: .validationCorrections)
+        try container.encodeIfPresent(routingDecodeAttempts, forKey: .routingDecodeAttempts)
     }
 }
 

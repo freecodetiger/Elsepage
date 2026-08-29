@@ -15,14 +15,10 @@ import Testing
         excerpt: "书的段落内容", locator: locator, score: 0.9)
     let nearby = NearbyPassageCandidate(text: "当前读到的原文片段", sourceID: "nearby-source", locator: locator)
 
-    let plan = ValidatedContextPlan(
-        intent: .conceptualQuestion, nearbyPassage: .include, bookRetrieval: nil, pastThoughtRetrieval: nil,
-        responseGuidance: .init(targetLength: .medium, allowQuestion: true, shouldNaturallyEnd: false),
-        budget: ContextBudget(totalCharacters: 6_000, nearbyCharacters: 1_400, bookEvidenceCharacters: 2_800, pastThoughtCharacters: 600, conversationCharacters: 1_200)
-    )
+    let budget = ContextBudget(totalCharacters: 6_000, nearbyCharacters: 1_400, bookEvidenceCharacters: 2_800, pastThoughtCharacters: 600, conversationCharacters: 1_200)
     let result = ContextAssembler().assemble(
         nearby: nearby, bookEvidence: [book], previousReflection: reflection, memories: [memory],
-        reflectionBookID: reflection.bookID, plan: plan
+        reflectionBookID: reflection.bookID, budget: budget
     )
     // Source priority: nearby > bookPassage > pastReflection > memory.
     #expect(result.evidence.map(\.kind) == [.nearbyPassage, .bookPassage, .pastReflection, .pastReflection])
@@ -35,14 +31,10 @@ import Testing
     let reflection = Reflection(bookID: BookID(), originalText: "过去的想法", inputKind: .text)
     let memory = ReaderMemory(kind: .semantic, claim: "长期记忆", confidence: 0.8, status: .active)
     // emotionalRecord: pastThought budget 0 → reflection + memory candidates are skipped.
-    let plan = ValidatedContextPlan(
-        intent: .emotionalRecord, nearbyPassage: .omit, bookRetrieval: nil, pastThoughtRetrieval: nil,
-        responseGuidance: .init(targetLength: .short, allowQuestion: false, shouldNaturallyEnd: true),
-        budget: ContextBudget(totalCharacters: 6_000, nearbyCharacters: 600, bookEvidenceCharacters: 0, pastThoughtCharacters: 0, conversationCharacters: 1_800)
-    )
+    let budget = ContextBudget(totalCharacters: 6_000, nearbyCharacters: 600, bookEvidenceCharacters: 0, pastThoughtCharacters: 0, conversationCharacters: 1_800)
     let result = ContextAssembler().assemble(
         nearby: nil, bookEvidence: [], previousReflection: reflection, memories: [memory],
-        reflectionBookID: reflection.bookID, plan: plan
+        reflectionBookID: reflection.bookID, budget: budget
     )
     #expect(result.evidence.isEmpty)
     #expect(result.stats.usedCharacters == 0)

@@ -1,6 +1,7 @@
 # Context Engineering 演进 — 系统规范
 
 > **状态**:已实施(2026-08-27 完成 P1/P2/P4/P5/P6/七/八 全部 Phase,详见根目录 `ARCHITECTURE.md` 与提交 75670a9…6777939)。P3 Router Fast Path 与 P6 ANN/HNSW 明确未做(见"十")。
+> **后续演进**:2026-08-29 完成 Context Planner 协议 v2 重构(LLM 语义意图 / 代码执行策略,`SemanticPlanValidator` + `ContextPolicyCompiler`),持久决策见 `docs/exec-plans/active/context-planner-protocol-refactor.md`。本文中 P1 的"推荐数据模型"已被 v2 域模型取代,以源码和新文档为准。
 > **与现状的关系**:本文描述的是**目标形态**,不是当前实现。当前实现的权威快照见根目录 `ARCHITECTURE.md`(漂移快照,非权威真相)。
 > **约束**:若源码/现有架构 invariant 与本文冲突,**以源码和现有 invariant 为准**,不要为了迎合本文强行修改正确设计。
 >

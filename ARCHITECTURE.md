@@ -2,7 +2,7 @@
 
 > 俯视图:从架构视角审视当前 Agent 编排。**忠实于代码现状**(截至 `develop` 分支),节点与边界均以源码为据。
 >
-> 结论先行:**3 个 LLM 子图**(ReaderAgent / ContextPlanner / Polish),共享 1 个有界执行运行时,背后是 2 个模型适配器(chat / embeddings / rerank)+ 本地 GRDB 持久化 + 1 个 **Context Engineering 层**(确定性检索/去重/预算/组装,非 LLM)。确定性服务(校验、兜底路由、引用验证、small-to-big、candidate ranking)与 LLM 节点严格分离。
+> 结论先行:**3 个 LLM 子图**(ReaderAgent / ContextPlanner / Polish),共享 1 个有界执行运行时,背后是 2 个模型适配器(chat / embeddings / rerank)+ 本地 GRDB 持久化 + 1 个 **Context Engineering 层**(确定性检索/去重/预算/组装,非 LLM)。确定性服务(校验、策略编译、兜底路由、引用验证、small-to-big、candidate ranking)与 LLM 节点严格分离。Planner 协议 v2:**LLM 决定语义意图,代码决定执行策略**(`SemanticPlanValidator` + `ContextPolicyCompiler`)。
 
 ---
 
@@ -14,7 +14,7 @@ flowchart TD
 
     subgraph AGENTS["Agent 编排层 (3 个 LLM 子图)"]
         RA["ReaderAgent<br/>主回答 Agent<br/>budget: readerReply<br/>(1 call / 45s 墙钟 / 1000 output tok)"]
-        ROUTER["LLMReaderContextRouter<br/>Context Planner 子图<br/>budget: 1 call / 8s / 500 tok"]
+        ROUTER["LLMReaderContextRouter<br/>Context Planner 子图 (wire schema v2)<br/>budget: 1 call / 8s / 800 tok"]
         POLISH["TranscriptPolishService<br/>语音润色子图<br/>1 call / 无 output 上限"]
     end
 
@@ -64,7 +64,7 @@ flowchart TD
 
 **说明**
 - 三个 LLM 子图各自独立、边界清晰:Planner 是 ReaderAgent 的**前置子图**;Polish 完全独立。
-- **Context Engineering 是确定性层**:检索、扩展、防剧透、去重、预算、组装全部是代码,不押在 LLM 上。`AgentCitationValidator`、`ContextPlanValidator`、`DeterministicReaderContextRouter`、`SmallToBigExpander`、`ContextCandidateRanker` 都是确定性服务。
+- **Context Engineering 是确定性层**:检索、扩展、防剧透、去重、预算、组装全部是代码,不押在 LLM 上。`AgentCitationValidator`、`SemanticPlanValidator`、`ContextPolicyCompiler`、`DeterministicReaderContextRouter`、`SmallToBigExpander`、`ContextCandidateRanker` 都是确定性服务。
 - `AgentExecutor` 是三个节点**共用**的有界执行器;`ModelClientFactory`(BYOK)在运行期解析密钥。
 - 防剧透边界(`ReadingBoundary`)在检索层与扩展层双重强制,不依赖 LLM 节点。
 
@@ -85,17 +85,19 @@ flowchart TD
     CAND --> SESS["SessionContextBuilder.build<br/>session 区间 / 划线 / 批注 / 书内过往反思"]
     SESS --> RIN["组装 ContextRoutingInput<br/>interactionMode / 当前反思 / 最近6条对话 / 阅读状态 / 可用源 / 上轮是否提问"]
 
-    RIN --> ROUTE["→ 子图B: LLMReaderContextRouter.route<br/>(计划含 denseQuery/lexicalTerms/retrievalMode/记忆源)"]
-    ROUTE --> VALID["ContextPlanValidator.validate<br/>clamp / trim / 按 intent 分配预算 / 强制的回复规则"]
+    RIN --> ROUTE["→ 子图B: LLMReaderContextRouter.route<br/>(语义计划: intent / 请求来源 / purpose / scope / 查询改写)"]
+    ROUTE --> VALID["SemanticPlanValidator.validate<br/>可用性门控 / 空 query 修复 / 强对话规则<br/>→ SemanticContextPlan + corrections"]
 
-    VALID --> CONN{"plan.pastThoughtRetrieval?"}
+    VALID --> COMPILER["ContextPolicyCompiler.compile<br/>证据数 / 检索策略 / 预算 按 intent+purpose 查表<br/>→ ContextExecutionPlan"]
+
+    COMPILER --> CONN{"executionPlan.pastThought?"}
     CONN -->|是| SC["ReflectionRetriever<br/>lexical + 独立 semantic 召回 (RRF 融合)<br/>同书优先, 否则跨书<br/>连接持久化"]
     CONN -->|否| NOC
     SC --> NOC["yield .contextPrepared"]
 
-    NOC --> MEM["MemoryRetriever<br/>lexical + semantic 融合, topN 2<br/>仅证据, 不建连接"]
+    NOC --> MEM["MemoryRetriever<br/>lexical + semantic 融合, topN 2 (编译期系统策略)<br/>仅证据, 不建连接"]
 
-    NOC --> BOOK{"plan.bookRetrieval && 有边界?"}
+    NOC --> BOOK{"executionPlan.book && 有边界?"}
     BOOK -->|是| BUILD["ReaderAgentContextBuilder.build<br/>→ 子图C: Child 检索 + Small-to-Big 扩展<br/>无边界 → 空证据(防剧透保守默认)"]
     BOOK -->|否| NOB
 
@@ -110,42 +112,57 @@ flowchart TD
     CITE --> PERSIST["持久化 agent 消息 + responseEvidence + citations"]
     PERSIST --> YDONE["yield .citationsValidated + .completed"]
     YDONE --> DISC["yield .contextDisclosed<br/>(replyTruncated / dedup 数 / fallback 信息)"]
-    DISC --> TRACE["saveTrace<br/>plan + 时长 + token 用量 + ContextPipelineMetrics<br/>(扩展数 / 去重数 / 实际 token / 语义缓存 hit-miss)"]
+    DISC --> TRACE["saveTrace<br/>plan + 时长 + token 用量 + ContextPipelineMetrics<br/>(扩展数 / 去重数 / 实际 token / 语义缓存 hit-miss<br/>+ planSchemaVersion / validationCorrections / decodeAttempts)"]
 ```
 
-**代码锚点**:`Sources/ReaderAgent/ReaderAgent.swift` · `ReaderAgentPolicy.swift` · `ReaderAgentSystemPrompt.swift` · `SessionContextBuilder.swift` · `AgentCitationValidator.swift` · `Sources/ContextEngineering/ContextAssembler.swift`
+**代码锚点**:`Sources/ReaderAgent/ReaderAgent.swift` · `ReaderAgentPolicy.swift` · `ReaderAgentSystemPrompt.swift` · `SessionContextBuilder.swift` · `AgentCitationValidator.swift` · `Sources/ContextEngineering/ContextAssembler.swift` · `Sources/ContextRouting/`(语义计划 / 校验 / 策略编译)
 
 ---
 
-## 3. 子图 B:上下文 Planner 子图(ContextRouter)
+## 3. 子图 B:上下文 Planner 子图(语义规划 → 校验 → 策略编译)
+
+Planner 协议 v2。中心原则:**LLM 决定语义意图,代码决定执行策略**。单次 LLM 调用不变;LLM 不再输出任何数值检索参数。
 
 ```mermaid
 flowchart TD
     IN["ContextRoutingInput<br/>interactionMode / currentReflection<br/>recentConversation(≤6条×500字) / currentReading<br/>availableSources / previousAgentAskedQuestion"]
     IN --> ENC["JSONEncoder 序列化输入"]
-    ENC --> REQ["AgentInput<br/>system: reader-context-router-v1 prompt<br/>temperature 0<br/>responseFormat: .jsonObject ← 能力门控"]
-    REQ --> EXEC["AgentExecutor<br/>budget: 1 call / 8s / 500 tok"]
+    ENC --> REQ["AgentInput<br/>system: reader-context-router-v2 prompt<br/>temperature 0<br/>responseFormat: .jsonObject ← 能力门控"]
+    REQ --> EXEC["AgentExecutor<br/>budget: 1 call / 8s / 800 tok"]
 
     EXEC --> COMP{"completed?"}
-    COMP -->|"decode(ReaderContextPlan) 成功"| OK["ContextRoutingResult<br/>plan + usedFallback=false"]
-    COMP -->|"decode 失败"| STRIP["strippingJSONFences<br/>剥 Markdown 代码围栏后重试一次"]
-    STRIP -->|成功| OK
-    STRIP -->|仍失败| FB["DeterministicReaderContextRouter<br/>规则兜底"]
-    EXEC -->|".failed / .cancelled / .budgetExceeded"| FB
+    COMP -->|"decode(PlannerWirePlan) 成功"| NORM["normalized()<br/>trim / 240 上限 / denseQuery·lexicalTerms 回退 query<br/>→ SemanticContextPlan"]
+    COMP -->|"decode 失败"| STRIP["strippingJSONFences<br/>剥 Markdown 代码围栏后重试一次<br/>(decodeAttempts 计入 trace)"]
+    STRIP -->|成功| NORM
+    STRIP -->|仍失败| FB["DeterministicReaderContextRouter<br/>规则兜底 → 同一 SemanticContextPlan 域模型"]
+    EXEC -->|".failed / .cancelled / .truncated"| FB
 
-    OK --> VALID["ContextPlanValidator.validate<br/>(下游, 见子图A)"]
-    FBR --> VALID
+    NORM --> V["SemanticPlanValidator.validate<br/>来源可用性门控 / 空 query 修复 / ≤1 请求每源<br/>previousAgentAskedQuestion → 禁止提问(硬规则)<br/>reflection 模式 long→medium<br/>→ 修正后 SemanticContextPlan + corrections"]
+    FB --> V
 
-    subgraph PLAN["ReaderContextPlan (增强, 全可选字段)"]
-        P1["intent / nearbyPassage / responseGuidance / rationale"]
-        P2["bookRetrieval: query + denseQuery? + lexicalTerms?<br/>+ retrievalMode?(dense|lexical|hybrid)<br/>+ candidateLimit? + useReranker? + expansionMode?"]
-        P3["pastThoughtRetrieval: query + maxCount"]
-        P4["memoryRetrieval: query + maxCount (仅证据)"]
-    end
-    REQ --> PLAN
+    V --> C["ContextPolicyCompiler.compile<br/>evidenceLimit 按 purpose 查表(2/3/4)<br/>retrievalMode=hybrid / candidateLimit=10 / useReranker=true / boundedWindow<br/>intent → ContextBudget 查表<br/>posture → ResponseGuidance<br/>→ ContextExecutionPlan (+v1 兼容快照)"]
 ```
 
-**代码锚点**:`Sources/ContextRouting/LLMReaderContextRouter.swift`(含 DeterministicRouter 兜底)· `ContextRoutingModels.swift` · `ContextPlanValidator.swift`
+**Wire schema v2(PlannerWirePlan,`reader-context-router-v2`)**:
+
+```jsonc
+{
+  "intent": "emotionalRecord | passageObservation | authorDisagreement | conceptualQuestion | personalConnection | conversationContinuation | unclear",
+  "nearbyPassage": "include | omit",
+  "bookRetrieval": null 或 { "query", "purpose": "clarifyCurrentPassage | findEarlierSupport | findEarlierContrast | traceConcept | verifyBookFact",
+                             "scope": "currentSection | currentChapter | readSoFar", "denseQuery?", "lexicalTerms?" },
+  "pastThoughtRetrieval": null 或 { "query", "purpose": "findContinuation | findChange | findContradiction | findRecurringQuestion" },
+  "response": { "length": "short | medium | long", "posture": "respondOnly | mayAskQuestion" }
+}
+```
+
+**v1 → v2 字段决策**(以源码消费为据):
+- 从 LLM 面移除:`maximumEvidenceCount`、`candidateLimit`、`useReranker`、`expansionMode`、`expansionMaxTokens`、`retrievalMode`、`memoryRetrieval`、`rationale`、`shouldNaturallyEnd` — 除 `denseQuery/lexicalTerms` 外全部无下游执行消费(仅曾流入指标/trace),记忆检索本就在路由前无条件执行。
+- `allowQuestion` → `posture: respondOnly | mayAskQuestion`(闭集姿态,硬规则仍由代码强制)。
+- `denseQuery/lexicalTerms` 保留(真实语义改写),执行策略中仍作为指标观测是否定制。
+- 持久化兼容:`routingTraces` 行内嵌的 v1 形状(`ReaderContextPlan`/`ValidatedContextPlan`)原样保留,新行由 `ContextExecutionPlan` 编译出同形状快照;新增可选字段 `planSchemaVersion` / `validationCorrections` / `routingDecodeAttempts`(旧行为 nil)。
+
+**代码锚点**:`Sources/ContextRouting/LLMReaderContextRouter.swift`(含 DeterministicReaderContextRouter 兜底)· `PlannerWirePlan.swift` · `SemanticContextPlan.swift` · `SemanticPlanValidator.swift` · `ContextPolicyCompiler.swift` · `ContextRoutingModels.swift`
 
 ---
 

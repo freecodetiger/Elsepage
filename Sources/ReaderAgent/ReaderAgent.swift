@@ -78,7 +78,8 @@ public struct ReaderAgent: Sendable {
     private let contextBuilder: ReaderAgentContextBuilder?
     private let sessionContextBuilder: SessionContextBuilder?
     private let contextRouter: any ReaderContextRouting
-    private let contextValidator: ContextPlanValidator
+    private let planValidator: SemanticPlanValidator
+    private let policyCompiler: ContextPolicyCompiler
     private let traceRepository: (any RoutingTraceRepository)?
     private let memories: (any MemoryRepository)?
     /// Optional semantic recall lane for reflection/memory retrieval (Phase 5).
@@ -93,7 +94,8 @@ public struct ReaderAgent: Sendable {
         contextBuilder: ReaderAgentContextBuilder? = nil,
         sessionContextBuilder: SessionContextBuilder? = nil,
         contextRouter: any ReaderContextRouting = LLMReaderContextRouter(),
-        contextValidator: ContextPlanValidator = .init(),
+        planValidator: SemanticPlanValidator = .init(),
+        policyCompiler: ContextPolicyCompiler = .init(),
         traceRepository: (any RoutingTraceRepository)? = nil,
         memories: (any MemoryRepository)? = nil,
         semanticRanking: (any SemanticRanking)? = nil
@@ -105,7 +107,8 @@ public struct ReaderAgent: Sendable {
         self.contextBuilder = contextBuilder
         self.sessionContextBuilder = sessionContextBuilder
         self.contextRouter = contextRouter
-        self.contextValidator = contextValidator
+        self.planValidator = planValidator
+        self.policyCompiler = policyCompiler
         self.traceRepository = traceRepository
         self.memories = memories
         self.semanticRanking = semanticRanking
@@ -191,11 +194,6 @@ public struct ReaderAgent: Sendable {
                         excluding: reflection.id
                     ) ?? .empty
                     let routingText = followUp?.text ?? reflection.originalText
-                    let matchedMemories = await MemoryRetriever(semantic: semanticRanking).matchingMemories(
-                        routingText: routingText,
-                        in: memories,
-                        topN: 2
-                    )
                     let routingInput = ContextRoutingInput(
                         interactionMode: followUp == nil ? .reflection : .conversation,
                         currentReflection: routingText,
@@ -222,16 +220,27 @@ public struct ReaderAgent: Sendable {
                     let routingStart = clock.now
                     let routingResult = await contextRouter.route(routingInput, using: client)
                     let routingDuration = routingStart.duration(to: clock.now)
-                    let plan = contextValidator.validate(routingResult.plan, input: routingInput)
+                    // Planner protocol v2: the LLM (or fallback) proposes semantic
+                    // intent; code validates it against runtime state, then
+                    // deterministically compiles the execution policy.
+                    let (validatedSemanticPlan, corrections) = planValidator.validate(routingResult.plan, input: routingInput)
+                    let executionPlan = policyCompiler.compile(validatedSemanticPlan, input: routingInput)
+                    // Deterministic system policy: long-term memory is always
+                    // consulted as evidence (never a plan-driven decision).
+                    let matchedMemories = await MemoryRetriever(semantic: semanticRanking).matchingMemories(
+                        routingText: routingText,
+                        in: memories,
+                        topN: executionPlan.memory.topN
+                    )
                     let connection: ReflectionConnection?
-                    if let pastPlan = plan.pastThoughtRetrieval {
+                    if let pastPolicy = executionPlan.pastThought {
                         // Same-book preference is strict (WS3): a same-book match wins
                         // even over a stronger cross-book one. Each lane fuses lexical +
                         // semantic when a SemanticRanking is configured.
-                        if let sameBookMatch = await strongestConnection(for: reflection, query: pastPlan.query, among: sameBookCandidates) {
+                        if let sameBookMatch = await strongestConnection(for: reflection, query: pastPolicy.query, among: sameBookCandidates) {
                             connection = sameBookMatch
                         } else {
-                            connection = await strongestConnection(for: reflection, query: pastPlan.query, among: crossBookCandidates)
+                            connection = await strongestConnection(for: reflection, query: pastPolicy.query, among: crossBookCandidates)
                         }
                     } else {
                         connection = nil
@@ -241,14 +250,14 @@ public struct ReaderAgent: Sendable {
                     let prior = connection.flatMap { id in allCandidates.first { $0.id == id.sourceReflectionID } }
                     let retrievalStart = clock.now
                     let bookContext: ReaderAgentBookContext?
-                    if let contextBuilder, let retrieval = plan.bookRetrieval {
+                    if let contextBuilder, let bookPolicy = executionPlan.book {
                         bookContext = try? await contextBuilder.build(
                             bookID: reflection.bookID,
-                            reflection: retrieval.query,
+                            reflection: bookPolicy.query,
                             currentLocator: currentLocator,
-                            evidenceLimit: retrieval.maximumEvidenceCount,
-                            characterBudget: plan.budget.bookEvidenceCharacters,
-                            scope: retrieval.preferredScope == .readSoFar ? .readSoFar : .currentResource
+                            evidenceLimit: bookPolicy.evidenceLimit,
+                            characterBudget: executionPlan.budget.bookEvidenceCharacters,
+                            scope: bookPolicy.scope == .readSoFar ? .readSoFar : .currentResource
                         )
                     } else {
                         bookContext = nil
@@ -256,9 +265,9 @@ public struct ReaderAgent: Sendable {
                     let messageID = UUID()
                     // Context Engineering layer owns source competition + budgeting:
                     // nearby/book/reflection/memory become candidates, get deduped,
-                    // ranked by source priority, and packed under the plan's budgets.
+                    // ranked by source priority, and packed under the compiled budgets.
                     let nearbyCandidate: NearbyPassageCandidate?
-                    if plan.nearbyPassage == .include,
+                    if executionPlan.nearbyIncluded,
                        let source = evidence.first(where: { $0.locator != nil }),
                        let locator = source.locator {
                         let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
@@ -273,7 +282,7 @@ public struct ReaderAgent: Sendable {
                         previousReflection: prior,
                         memories: matchedMemories,
                         reflectionBookID: reflection.bookID,
-                        plan: plan
+                        budget: executionPlan.budget
                     )
                     let assemblyDuration = assemblyStart.duration(to: clock.now)
                     let responseEvidence = assembly.evidence.enumerated().map { offset, item in
@@ -282,16 +291,16 @@ public struct ReaderAgent: Sendable {
                             excerpt: item.excerpt, locator: item.locator)
                     }
                     // Context-pipeline observability (all optional, decode-safe).
-                    let bookPlan = plan.bookRetrieval
+                    let bookPolicy = executionPlan.book
                     var pipelineMetrics = ContextPipelineMetrics()
-                    pipelineMetrics.retrievalMode = bookPlan?.retrievalMode
-                    pipelineMetrics.denseQueryCustomized = bookPlan.flatMap { plan in plan.denseQuery.map { $0 != plan.query } }
-                    pipelineMetrics.lexicalTermsCustomized = bookPlan.flatMap { plan in plan.lexicalTerms.map { $0 != plan.query } }
+                    pipelineMetrics.retrievalMode = bookPolicy?.retrievalMode
+                    pipelineMetrics.denseQueryCustomized = bookPolicy.map { $0.denseQuery != $0.query }
+                    pipelineMetrics.lexicalTermsCustomized = bookPolicy.map { $0.lexicalTerms != $0.query }
                     pipelineMetrics.expandedEvidenceCount = bookContext?.evidence.count
                     pipelineMetrics.reflectionEvidenceCount = prior == nil ? nil : 1
                     pipelineMetrics.memoryEvidenceCount = matchedMemories.isEmpty ? nil : matchedMemories.count
                     pipelineMetrics.deduplicatedCount = assembly.stats.deduplicatedCount
-                    pipelineMetrics.contextTokenBudget = plan.budget.totalCharacters
+                    pipelineMetrics.contextTokenBudget = executionPlan.budget.totalCharacters
                     pipelineMetrics.actualContextTokens = assembly.stats.usedCharacters
                     pipelineMetrics.assemblyDurationSeconds = Self.seconds(assemblyDuration)
                     pipelineMetrics.semanticCacheHits = semanticRanking?.cacheHitMiss.hits
@@ -316,11 +325,11 @@ public struct ReaderAgent: Sendable {
                             previousReflection: prior,
                             bookEvidence: bookContext?.evidence ?? [],
                             responseEvidence: responseEvidence,
-                            includeNearbyPassage: plan.nearbyPassage == .include,
-                            responseGuidance: plan.responseGuidance,
-                            nearbyCharacterBudget: plan.budget.nearbyCharacters,
-                            pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters,
-                            conversationCharacterBudget: plan.budget.conversationCharacters,
+                            includeNearbyPassage: executionPlan.nearbyIncluded,
+                            responseGuidance: executionPlan.responseGuidance,
+                            nearbyCharacterBudget: executionPlan.budget.nearbyCharacters,
+                            pastThoughtCharacterBudget: executionPlan.budget.pastThoughtCharacters,
+                            conversationCharacterBudget: executionPlan.budget.conversationCharacters,
                             sessionContext: sessionContext
                         )
                     ) {
@@ -375,7 +384,7 @@ public struct ReaderAgent: Sendable {
                     let replyDuration = replyStart.duration(to: clock.now)
                     if completedMessage != nil {
                         continuation.yield(.contextDisclosed(ContextDisclosure(
-                            includedNearbyPassage: plan.nearbyPassage == .include,
+                            includedNearbyPassage: executionPlan.nearbyIncluded,
                             retrievedBookEvidenceCount: bookContext?.evidence.count ?? 0,
                             connectedReflectionID: connection?.sourceReflectionID,
                             usedFallback: routingResult.usedFallback,
@@ -388,7 +397,8 @@ public struct ReaderAgent: Sendable {
                         await saveTrace(
                             reflection: reflection,
                             routingResult: routingResult,
-                            plan: plan,
+                            executionPlan: executionPlan,
+                            corrections: corrections,
                             bookContext: bookContext,
                             connection: connection,
                             routingDuration: routingDuration,
@@ -412,7 +422,8 @@ public struct ReaderAgent: Sendable {
     private func saveTrace(
         reflection: Reflection,
         routingResult: ContextRoutingResult,
-        plan: ValidatedContextPlan,
+        executionPlan: ContextExecutionPlan,
+        corrections: [String],
         bookContext: ReaderAgentBookContext?,
         connection: ReflectionConnection?,
         routingDuration: Duration,
@@ -424,8 +435,8 @@ public struct ReaderAgent: Sendable {
         guard let traceRepository else { return }
         let trace = ContextPlanTrace(
             reflectionID: reflection.id.description,
-            proposedPlan: routingResult.plan,
-            validatedPlan: plan,
+            proposedPlan: executionPlan.legacyProposal,
+            validatedPlan: executionPlan.legacyValidatedPlan,
             usedFallback: routingResult.usedFallback,
             fallbackReason: routingResult.fallbackReason,
             fallbackDetail: routingResult.fallbackDetail,
@@ -436,7 +447,10 @@ public struct ReaderAgent: Sendable {
             connectedReflectionID: connection?.sourceReflectionID.description,
             routingTokenUsage: routingResult.tokenUsage,
             replyTokenUsage: replyUsage,
-            pipelineMetrics: pipelineMetrics
+            pipelineMetrics: pipelineMetrics,
+            planSchemaVersion: PlannerWirePlan.schemaVersion,
+            validationCorrections: corrections.isEmpty ? nil : corrections,
+            routingDecodeAttempts: routingResult.decodeAttempts
         )
         // Best-effort: a trace-save failure must never break the reply.
         try? await traceRepository.save(trace)

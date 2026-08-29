@@ -97,7 +97,7 @@ public struct BenchSampleRun: Codable, Sendable {
 /// Runs one bench sample through the same pipeline the app uses:
 ///
 ///   ContextRoutingInput (built like ReaderAgent.run)
-///     → LLMReaderContextRouter → ContextPlanValidator
+///     → LLMReaderContextRouter → SemanticPlanValidator → ContextPolicyCompiler
 ///     → ReflectionRetriever / MemoryRetriever (over sample history)
 ///     → ReaderAgentContextBuilder (over sample evidence)
 ///     → ContextAssembler → ReaderAgentPolicy.input
@@ -162,9 +162,6 @@ public struct BenchPipeline: Sendable {
             let memoryRepository = BenchMemoryRepository(sample.userHistory.memoryClaims, sampleID: sample.id)
 
             // --- Routing (same construction as ReaderAgent.run) ---
-            let matchedMemories = await MemoryRetriever().matchingMemories(
-                routingText: reflection.originalText, in: memoryRepository, topN: 2
-            )
             let routingInput = ContextRoutingInput(
                 interactionMode: .reflection,
                 currentReflection: reflection.originalText,
@@ -191,16 +188,21 @@ public struct BenchPipeline: Sendable {
             let routingStart = clock.now
             let routingResult = await LLMReaderContextRouter().route(routingInput, using: client)
             let routingSeconds = Self.seconds(from: routingStart, to: clock.now)
-            let plan = ContextPlanValidator().validate(routingResult.plan, input: routingInput)
+            let (validatedSemanticPlan, _) = SemanticPlanValidator().validate(routingResult.plan, input: routingInput)
+            let executionPlan = ContextPolicyCompiler().compile(validatedSemanticPlan, input: routingInput)
+            // Deterministic system policy: memory is always consulted as evidence.
+            let matchedMemories = await MemoryRetriever().matchingMemories(
+                routingText: reflection.originalText, in: memoryRepository, topN: executionPlan.memory.topN
+            )
 
             // --- Past-thought connection (WS3 same-book preference, as in ReaderAgent.run) ---
             var connection: ReflectionConnection?
-            if let pastPlan = plan.pastThoughtRetrieval {
-                if let sameBookMatch = await ReflectionRetriever().strongestMatch(for: pastPlan.query, among: sameBookCandidates) {
+            if let pastPolicy = executionPlan.pastThought {
+                if let sameBookMatch = await ReflectionRetriever().strongestMatch(for: pastPolicy.query, among: sameBookCandidates) {
                     connection = ReflectionConnection(
                         reflectionID: reflectionID, sourceReflectionID: sameBookMatch.reflection.id, relevance: sameBookMatch.relevance
                     )
-                } else if let crossBookMatch = await ReflectionRetriever().strongestMatch(for: pastPlan.query, among: crossBookCandidates) {
+                } else if let crossBookMatch = await ReflectionRetriever().strongestMatch(for: pastPolicy.query, among: crossBookCandidates) {
                     connection = ReflectionConnection(
                         reflectionID: reflectionID, sourceReflectionID: crossBookMatch.reflection.id, relevance: crossBookMatch.relevance
                     )
@@ -213,21 +215,21 @@ public struct BenchPipeline: Sendable {
             let contextBuilder = ReaderAgentContextBuilder(retriever: BenchBookRetriever(sample: sample, bookID: bookID), repository: repository)
             let retrievalStart = clock.now
             var bookContext: ReaderAgentBookContext?
-            if let retrieval = plan.bookRetrieval {
+            if let bookPolicy = executionPlan.book {
                 bookContext = try? await contextBuilder.build(
                     bookID: bookID,
-                    reflection: retrieval.query,
+                    reflection: bookPolicy.query,
                     currentLocator: locator,
-                    evidenceLimit: retrieval.maximumEvidenceCount,
-                    characterBudget: plan.budget.bookEvidenceCharacters,
-                    scope: retrieval.preferredScope == .readSoFar ? .readSoFar : .currentResource
+                    evidenceLimit: bookPolicy.evidenceLimit,
+                    characterBudget: executionPlan.budget.bookEvidenceCharacters,
+                    scope: bookPolicy.scope == .readSoFar ? .readSoFar : .currentResource
                 )
             }
             let retrievalSeconds = Self.seconds(from: retrievalStart, to: clock.now)
 
             // --- Assembly (real ContextAssembler, same inputs as ReaderAgent.run) ---
             var nearbyCandidate: NearbyPassageCandidate?
-            if plan.nearbyPassage == .include, let locator {
+            if executionPlan.nearbyIncluded, let locator {
                 let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
                 nearbyCandidate = text.isEmpty ? nil : NearbyPassageCandidate(
                     text: text, sourceID: currentEvidence.first?.id.uuidString.lowercased() ?? "", locator: locator
@@ -240,7 +242,7 @@ public struct BenchPipeline: Sendable {
                 previousReflection: prior,
                 memories: matchedMemories,
                 reflectionBookID: bookID,
-                plan: plan
+                budget: executionPlan.budget
             )
             let assemblySeconds = Self.seconds(from: assemblyStart, to: clock.now)
 
@@ -267,11 +269,11 @@ public struct BenchPipeline: Sendable {
                 previousReflection: prior,
                 bookEvidence: bookContext?.evidence ?? [],
                 responseEvidence: responseEvidence,
-                includeNearbyPassage: plan.nearbyPassage == .include,
-                responseGuidance: plan.responseGuidance,
-                nearbyCharacterBudget: plan.budget.nearbyCharacters,
-                pastThoughtCharacterBudget: plan.budget.pastThoughtCharacters,
-                conversationCharacterBudget: plan.budget.conversationCharacters,
+                includeNearbyPassage: executionPlan.nearbyIncluded,
+                responseGuidance: executionPlan.responseGuidance,
+                nearbyCharacterBudget: executionPlan.budget.nearbyCharacters,
+                pastThoughtCharacterBudget: executionPlan.budget.pastThoughtCharacters,
+                conversationCharacterBudget: executionPlan.budget.conversationCharacters,
                 sessionContext: sessionContext
             )
             let promptCharacterCount = input.messages.reduce(0) { $0 + $1.content.count }
@@ -332,7 +334,7 @@ public struct BenchPipeline: Sendable {
                     BenchSampleEvidence(id: $0.id, kind: $0.kind.rawValue, sourceID: $0.sourceID, title: $0.title, excerpt: $0.excerpt)
                 },
                 routing: BenchRoutingSummary(
-                    intent: plan.intent.rawValue,
+                    intent: executionPlan.intent.rawValue,
                     usedFallback: routingResult.usedFallback,
                     fallbackReason: routingResult.fallbackReason?.rawValue,
                     connectedPastReflectionID: connection?.sourceReflectionID.description,

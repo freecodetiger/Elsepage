@@ -123,10 +123,9 @@ import Testing
 }
 
 private func makeTrace(reflectionID: String, detail: String?, seconds: [Double], createdAt: Date = Date()) -> ContextPlanTrace {
-    let proposed = ReaderContextPlan(
-        intent: .passageObservation, nearbyPassage: .include, bookRetrieval: nil,
-        pastThoughtRetrieval: nil,
-        responseGuidance: .init(targetLength: .short, allowQuestion: false, shouldNaturallyEnd: true)
+    let semantic = SemanticContextPlan(
+        intent: .passageObservation, requests: [.nearby],
+        response: SemanticResponsePlan(length: .short, posture: .respondOnly)
     )
     let input = ContextRoutingInput(
         interactionMode: .reflection,
@@ -136,12 +135,13 @@ private func makeTrace(reflectionID: String, detail: String?, seconds: [Double],
         availableSources: .init(hasNearbyPassage: false, hasBookIndex: false, hasPastThoughts: false),
         previousAgentAskedQuestion: false
     )
-    let validated = ContextPlanValidator().validate(proposed, input: input)
+    let (validated, _) = SemanticPlanValidator().validate(semantic, input: input)
+    let execution = ContextPolicyCompiler().compile(validated, input: input)
     return ContextPlanTrace(
         reflectionID: reflectionID,
         createdAt: createdAt,
-        proposedPlan: proposed,
-        validatedPlan: validated,
+        proposedPlan: execution.legacyProposal,
+        validatedPlan: execution.legacyValidatedPlan,
         usedFallback: detail != nil,
         fallbackReason: detail != nil ? .modelFailure : nil,
         fallbackDetail: detail,
