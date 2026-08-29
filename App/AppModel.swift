@@ -51,6 +51,7 @@ final class AppModel {
             let journal = GRDBJournalRepository(database: database)
             let memories = GRDBMemoryRepository(database: database)
             let brain = GRDBBrainRepository(database: database)
+            let brainStore = GRDBBrainEmbeddingStore(database: database)
             let bookIndex = GRDBBookIndexRepository(database: database)
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
@@ -92,7 +93,13 @@ final class AppModel {
                 memories: memories,
                 // Reflection/Memory semantic recall lane (Phase 5): query-time embed
                 // behind a process-local cache; nil provider degrades to lexical.
-                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider)
+                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider),
+                // 大脑维护路径(v1.1 Phase 17):回复后异步投影到 Brain。
+                brainRetriever: BrainRetriever(items: brain, store: brainStore, embeddingProvider: makeEmbeddingProvider),
+                projection: BrainProjectionService(
+                    items: brain,
+                    retriever: BrainRetriever(items: brain, store: brainStore, embeddingProvider: makeEmbeddingProvider)
+                )
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
             // Re-checked every time a reflection sheet opens, so the polish button appears as soon

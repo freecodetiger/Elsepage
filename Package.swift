@@ -39,7 +39,7 @@ let package = Package(
         .target(name: "AchievementCore", dependencies: ["LibraryCore", "ReflectionCore"]),
         .target(name: "RetrievalCore", dependencies: ["LibraryCore", "ReaderCore"]),
         .target(name: "ContextEngineering", dependencies: ["BrainCore", "ContextRouting", "RetrievalCore", "ReflectionCore", "ReaderCore", "LibraryCore"]),
-        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "ContextRouting", "ContextEngineering", "ReaderCore", "ReflectionCore", "RetrievalCore"]),
+        .target(name: "ReaderAgent", dependencies: ["AgentRuntime", "BrainCore", "ContextRouting", "ContextEngineering", "ReaderCore", "ReflectionCore", "RetrievalCore"]),
         .target(name: "ModelProviders", dependencies: ["AgentRuntime", "RetrievalCore"]),
         .target(
             name: "Persistence",

@@ -84,6 +84,9 @@ public struct ReaderAgent: Sendable {
     /// Brain lane (phase 16): nil → the brain request face stays off and the
     /// validator drops any planned brain retrieval.
     private let brainRetriever: BrainRetriever?
+    /// 大脑维护路径(phase 17):回复持久化后异步观察;nil → 关闭。
+    /// Fire-and-forget——失败只影响 Brain,绝不影响回复。
+    private let projection: BrainProjectionService?
     private let traceRepository: (any RoutingTraceRepository)?
     private let memories: (any MemoryRepository)?
     /// Optional semantic recall lane for reflection/memory retrieval (Phase 5).
@@ -101,6 +104,7 @@ public struct ReaderAgent: Sendable {
         planValidator: SemanticPlanValidator = .init(),
         policyCompiler: ContextPolicyCompiler = .init(),
         brainRetriever: BrainRetriever? = nil,
+        projection: BrainProjectionService? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
         memories: (any MemoryRepository)? = nil,
         semanticRanking: (any SemanticRanking)? = nil
@@ -115,6 +119,7 @@ public struct ReaderAgent: Sendable {
         self.planValidator = planValidator
         self.policyCompiler = policyCompiler
         self.brainRetriever = brainRetriever
+        self.projection = projection
         self.traceRepository = traceRepository
         self.memories = memories
         self.semanticRanking = semanticRanking
@@ -400,6 +405,11 @@ public struct ReaderAgent: Sendable {
                             }
                             continuation.yield(.completed(message))
                             completedMessage = message
+                            // 大脑维护路径(phase 17):fire-and-forget。失败只
+                            // 影响 Brain,绝不阻塞/破坏回复。
+                            if let projection {
+                                Task { _ = await projection.observe(observation: routingText, reflectionID: reflection.id, using: client) }
+                            }
                         case .cancelled: continuation.yield(.cancelled)
                         case .failed(let failure): continuation.yield(.failed(.runtime(failure)))
                         case .runStarted, .modelStarted: break
