@@ -116,6 +116,19 @@ final class ThoughtsModel {
         )
     }
 
+    /// JRNL-01/02: persists the user's edit of an Agent-drafted "What I think"
+    /// bullet and refreshes the Journal. No-ops on unchanged or empty text.
+    func applyThoughtEdit(_ thought: JournalThought, newText: String) async {
+        let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != thought.thought else { return }
+        do {
+            try await journalService.applyUserEdit(thoughtID: thought.id, newText: trimmed)
+            await reload()
+        } catch {
+            errorMessage = "修改没能保存到本机。"
+        }
+    }
+
     private static func message(for failure: ReaderAgentFailure) -> String {
         switch failure {
         case .missingReflection: "找不到这条 Reflection。"

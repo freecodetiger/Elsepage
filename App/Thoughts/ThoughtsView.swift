@@ -190,7 +190,10 @@ struct ThoughtsView: View {
                     openConversation: {
                         selectedConversation = model.makeConversation(for: entry.reflection)
                     },
-                    openSource: openSource
+                    openSource: openSource,
+                    onEditThought: { thought, newText in
+                        Task { await model.applyThoughtEdit(thought, newText: newText) }
+                    }
                 )
             }
         }
