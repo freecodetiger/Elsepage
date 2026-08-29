@@ -41,6 +41,57 @@ public final class GRDBBrainRepository: BrainRepository, @unchecked Sendable {
     public func delete(id: BrainItemID) async throws {
         _ = try await db.writer.write { db in try BrainItemRecord.deleteOne(db, key: id.rawValue) }
     }
+
+    // MARK: Evidence (docs/brain.md §4)
+
+    public func evidence(for itemID: BrainItemID) async throws -> [BrainEvidence] {
+        try await db.writer.read { db in
+            try BrainEvidenceRecord
+                .filter(Column("brainItemID") == itemID.rawValue)
+                .order(Column("createdAt"), Column("sourceType"), Column("sourceID"))
+                .fetchAll(db)
+                .map { try $0.domain() }
+        }
+    }
+
+    public func attachEvidence(_ itemID: BrainItemID, source: BrainEvidenceSource, relation: EvidenceRelation, weight: Double) async throws {
+        try await db.writer.write { db in
+            try BrainEvidenceRecord(itemID: itemID, source: source, relation: relation, weight: weight, createdAt: Date())
+                .insert(db, onConflict: .ignore)
+        }
+    }
+
+    // MARK: Relations (docs/brain.md §5)
+
+    public func relations(of itemID: BrainItemID) async throws -> [BrainRelation] {
+        try await db.writer.read { db in
+            // Rows are stored in their canonical direction (relate() writes
+            // source→target as given); queries from either side return them
+            // unchanged so semantics like "question addresses thought" survive.
+            let rows = try BrainRelationRecord
+                .filter(Column("sourceItemID") == itemID.rawValue || Column("targetItemID") == itemID.rawValue)
+                .fetchAll(db)
+            return try rows
+                .map { try $0.domain() }
+                .sorted { lhs, rhs in
+                    if lhs.relation.rawValue != rhs.relation.rawValue { return lhs.relation.rawValue < rhs.relation.rawValue }
+                    return lhs.targetItemID.rawValue < rhs.targetItemID.rawValue
+                }
+        }
+    }
+
+    public func relate(source: BrainItemID, target: BrainItemID, relation: BrainRelationType, weight: Double) async throws {
+        guard source != target else { throw BrainItemValidationError.selfRelation }
+        try await db.writer.write { db in
+            try db.execute(
+                sql: """
+                INSERT OR REPLACE INTO brainItemRelations (sourceItemID, targetItemID, relation, weight, createdAt)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                arguments: [source.rawValue, target.rawValue, relation.rawValue, weight, Date()]
+            )
+        }
+    }
 }
 
 private struct BrainItemRecord: Codable, FetchableRecord, PersistableRecord {
@@ -138,5 +189,69 @@ private extension BrainItem {
         case .question(let item): item.question
         case .memory(let item): item.content
         }
+    }
+}
+
+private struct BrainEvidenceRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "brainItemEvidence"
+    var id: Int64?
+    var brainItemID: String
+    var sourceType: String
+    var sourceID: String
+    var relation: String
+    var weight: Double
+    var createdAt: Date
+
+    init(itemID: BrainItemID, source: BrainEvidenceSource, relation: EvidenceRelation, weight: Double, createdAt: Date) {
+        id = nil
+        brainItemID = itemID.rawValue
+        switch source {
+        case .reflection(let id): sourceType = "reflection"; sourceID = id
+        case .bookChunk(let id): sourceType = "bookChunk"; sourceID = id
+        case .message(let id): sourceType = "message"; sourceID = id
+        }
+        self.relation = relation.rawValue
+        self.weight = weight
+        self.createdAt = createdAt
+    }
+
+    func domain() throws -> BrainEvidence {
+        guard let source = Self.source(sourceType: sourceType, sourceID: sourceID),
+              let relation = EvidenceRelation(rawValue: relation) else {
+            throw BrainItemValidationError.stateMismatch
+        }
+        return BrainEvidence(
+            itemID: BrainItemID(rawValue: brainItemID), source: source,
+            relation: relation, weight: weight, createdAt: createdAt
+        )
+    }
+
+    private static func source(sourceType: String, sourceID: String) -> BrainEvidenceSource? {
+        switch sourceType {
+        case "reflection": .reflection(sourceID)
+        case "bookChunk": .bookChunk(sourceID)
+        case "message": .message(sourceID)
+        default: nil
+        }
+    }
+}
+
+private struct BrainRelationRecord: Codable, FetchableRecord, TableRecord {
+    static let databaseTableName = "brainItemRelations"
+    var sourceItemID: String
+    var targetItemID: String
+    var relation: String
+    var weight: Double
+    var createdAt: Date
+
+    func domain() throws -> BrainRelation {
+        guard let relation = BrainRelationType(rawValue: relation) else {
+            throw BrainItemValidationError.stateMismatch
+        }
+        return BrainRelation(
+            sourceItemID: BrainItemID(rawValue: sourceItemID),
+            targetItemID: BrainItemID(rawValue: targetItemID),
+            relation: relation, weight: weight, createdAt: createdAt
+        )
     }
 }

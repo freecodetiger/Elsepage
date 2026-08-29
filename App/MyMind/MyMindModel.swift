@@ -135,6 +135,28 @@ final class MyMindModel {
         return (reflection.originalText, book, locator)
     }
 
+    // MARK: - Brain evidence (phase 14)
+
+    /// Brain-evidence rows for one item. Best-effort: a lookup failure yields
+    /// an empty list, never an error state.
+    func brainEvidence(for item: BrainItem) async -> [BrainEvidence] {
+        guard let evidence = try? await brain.evidence(for: item.id) else { return [] }
+        return evidence
+    }
+
+    /// Resolves a reflection-sourced brain evidence row into displayable
+    /// context (original words + book + jump target). Nil for non-reflection
+    /// sources and for soft-dangling rows whose reflection was deleted.
+    func brainEvidenceContext(for evidence: BrainEvidence) async -> (reflectionText: String, book: Book?, locator: BookLocator?)? {
+        guard case .reflection(let id) = evidence.source,
+              let reflectionID = ReflectionID(rawValue: id),
+              let reflection = try? await reflections.reflection(id: reflectionID) else { return nil }
+        let rows = (try? await reflections.evidence(for: reflectionID)) ?? []
+        let locator = rows.first(where: { $0.sourceType == .bookLocator })?.locator
+        let book = try? await books.book(id: reflection.bookID)
+        return (reflection.originalText, book, locator)
+    }
+
     @discardableResult
     private func persist(_ memory: ReaderMemory) async -> Bool {
         do {

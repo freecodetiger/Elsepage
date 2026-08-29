@@ -12,6 +12,24 @@ public protocol BrainRepository: Sendable {
     /// Upsert. Content must be non-empty after trimming.
     func save(_ item: BrainItem) async throws
     func delete(id: BrainItemID) async throws
+
+    // MARK: Evidence (docs/brain.md §4)
+
+    /// Evidence attached to one item, oldest first, then by source identity —
+    /// deterministic for stable UI.
+    func evidence(for itemID: BrainItemID) async throws -> [BrainEvidence]
+    /// Attaches evidence. Idempotent: the same (item, source, relation) pair
+    /// never produces a second row. `weight` is 0...1.
+    func attachEvidence(_ itemID: BrainItemID, source: BrainEvidenceSource, relation: EvidenceRelation, weight: Double) async throws
+
+    // MARK: Relations (docs/brain.md §5)
+
+    /// All relations touching `itemID`, normalized source→target regardless of
+    /// stored direction.
+    func relations(of itemID: BrainItemID) async throws -> [BrainRelation]
+    /// Creates or refreshes a directed relation. Idempotent per
+    /// (source, target, relation). `source` must differ from `target`.
+    func relate(source: BrainItemID, target: BrainItemID, relation: BrainRelationType, weight: Double) async throws
 }
 
 public enum BrainItemValidationError: Error, Equatable {
@@ -20,4 +38,7 @@ public enum BrainItemValidationError: Error, Equatable {
     /// combination). Database CHECKs are the first line of defense; this is the
     /// decode-time guard so a bad row can never surface as a wrong-typed value.
     case stateMismatch
+    /// A self-relation (source == target) is not representable — relations
+    /// connect distinct brain items.
+    case selfRelation
 }

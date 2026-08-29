@@ -281,7 +281,16 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
     }
 
     public func delete(id: ReflectionID) async throws {
-        _ = try await db.writer.write { db in try ReflectionRecord.deleteOne(db, key: id.description) }
+        try await db.writer.write { db in
+            // Reflection-sourced brain evidence carries the reflection ID as a
+            // generic string (no SQLite FK is possible), so the cascade lives
+            // here — same transaction as the reflection row itself.
+            try db.execute(
+                sql: "DELETE FROM brainItemEvidence WHERE sourceType = 'reflection' AND sourceID = ?",
+                arguments: [id.description]
+            )
+            try ReflectionRecord.deleteOne(db, key: id.description)
+        }
     }
 
     private static func validate(_ evidence: ReflectionEvidence, belongsTo bookID: BookID, in db: Database) throws {

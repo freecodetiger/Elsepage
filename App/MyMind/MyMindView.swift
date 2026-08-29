@@ -186,6 +186,9 @@ struct MyMindView: View {
     private func brainThoughtDestination(_ thought: Thought) -> some View {
         BrainThoughtDetailView(
             thought: thought,
+            evidenceLoader: { await model.brainEvidence(for: .thought(thought)) },
+            contextLoader: { await model.brainEvidenceContext(for: $0) },
+            openSource: openSource,
             onEdit: { editingThought = thought },
             onDelete: {
                 Task {
@@ -199,6 +202,9 @@ struct MyMindView: View {
     private func brainQuestionDestination(_ question: Question) -> some View {
         BrainQuestionDetailView(
             question: question,
+            evidenceLoader: { await model.brainEvidence(for: .question(question)) },
+            contextLoader: { await model.brainEvidenceContext(for: $0) },
+            openSource: openSource,
             onEdit: { editingQuestion = question },
             onDelete: {
                 Task {
@@ -678,14 +684,20 @@ private struct BrainItemRow: View {
     }
 }
 
-/// Thought detail (brain.md §15, phase-13 subset): current statement, stage,
-/// edit and delete. Evolution timeline arrives with revisions (phase 18);
-/// sources and related items arrive with evidence (phase 14).
+/// Thought detail (brain.md §15, phase-14 subset): current statement, stage,
+/// evidence section, edit and delete. Evolution timeline arrives with
+/// revisions (phase 18); related-item sections arrive when phase 17 starts
+/// writing relations.
 private struct BrainThoughtDetailView: View {
     let thought: Thought
+    let evidenceLoader: () async -> [BrainEvidence]
+    let contextLoader: (BrainEvidence) async -> MemoryEvidence?
+    let openSource: (Book, BookLocator) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showsDelete = false
+    @State private var evidence: [BrainEvidence] = []
+    @State private var contexts: [String: MemoryEvidence] = [:]
 
     var body: some View {
         ScrollView {
@@ -708,6 +720,12 @@ private struct BrainThoughtDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                BrainEvidenceSection(
+                    heading: "来自我的阅读",
+                    evidence: evidence,
+                    contexts: contexts,
+                    openSource: openSource
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(ElsepageTheme.Spacing.page)
@@ -715,6 +733,7 @@ private struct BrainThoughtDetailView: View {
         .background(Color.elsepageBackground)
         .navigationTitle(thought.title)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await loadEvidence() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("编辑", action: onEdit)
@@ -733,15 +752,31 @@ private struct BrainThoughtDetailView: View {
             Text("删除后无法撤销。")
         }
     }
+
+    private func loadEvidence() async {
+        evidence = await evidenceLoader()
+        for row in evidence {
+            let key = brainEvidenceKey(row.source)
+            if case .reflection = row.source, contexts[key] == nil {
+                contexts[key] = await contextLoader(row)
+            }
+        }
+    }
 }
 
-/// Question detail (brain.md §16, phase-13 subset): the question and its state.
-/// "它从哪里来 / 正在形成的答案" arrive with evidence (phase 14).
+/// Question detail (brain.md §16, phase-14 subset): the question, its state,
+/// and where it came from. "正在形成的答案" arrives when phase 17 writes
+/// addresses relations.
 private struct BrainQuestionDetailView: View {
     let question: Question
+    let evidenceLoader: () async -> [BrainEvidence]
+    let contextLoader: (BrainEvidence) async -> MemoryEvidence?
+    let openSource: (Book, BookLocator) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showsDelete = false
+    @State private var evidence: [BrainEvidence] = []
+    @State private var contexts: [String: MemoryEvidence] = [:]
 
     var body: some View {
         ScrollView {
@@ -764,6 +799,12 @@ private struct BrainQuestionDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                BrainEvidenceSection(
+                    heading: "它从哪里来",
+                    evidence: evidence,
+                    contexts: contexts,
+                    openSource: openSource
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(ElsepageTheme.Spacing.page)
@@ -771,6 +812,7 @@ private struct BrainQuestionDetailView: View {
         .background(Color.elsepageBackground)
         .navigationTitle("还没想明白")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await loadEvidence() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("编辑", action: onEdit)
@@ -788,6 +830,123 @@ private struct BrainQuestionDetailView: View {
         } message: {
             Text("删除后无法撤销。")
         }
+    }
+
+    private func loadEvidence() async {
+        evidence = await evidenceLoader()
+        for row in evidence {
+            let key = brainEvidenceKey(row.source)
+            if case .reflection = row.source, contexts[key] == nil {
+                contexts[key] = await contextLoader(row)
+            }
+        }
+    }
+}
+
+/// Evidence block shared by both detail pages. Reflection sources resolve to
+/// original words + a jump back into the book; other source types degrade to
+/// a typed reference line. Empty state is the trust-preserving downgrade:
+/// sources accumulate with discussion, they are never fabricated.
+private struct BrainEvidenceSection: View {
+    let heading: String
+    let evidence: [BrainEvidence]
+    let contexts: [String: MemoryEvidence]
+    let openSource: (Book, BookLocator) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            Text(heading)
+                .font(.system(.headline, design: .serif, weight: .semibold))
+            if evidence.isEmpty {
+                Text("来源会随讨论逐渐积累。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(evidence, id: \.self) { row in
+                    evidenceRow(row)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func evidenceRow(_ row: BrainEvidence) -> some View {
+        let key = brainEvidenceKey(row.source)
+        if let context = contexts[key] {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(context.reflectionText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: ElsepageTheme.Spacing.small) {
+                    if let book = context.book {
+                        Text("《\(book.title)》")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.elsepageAccent)
+                    }
+                    Text(brainRelationLabel(row.relation))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                if let book = context.book, let locator = context.locator {
+                    Button("回到《\(book.title)》") { openSource(book, locator) }
+                        .font(.footnote.weight(.medium))
+                        .tint(Color.elsepageAccent)
+                }
+            }
+            .padding(ElsepageTheme.Spacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+            .accessibilityElement(children: .combine)
+        } else if case .reflection = row.source {
+            // Soft-dangling: the reflection was deleted; show nothing for it.
+            EmptyView()
+        } else {
+            HStack(spacing: ElsepageTheme.Spacing.small) {
+                Text(brainSourceTypeLabel(row.source))
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
+                    .foregroundStyle(Color.elsepageAccent)
+                Text(brainRelationLabel(row.relation))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+            }
+            .padding(ElsepageTheme.Spacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+private func brainEvidenceKey(_ source: BrainEvidenceSource) -> String {
+    switch source {
+    case .reflection(let id): "reflection:\(id)"
+    case .bookChunk(let id): "bookChunk:\(id)"
+    case .message(let id): "message:\(id)"
+    }
+}
+
+private func brainSourceTypeLabel(_ source: BrainEvidenceSource) -> String {
+    switch source {
+    case .reflection: "反思"
+    case .bookChunk: "原文"
+    case .message: "对话"
+    }
+}
+
+private func brainRelationLabel(_ relation: EvidenceRelation) -> String {
+    switch relation {
+    case .origin: "来源"
+    case .supports: "支持"
+    case .contradicts: "相悖"
+    case .revises: "修正"
+    case .raises: "引发"
+    case .answers: "回应"
     }
 }
 

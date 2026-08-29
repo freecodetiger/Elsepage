@@ -171,3 +171,144 @@ import Testing
         #expect(error == .emptyContent)
     }
 }
+
+// MARK: - Evidence / Relations (phase 14)
+
+@Test func evidenceAttachesIdempotentlyAndOrdersDeterministically() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let thought = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "thought-e"), title: "自由意味着责任",
+        statement: "自由的核心是承担选择。", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(thought)
+
+    // Idempotent: the same (item, source, relation) never duplicates.
+    try await repository.attachEvidence(thought.id, source: .reflection("ref-1"), relation: .origin, weight: 1)
+    try await repository.attachEvidence(thought.id, source: .reflection("ref-1"), relation: .origin, weight: 1)
+    try await repository.attachEvidence(thought.id, source: .reflection("ref-2"), relation: .supports, weight: 0.8)
+    try await repository.attachEvidence(thought.id, source: .bookChunk("chunk-9"), relation: .origin, weight: 1)
+
+    let evidence = try await repository.evidence(for: thought.id)
+    #expect(evidence.count == 3)
+    // Deterministic (createdAt, sourceType, sourceID) order — asserted by
+    // content, not position, since same-millisecond attaches tie on createdAt.
+    #expect(evidence.contains { $0.relation == .origin && $0.source == .reflection("ref-1") })
+    #expect(evidence.contains { $0.relation == .supports && $0.source == .reflection("ref-2") })
+    #expect(evidence.contains { evidence in
+        if case .bookChunk = evidence.source { return evidence.relation == .origin }
+        return false
+    })
+    #expect(evidence.contains { if case .bookChunk = $0.source { return true } else { return false } })
+}
+
+@Test func relationsRoundTripBothDirectionsAndRejectSelfRelation() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let a = BrainItem.question(Question(
+        id: BrainItemID(rawValue: "q-1"), question: "共情意味着认同吗？", state: .exploring,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    let b = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-1"), title: "人与他人的距离",
+        statement: "理解不等于站队。", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(a)
+    try await repository.save(b)
+
+    try await repository.relate(source: a.id, target: b.id, relation: .addresses, weight: 1)
+
+    // Normalized source→target regardless of query direction.
+    let fromSource = try await repository.relations(of: a.id)
+    let fromTarget = try await repository.relations(of: b.id)
+    #expect(fromSource.first?.relation == .addresses)
+    #expect(fromSource.first?.targetItemID == b.id)
+    #expect(fromTarget.first?.sourceItemID == a.id)
+    #expect(fromTarget.first?.targetItemID == b.id)
+
+    // Idempotent per triple.
+    try await repository.relate(source: a.id, target: b.id, relation: .addresses, weight: 1)
+    #expect(try await repository.relations(of: a.id).count == 1)
+
+    await #expect(throws: BrainItemValidationError.selfRelation) {
+        try await repository.relate(source: a.id, target: a.id, relation: .related, weight: 1)
+    }
+}
+
+@Test func deletingBrainItemCascadesEvidenceAndRelations() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let a = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-del"), title: "会被删除的想法",
+        statement: "正文", stage: .emerging,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    let b = BrainItem.question(Question(
+        id: BrainItemID(rawValue: "q-del"), question: "会被留下的问题", state: .open,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(a)
+    try await repository.save(b)
+    try await repository.attachEvidence(a.id, source: .reflection("ref-del"), relation: .origin, weight: 1)
+    try await repository.relate(source: b.id, target: a.id, relation: .raises, weight: 1)
+
+    try await repository.delete(id: a.id)
+
+    #expect(try await repository.evidence(for: a.id).isEmpty)
+    #expect(try await repository.relations(of: a.id).isEmpty)
+    #expect(try await repository.relations(of: b.id).isEmpty, "relations cascade from both sides")
+    #expect(try await repository.item(id: b.id) != nil)
+}
+
+@Test func reflectionDeleteCleansReflectionSourcedEvidence() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let book = TestFixtures.book()
+    try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "来源反思正文", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+
+    let repository = GRDBBrainRepository(database: database)
+    let thought = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-ref"), title: "有据的想法",
+        statement: "依据一条反思。", stage: .evolving,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(thought)
+    try await repository.attachEvidence(thought.id, source: .reflection(reflection.id.description), relation: .origin, weight: 1)
+    try await repository.attachEvidence(thought.id, source: .bookChunk("chunk-keep"), relation: .supports, weight: 1)
+
+    try await reflections.delete(id: reflection.id)
+
+    let remaining = try await repository.evidence(for: thought.id)
+    #expect(remaining.count == 1, "reflection-sourced evidence is cleaned with its reflection")
+    #expect(remaining.first?.source == .bookChunk("chunk-keep"))
+    #expect(try await repository.item(id: thought.id) != nil, "the thought itself survives")
+}
+
+@Test func wipeCoversEvidenceAndRelations() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let a = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-wipe"), title: "擦除", statement: "擦除前",
+        stage: .emerging, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: Date(), updatedAt: Date()
+    ))
+    let b = BrainItem.question(Question(
+        id: BrainItemID(rawValue: "q-wipe"), question: "擦除前的问题", state: .open,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(a)
+    try await repository.save(b)
+    try await repository.attachEvidence(a.id, source: .message("msg-1"), relation: .raises, weight: 1)
+    try await repository.relate(source: a.id, target: b.id, relation: .related, weight: 1)
+
+    try await database.wipeAllUserData()
+
+    #expect(try await repository.evidence(for: a.id).isEmpty)
+    #expect(try await repository.relations(of: a.id).isEmpty)
+    #expect(try await repository.items().isEmpty)
+}

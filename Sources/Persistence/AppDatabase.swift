@@ -477,6 +477,41 @@ public final class AppDatabase: @unchecked Sendable {
             }
             try Self.backfillBrainItems(db)
         }
+
+        // Brain evidence & relations (docs/brain.md §4-5, phase 14). Evidence is
+        // fact, brain items are interpretation; identity is (item, source,
+        // relation) / (source, target, relation) so attaching is idempotent.
+        // Reflection-sourced evidence has no SQLite FK (the source columns are
+        // generic strings) — GRDBReflectionRepository.delete cleans those rows
+        // in the same transaction; item deletion cascades via FK.
+        migrator.registerMigration("v22_brain_evidence_relations") { db in
+            try db.create(table: "brainItemEvidence", ifNotExists: true) { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("brainItemID", .text).notNull().references("brainItems", onDelete: .cascade)
+                t.column("sourceType", .text).notNull()
+                t.column("sourceID", .text).notNull()
+                t.column("relation", .text).notNull()
+                t.column("weight", .double).notNull().defaults(to: 1)
+                t.column("createdAt", .datetime).notNull()
+                t.uniqueKey(["brainItemID", "sourceType", "sourceID", "relation"])
+                t.check(sql: "sourceType IN ('reflection', 'bookChunk', 'message')")
+                t.check(sql: "relation IN ('origin', 'supports', 'contradicts', 'revises', 'raises', 'answers')")
+                t.check(sql: "weight >= 0 AND weight <= 1")
+            }
+            try db.create(table: "brainItemRelations", ifNotExists: true) { t in
+                t.column("sourceItemID", .text).notNull().references("brainItems", onDelete: .cascade)
+                t.column("targetItemID", .text).notNull().references("brainItems", onDelete: .cascade)
+                t.column("relation", .text).notNull()
+                t.column("weight", .double).notNull().defaults(to: 1)
+                t.column("createdAt", .datetime).notNull()
+                t.primaryKey(["sourceItemID", "targetItemID", "relation"])
+                t.check(sql: "sourceItemID != targetItemID")
+                t.check(sql: "relation IN ('related', 'supports', 'contradicts', 'evolvesFrom', 'raises', 'addresses', 'derivedMemory')")
+                t.check(sql: "weight >= 0 AND weight <= 1")
+            }
+            try db.create(index: "brainItemEvidence_onItem", on: "brainItemEvidence", columns: ["brainItemID"])
+            try db.create(index: "brainItemRelations_onTarget", on: "brainItemRelations", columns: ["targetItemID"])
+        }
         return migrator
     }
 
@@ -517,6 +552,8 @@ public final class AppDatabase: @unchecked Sendable {
         "reflectionConnections",
         "reflectionEvidence",
         "memories",
+        "brainItemEvidence",
+        "brainItemRelations",
         "brainItems",
         "reflections",
         "readingSessions",

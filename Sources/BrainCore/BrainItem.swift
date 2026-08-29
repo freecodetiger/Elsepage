@@ -28,6 +28,61 @@ public enum BrainEvidenceSource: Hashable, Sendable {
     case message(String)
 }
 
+/// How an evidence item relates to a brain item (docs/brain.md §4). Evidence
+/// is fact, brain items are interpretation — this vocabulary expresses the
+/// interpretive stance the item takes toward its sources.
+public enum EvidenceRelation: String, Hashable, Codable, Sendable, CaseIterable {
+    case origin, supports, contradicts, revises, raises, answers
+}
+
+/// Item↔item relations (docs/brain.md §5) — deliberately a small closed set,
+/// not a knowledge graph. Lifecycle is expressed as relations, never as state
+/// rewrites: a resolved question points at an answering thought via
+/// `addresses`; a confirmed thought spawns a memory via `derivedMemory`, and
+/// both records keep existing.
+public enum BrainRelationType: String, Hashable, Codable, Sendable, CaseIterable {
+    case related, supports, contradicts, evolvesFrom, raises, addresses, derivedMemory
+}
+
+/// One evidence row attached to a brain item. Identity is
+/// (item, source, relation) — attaching the same source twice with the same
+/// relation is a no-op, not a duplicate.
+public struct BrainEvidence: Hashable, Sendable {
+    public let itemID: BrainItemID
+    public let source: BrainEvidenceSource
+    public let relation: EvidenceRelation
+    /// 0...1 (1 = full strength). Kept simple and deterministic in v1.
+    public let weight: Double
+    public let createdAt: Date
+
+    public init(itemID: BrainItemID, source: BrainEvidenceSource, relation: EvidenceRelation, weight: Double = 1, createdAt: Date) {
+        self.itemID = itemID
+        self.source = source
+        self.relation = relation
+        self.weight = weight
+        self.createdAt = createdAt
+    }
+}
+
+/// A directed relation between two brain items. Identity is
+/// (source, target, relation).
+public struct BrainRelation: Hashable, Sendable {
+    public let sourceItemID: BrainItemID
+    public let targetItemID: BrainItemID
+    public let relation: BrainRelationType
+    /// 0...1.
+    public let weight: Double
+    public let createdAt: Date
+
+    public init(sourceItemID: BrainItemID, targetItemID: BrainItemID, relation: BrainRelationType, weight: Double = 1, createdAt: Date) {
+        self.sourceItemID = sourceItemID
+        self.targetItemID = targetItemID
+        self.relation = relation
+        self.weight = weight
+        self.createdAt = createdAt
+    }
+}
+
 public struct BrainProvenance: Hashable, Sendable {
     public let originEvidence: BrainEvidenceSource?
 
