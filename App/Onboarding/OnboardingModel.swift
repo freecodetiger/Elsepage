@@ -1,4 +1,5 @@
 import AppInfrastructure
+import Foundation
 import LibraryCore
 import Observation
 

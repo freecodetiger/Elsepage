@@ -46,7 +46,8 @@ struct OnboardingView: View {
             allowsMultipleSelection: false
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
-                Task { await model.importEPUB(at: url) }
+                let model = self.model
+                Task { @MainActor in await model.importEPUB(at: url) }
             }
         }
     }

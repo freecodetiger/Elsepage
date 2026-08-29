@@ -658,7 +658,7 @@ final class ReaderModel {
     var agentDiscussionRecorder: AgentDiscussionRecorder? {
         let sessions = sessions
         return { sessionID in
-            try? await sessions.recordAgentDiscussion(id: sessionID)
+            _ = try? await sessions.recordAgentDiscussion(id: sessionID)
         }
     }
 
@@ -751,6 +751,7 @@ extension Note {
 
 /// Restrained haptics for annotation moments only (PRD 10.4); page turns and
 /// ordinary reading never vibrate. The vocabulary itself lives in Haptics.
+@MainActor
 private enum AnnotationHaptics {
     static func highlightCreated() {
         Haptics.highlightCreated()
