@@ -5,12 +5,14 @@ import UIKit
 /// Non-blocking top banner for a freshly unlocked achievement (P1: never interrupt
 /// reading). Auto-dismisses after a short beat; tap to dismiss early.
 struct AchievementToast: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let achievement: Achievement
     let onDismiss: () -> Void
+    @State private var appeared = false
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: achievement.systemImage)
+            icon
                 .font(.title3)
                 .foregroundStyle(Color.elsepageAccent)
                 .frame(width: 36, height: 36)
@@ -36,6 +38,18 @@ struct AchievementToast: View {
         .padding(.horizontal, ElsepageTheme.Spacing.page)
         .contentShape(Rectangle())
         .onTapGesture { onDismiss() }
+        .onAppear { appeared = true }
+    }
+
+    /// Achievement moment (PRD §10.3): a single bounce on the badge icon;
+    /// suppressed entirely under Reduce Motion.
+    @ViewBuilder private var icon: some View {
+        if reduceMotion {
+            Image(systemName: achievement.systemImage)
+        } else {
+            Image(systemName: achievement.systemImage)
+                .symbolEffect(.bounce, options: .nonRepeating, value: appeared)
+        }
     }
 }
 

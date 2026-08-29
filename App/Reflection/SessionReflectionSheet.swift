@@ -861,6 +861,7 @@ final class ReflectionConversationModel: Identifiable {
 
 struct SessionReflectionSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var model: SessionReflectionModel
     let onSaved: @MainActor (Reflection) -> Void
     var openCitation: ((AgentResponseEvidence) -> Void)?
@@ -895,6 +896,7 @@ struct SessionReflectionSheet: View {
                     .padding(.horizontal, ElsepageTheme.Spacing.page)
                     .padding(.vertical, ElsepageTheme.Spacing.medium)
                     .background(Color.elsepageBackground)
+                    .transition(.moment(reduceMotion))
                 } else if let conversation = model.conversation {
                     ReflectionConversationView(
                         model: conversation,
@@ -902,8 +904,12 @@ struct SessionReflectionSheet: View {
                         openCitation: openCitation,
                         onConversationDeleted: { dismiss() }
                     )
+                    .transition(.moment(reduceMotion))
                 }
             }
+            // Reflection 完成 (PRD §10.3): the editor hands over to the saved
+            // conversation with a quiet cross-fade.
+            .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.reflection?.id)
             .navigationTitle("留下些什么")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

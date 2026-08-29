@@ -45,6 +45,9 @@ struct ReaderTransientNotice: Equatable, Identifiable {
         case copied
         case deletedHighlight(Highlight, notes: [Note])
         case deletedNote(Note)
+        /// 从 Agent Citation 跳回原文 (PRD §10.3) — chrome-level acknowledgment
+        /// only; the EPUB content itself never animates (P1).
+        case returnedToSource
     }
 
     let id = UUID()
@@ -392,7 +395,7 @@ final class ReaderModel {
 
     func undoNotice() {        guard let notice = transientNotice else { return }
         switch notice.kind {
-        case .copied:
+        case .copied, .returnedToSource:
             clearNotice()
         case .deletedHighlight(let highlight, let removedNotes):
             clearNotice()
