@@ -66,13 +66,13 @@ v0.5 用户待办 (真机): xcodebuild 构建并上 TestFlight → 验收清单�
 ## Session Continuity
 
 Last session: 2026-08-29
-Stopped at: v1.1 Personal Brain 里程碑已挂载(Phases 12-19,来源 docs/brain.md);Phase 12 Brain Domain + Persistence 完成并提交(333 tests 全绿);下一阶段 Phase 13 Brain UI(依赖 12)
-Resume file: .planning/phases/12-brain-domain/12-SUMMARY.md
+Stopped at: v1.1 Personal Brain — Phase 12/13 完成(Domain+Persistence、三分区 UI);下一阶段 Phase 14/15 可并行;App 层 xcodebuild 编译验证待用户
+Resume file: .planning/phases/13-brain-ui/13-SUMMARY.md
 
 ### v1.1 Brain 里程碑进度
 
 - [x] Phase 12: Brain Domain + Persistence(BrainCore 模块 / brainItems v21 迁移 / memories 回填 / 6 测试)
-- [ ] Phase 13: Brain UI(我的大脑 首页三分区 + 三类详情页)
+- [x] Phase 13: Brain UI(三分区 + 详情/编辑 + Memory 来源性质;App xcodebuild 编译验证待用户)
 - [ ] Phase 14: Evidence / Relation(brainItemEvidence + brainItemRelations)
 - [ ] Phase 15: Persistent Embedding + BrainRetriever
 - [ ] Phase 16: Agent Bridge(BrainContextProvider → ContextCandidate → ContextAssembler)
