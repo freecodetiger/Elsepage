@@ -30,6 +30,14 @@ public protocol BrainRepository: Sendable {
     /// Creates or refreshes a directed relation. Idempotent per
     /// (source, target, relation). `source` must differ from `target`.
     func relate(source: BrainItemID, target: BrainItemID, relation: BrainRelationType, weight: Double) async throws
+
+    // MARK: Revisions (docs/brain.md §10)
+
+    /// Rewrite history for one item, newest first.
+    func revisions(for itemID: BrainItemID) async throws -> [BrainItemRevision]
+    /// Records the PREVIOUS content of an item before an update replaces it.
+    /// The revision number is assigned by the store (per-item count + 1).
+    func recordRevision(itemID: BrainItemID, content: String, triggerEvidenceID: String?) async throws
 }
 
 public enum BrainItemValidationError: Error, Equatable {

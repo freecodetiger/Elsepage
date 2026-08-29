@@ -528,6 +528,23 @@ public final class AppDatabase: @unchecked Sendable {
                 t.primaryKey(["brainItemID", "model"])
             }
         }
+
+        // Brain revisions (docs/brain.md §10, phase 18): the previous distilled
+        // wording is preserved whenever an update replaces it — by the
+        // projection service or by a user edit. PK (item, revision) numbers
+        // rewrites per item; FK cascade cleans up with the item.
+        migrator.registerMigration("v24_brain_item_revisions") { db in
+            try db.create(table: "brainItemRevisions", ifNotExists: true) { t in
+                t.column("brainItemID", .text).notNull().references("brainItems", onDelete: .cascade)
+                t.column("revision", .integer).notNull()
+                t.column("content", .text).notNull()
+                t.column("triggerEvidenceID", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.primaryKey(["brainItemID", "revision"])
+                t.check(sql: "revision >= 1")
+                t.check(sql: "length(trim(content)) > 0")
+            }
+        }
         return migrator
     }
 
@@ -570,6 +587,7 @@ public final class AppDatabase: @unchecked Sendable {
         "memories",
         "brainItemEmbeddings",
         "brainItemEvidence",
+        "brainItemRevisions",
         "brainItemRelations",
         "brainItems",
         "reflections",

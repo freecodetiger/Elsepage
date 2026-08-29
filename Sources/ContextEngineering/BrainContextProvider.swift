@@ -55,7 +55,7 @@ public struct BrainContextProvider: Sendable {
         )
     }
 
-    static func contentText(of item: BrainItem) -> String {
+    public static func contentText(of item: BrainItem) -> String {
         switch item {
         case .thought(let item): item.statement
         case .question(let item): item.question
@@ -63,7 +63,7 @@ public struct BrainContextProvider: Sendable {
         }
     }
 
-    static func titleText(of item: BrainItem) -> String {
+    public static func titleText(of item: BrainItem) -> String {
         switch item {
         case .thought(let item): item.title
         case .question(let item): String(item.question.prefix(24))

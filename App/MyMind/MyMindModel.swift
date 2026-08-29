@@ -144,6 +144,11 @@ final class MyMindModel {
         return evidence
     }
 
+    /// Rewrite history for a brain item (phase 18). Best-effort like evidence.
+    func brainRevisions(for item: BrainItem) async -> [BrainItemRevision] {
+        (try? await brain.revisions(for: item.id)) ?? []
+    }
+
     /// Resolves a reflection-sourced brain evidence row into displayable
     /// context (original words + book + jump target). Nil for non-reflection
     /// sources and for soft-dangling rows whose reflection was deleted.
@@ -180,8 +185,12 @@ final class MyMindModel {
 
     /// Edits an existing thought. No manual creation: thoughts form through
     /// reading, never through a form (brain.md §14 — the homepage is not a
-    /// database manager).
+    /// database manager). The replaced statement is recorded as a revision so
+    /// the user's own edits stay traceable (phase 18).
     func editThought(_ thought: Thought, title: String, statement: String, stage: ThoughtStage) async {
+        if thought.statement != statement {
+            try? await brain.recordRevision(itemID: thought.id, content: thought.statement, triggerEvidenceID: nil)
+        }
         var updated = thought
         updated.title = title
         updated.statement = statement

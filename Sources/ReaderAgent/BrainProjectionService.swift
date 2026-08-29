@@ -97,6 +97,11 @@ public struct BrainProjectionService: Sendable {
                 guard var thought = try await currentThought(itemID) else {
                     return BrainMutationOutcome(proposal: proposal, applied: false, corrections: ["target disappeared"])
                 }
+                // 追溯纪律:被替换的旧陈述先降级为修订记录(Phase 18)。
+                try await items.recordRevision(
+                    itemID: itemID, content: thought.statement,
+                    triggerEvidenceID: reflectionID.description
+                )
                 thought.statement = statement
                 if let stage { thought.stage = stage }
                 thought.updatedAt = Date()

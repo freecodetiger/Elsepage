@@ -29,6 +29,7 @@
 		277C368660A887E04E3819C7 /* AchievementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA92C45D6F2DB0E154BC51F5 /* AchievementTests.swift */; };
 		29E9FAE1964C080610B43AAE /* ReflectionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0B4FD2F89117EA936344DC03 /* ReflectionCore */; };
 		2D71EF6E9B63C5E438528984 /* RAGManagementModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D7DC675947E863895D35559 /* RAGManagementModel.swift */; };
+		32AFD13B57595A9B6A1F9E74 /* BrainProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CBFB3E76F9FF80BDEE8143B /* BrainProjectionTests.swift */; };
 		35FD861AF9A5447785B0A1AC /* MemoryApplicationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE2F8A71486BBA0DF0D231D /* MemoryApplicationServiceTests.swift */; };
 		3836C273AAA2B862FF7F358B /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 3F3697D18135E781693A7918 /* Persistence */; };
 		394CD2EF348A6F7A26E4B9D2 /* ReadiumBookIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DDCEA9F1C6C8AEE014BF953 /* ReadiumBookIndexer.swift */; };
@@ -199,6 +200,7 @@
 		7B89083F818E40F555FF2F92 /* ReaderFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderFoundationTests.swift; sourceTree = "<group>"; };
 		7DE690BC54A230CB4421B39E /* SmallToBigExpanderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmallToBigExpanderTests.swift; sourceTree = "<group>"; };
 		8353073EC8D822339F330EE1 /* CrossBookRetrievalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossBookRetrievalTests.swift; sourceTree = "<group>"; };
+		8CBFB3E76F9FF80BDEE8143B /* BrainProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainProjectionTests.swift; sourceTree = "<group>"; };
 		8D2C8D60EAE897860577B506 /* ProviderSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsModel.swift; sourceTree = "<group>"; };
 		8DD4FD5C6C4F5C78035B1D7A /* TodayReflectionPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayReflectionPromptTests.swift; sourceTree = "<group>"; };
 		8FBB4E02618581B6372645CE /* AgentCitationPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCitationPersistenceTests.swift; sourceTree = "<group>"; };
@@ -441,6 +443,7 @@
 				B6091F0254AA8FBAD94F5956 /* BookIndexPersistenceTests.swift */,
 				B6766AA682DF76C5C0963332 /* BookIndexStatusTests.swift */,
 				B27B237DC53E305C5CE87CA2 /* BrainPersistenceTests.swift */,
+				8CBFB3E76F9FF80BDEE8143B /* BrainProjectionTests.swift */,
 				8353073EC8D822339F330EE1 /* CrossBookRetrievalTests.swift */,
 				763AB1DDEA8450791C00CCA5 /* ImportHardeningTests.swift */,
 				1BA9A148F06827703F567E88 /* JournalStructuredTests.swift */,
@@ -789,6 +792,7 @@
 				C6BC143F6DAB75CAD8D9FBE5 /* BookIndexPersistenceTests.swift in Sources */,
 				10D4D22BB8FCDEE4F56BA777 /* BookIndexStatusTests.swift in Sources */,
 				B609E07430F891AB9AAE6A0A /* BrainPersistenceTests.swift in Sources */,
+				32AFD13B57595A9B6A1F9E74 /* BrainProjectionTests.swift in Sources */,
 				F9D3999E577D1C15ABCE2750 /* CrossBookRetrievalTests.swift in Sources */,
 				87269EB51BCFE5BA105ED490 /* ImportHardeningTests.swift in Sources */,
 				60CA8F0626CA131008F502F4 /* JournalStructuredTests.swift in Sources */,

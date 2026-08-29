@@ -187,6 +187,7 @@ struct MyMindView: View {
         BrainThoughtDetailView(
             thought: thought,
             evidenceLoader: { await model.brainEvidence(for: .thought(thought)) },
+            revisionsLoader: { await model.brainRevisions(for: .thought(thought)) },
             contextLoader: { evidence in
                 await model.brainEvidenceContext(for: evidence).map {
                     MemoryEvidence(reflectionText: $0.reflectionText, book: $0.book, locator: $0.locator)
@@ -699,6 +700,7 @@ private struct BrainItemRow: View {
 private struct BrainThoughtDetailView: View {
     let thought: Thought
     let evidenceLoader: () async -> [BrainEvidence]
+    let revisionsLoader: () async -> [BrainItemRevision]
     let contextLoader: (BrainEvidence) async -> MemoryEvidence?
     let openSource: (Book, BookLocator) -> Void
     let onEdit: () -> Void
@@ -706,6 +708,7 @@ private struct BrainThoughtDetailView: View {
     @State private var showsDelete = false
     @State private var evidence: [BrainEvidence] = []
     @State private var contexts: [String: MemoryEvidence] = [:]
+    @State private var revisions: [BrainItemRevision] = []
 
     var body: some View {
         ScrollView {
@@ -728,6 +731,7 @@ private struct BrainThoughtDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                BrainRevisionSection(revisions: revisions)
                 BrainEvidenceSection(
                     heading: "来自我的阅读",
                     evidence: evidence,
@@ -763,10 +767,47 @@ private struct BrainThoughtDetailView: View {
 
     private func loadEvidence() async {
         evidence = await evidenceLoader()
+        revisions = await revisionsLoader()
         for row in evidence {
             let key = brainEvidenceKey(row.source)
             if case .reflection = row.source, contexts[key] == nil {
                 contexts[key] = await contextLoader(row)
+            }
+        }
+    }
+}
+
+/// The thought's evolution timeline (brain.md §10, phase 18): every replaced
+/// statement, newest first. The current statement lives above; this is the
+/// traceable path it took to get here.
+private struct BrainRevisionSection: View {
+    let revisions: [BrainItemRevision]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            Text("我的变化")
+                .font(.system(.headline, design: .serif, weight: .semibold))
+            if revisions.isEmpty {
+                Text("陈述会随讨论不断重写，旧版本留在这里。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(revisions, id: \.revision) { revision in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(revision.content)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(revision.createdAt, format: .dateTime.year().month())
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(ElsepageTheme.Spacing.medium)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+                    .accessibilityElement(children: .combine)
+                }
             }
         }
     }

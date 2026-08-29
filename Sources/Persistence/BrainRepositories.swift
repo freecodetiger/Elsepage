@@ -92,6 +92,34 @@ public final class GRDBBrainRepository: BrainRepository, @unchecked Sendable {
             )
         }
     }
+
+    // MARK: Revisions (docs/brain.md §10)
+
+    public func revisions(for itemID: BrainItemID) async throws -> [BrainItemRevision] {
+        try await db.writer.read { db in
+            try BrainItemRevisionRecord
+                .filter(Column("brainItemID") == itemID.rawValue)
+                .order(Column("revision").desc)
+                .fetchAll(db)
+                .map { try $0.domain() }
+        }
+    }
+
+    public func recordRevision(itemID: BrainItemID, content: String, triggerEvidenceID: String?) async throws {
+        try await db.writer.write { db in
+            let count = try Int.fetchOne(
+                db, sql: "SELECT COUNT(*) FROM brainItemRevisions WHERE brainItemID = ?",
+                arguments: [itemID.rawValue]
+            ) ?? 0
+            try db.execute(
+                sql: """
+                INSERT INTO brainItemRevisions (brainItemID, revision, content, triggerEvidenceID, createdAt)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                arguments: [itemID.rawValue, count + 1, content, triggerEvidenceID, Date()]
+            )
+        }
+    }
 }
 
 private struct BrainItemRecord: Codable, FetchableRecord, PersistableRecord {
@@ -110,8 +138,9 @@ private struct BrainItemRecord: Codable, FetchableRecord, PersistableRecord {
         kind = item.kind.rawValue
         schemaVersion = 1
         contentHash = nil
-        // Typed provenance moves to brainItemEvidence in phase 14; the memory
-        // backfill's source reflection is the one provenance this phase keeps.
+        // sourceReflectionID is RESERVED for the v21 legacy-backfill snapshot;
+        // new items carry provenance in brainItemEvidence (soft-dangling by
+        // design — deleting a reflection must not vaporize a formed memory).
         sourceReflectionID = nil
         switch item {
         case .thought(let thought):
@@ -138,9 +167,6 @@ private struct BrainItemRecord: Codable, FetchableRecord, PersistableRecord {
             confidence = memory.confidence.rawValue
             createdAt = memory.createdAt
             updatedAt = memory.updatedAt
-            if case .reflection(let reflectionID) = memory.provenance.originEvidence {
-                sourceReflectionID = reflectionID
-            }
         }
     }
 
@@ -208,8 +234,7 @@ public final class GRDBBrainEmbeddingStore: BrainEmbeddingStore, @unchecked Send
     }
 }
 
-private struct BrainItemVectorRecord: Codable, FetchableRecord, PersistableRecord {
-    static let databaseTableName = "brainItemEmbeddings"
+private struct BrainItemVectorRecord: Codable, FetchableRecord, PersistableRecord {    static let databaseTableName = "brainItemEmbeddings"
     var brainItemID: String
     var model: String
     var dimensions: Int
@@ -317,6 +342,22 @@ private struct BrainRelationRecord: Codable, FetchableRecord, TableRecord {
             sourceItemID: BrainItemID(rawValue: sourceItemID),
             targetItemID: BrainItemID(rawValue: targetItemID),
             relation: relation, weight: weight, createdAt: createdAt
+        )
+    }
+}
+
+private struct BrainItemRevisionRecord: Codable, FetchableRecord, TableRecord {
+    static let databaseTableName = "brainItemRevisions"
+    var brainItemID: String
+    var revision: Int
+    var content: String
+    var triggerEvidenceID: String?
+    var createdAt: Date
+
+    func domain() throws -> BrainItemRevision {
+        BrainItemRevision(
+            itemID: BrainItemID(rawValue: brainItemID), revision: revision,
+            content: content, triggerEvidenceID: triggerEvidenceID, createdAt: createdAt
         )
     }
 }

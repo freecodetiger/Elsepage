@@ -151,3 +151,66 @@ private final class ProjectionScriptedClient: ModelClient, @unchecked Sendable {
     #expect(!garbage.applied)
     #expect(try await repository2.items().isEmpty)
 }
+
+// MARK: - Revisions (phase 18 — 变化可追溯)
+
+@Test func projectionUpdateRecordsPreviousStatementAsRevision() async throws {
+    let (service, repository) = try await makeProjectionFixture()
+    let existing = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-rev"), title: "自由观", statement: "自由就是不受束缚",
+        stage: .evolving, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(existing)
+    let reflectionID = ReflectionID()
+
+    _ = await service.observe(
+        observation: "自由就是不受束缚吗，我觉得不止如此",
+        reflectionID: reflectionID,
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"updateThought\",\"itemID\":\"t-rev\",\"content\":\"自由的核心是承担选择。\"}"
+        ])
+    )
+
+    let revisions = try await repository.revisions(for: existing.id)
+    #expect(revisions.count == 1)
+    #expect(revisions.first?.revision == 1)
+    #expect(revisions.first?.content == "自由就是不受束缚", "the REPLACED wording is preserved")
+    #expect(revisions.first?.triggerEvidenceID == reflectionID.description)
+    // A second rewrite numbers incrementally. The observation must resonate
+    // with the CURRENT statement for retrieval to link them.
+    _ = await service.observe(
+        observation: "自由的核心是承担选择，这一点我现在更确定了",
+        reflectionID: ReflectionID(),
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"updateThought\",\"itemID\":\"t-rev\",\"content\":\"自由的核心是承担选择，而不是免于束缚。\"}"
+        ])
+    )
+    let afterSecond = try await repository.revisions(for: existing.id)
+    #expect(afterSecond.count == 2)
+    #expect(afterSecond.map(\.revision) == [2, 1], "newest first")
+    #expect(afterSecond.first?.content == "自由的核心是承担选择。")
+}
+
+@Test func revisionsRoundTripCascadeAndWipe() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let thought = BrainItem.thought(Thought(
+        id: BrainItemID(rawValue: "t-hist"), title: "历史", statement: "第一版",
+        stage: .emerging, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: Date(), updatedAt: Date()
+    ))
+    try await repository.save(thought)
+    try await repository.recordRevision(itemID: thought.id, content: "第一版", triggerEvidenceID: "ref-x")
+    try await repository.recordRevision(itemID: thought.id, content: "第一版", triggerEvidenceID: nil)
+
+    let revisions = try await repository.revisions(for: thought.id)
+    #expect(revisions.map(\.revision) == [2, 1], "numbering assigned by the store, newest first")
+    #expect(revisions.last?.triggerEvidenceID == "ref-x")
+
+    try await repository.delete(id: thought.id)
+    #expect(try await repository.revisions(for: thought.id).isEmpty, "revisions cascade with their item")
+
+    try await database.wipeAllUserData()
+    #expect(try await repository.items().isEmpty)
+}
