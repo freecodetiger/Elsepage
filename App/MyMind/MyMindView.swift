@@ -180,7 +180,6 @@ struct MyMindView: View {
             achievementsSection
             thoughtsSection
             questionsSection
-            profileSection
             memoriesSection
         }
         .padding(ElsepageTheme.Spacing.page)
@@ -527,7 +526,7 @@ private struct MemoryRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
-            Text("置信度 \(confidenceLabel(memory.confidence))")
+            Text("置信度 \(memory.confidence.displayName)")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
@@ -579,8 +578,14 @@ private struct MemoryRow: View {
     }
 }
 
-private func confidenceLabel(_ confidence: Double) -> String {
-    if confidence >= 0.8 { "高" } else if confidence >= 0.5 { "中" } else { "低" }
+private extension MemoryConfidence {
+    var displayName: String {
+        switch self {
+        case .high: "高"
+        case .medium: "中"
+        case .low: "低"
+        }
+    }
 }
 
 private func brainStageLabel(_ stage: ThoughtStage) -> String {
