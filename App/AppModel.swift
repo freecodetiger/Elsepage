@@ -185,11 +185,10 @@ final class AppModel {
                 memoryRepository: memories,
                 achievements: achievements,
                 recordAgentDiscussion: { [library] sessionID in
-                    try? await library?.sessionService.recordAgentDiscussion(id: sessionID)
+                    _ = try? await library?.sessionService.recordAgentDiscussion(id: sessionID)
                 }
             )
             myMind = MyMindModel(
-                memories: memories,
                 brain: brain,
                 reflections: reflections,
                 books: books,
