@@ -1,0 +1,35 @@
+{
+  "breakdown": {
+    "adversarial": 30,
+    "edge": 30,
+    "legit": 120
+  },
+  "corpusFiles": {
+    "books.json": "62183a159ed49239804e48351554f1e8b970544ea11b3e26c9fc39895a748a05",
+    "chunks.jsonl": "1a72351bed1d3f2a77a4e27a2727fecdba0dddc47d193aa5a899c39d6c7e7653",
+    "queries.jsonl": "fd2d94bdfdeb201e5b4d404a910af176ff804db9905c8f47f68fa69dbb022830"
+  },
+  "corpusHash": "74d7405937123e6fe18f9aee71b1e4533bec03ac1e0fe36efa96f779acd696d7",
+  "files": {
+    "books.json": "62183a159ed49239804e48351554f1e8b970544ea11b3e26c9fc39895a748a05",
+    "chunks.jsonl": "1a72351bed1d3f2a77a4e27a2727fecdba0dddc47d193aa5a899c39d6c7e7653",
+    "queries.jsonl": "fd2d94bdfdeb201e5b4d404a910af176ff804db9905c8f47f68fa69dbb022830"
+  },
+  "generatedAt": "2026-08-30T00:00:00Z",
+  "generationSeed": 42,
+  "indexVersion": 3,
+  "numBooks": 3,
+  "numChildren": 270,
+  "numParents": 90,
+  "numQueries": 180,
+  "perIntent_legit": {
+    "authorDisagreement": 17,
+    "conceptualQuestion": 17,
+    "conversationContinuation": 17,
+    "emotionalRecord": 18,
+    "passageObservation": 17,
+    "personalConnection": 17,
+    "unclear": 17
+  },
+  "planSchemaVersion": 2
+}

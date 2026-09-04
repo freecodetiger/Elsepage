@@ -1,0 +1,191 @@
+[
+  {
+    "author": "Synthetic",
+    "bookID": "book-01-1dc92211",
+    "children": 90,
+    "parents": 30,
+    "resources": [
+      {
+        "chapterID": null,
+        "href": "cover.xhtml",
+        "ordinal": 0,
+        "title": null
+      },
+      {
+        "chapterID": "ch01",
+        "href": "chapter01.xhtml",
+        "ordinal": 1,
+        "title": "第1章"
+      },
+      {
+        "chapterID": "ch02",
+        "href": "chapter02.xhtml",
+        "ordinal": 2,
+        "title": "第2章"
+      },
+      {
+        "chapterID": "ch03",
+        "href": "chapter03.xhtml",
+        "ordinal": 3,
+        "title": "第3章"
+      },
+      {
+        "chapterID": "ch04",
+        "href": "chapter04.xhtml",
+        "ordinal": 4,
+        "title": "第4章"
+      },
+      {
+        "chapterID": "ch05",
+        "href": "chapter05.xhtml",
+        "ordinal": 5,
+        "title": "第5章"
+      },
+      {
+        "chapterID": "ch06",
+        "href": "chapter06.xhtml",
+        "ordinal": 6,
+        "title": "第6章"
+      },
+      {
+        "chapterID": "ch07",
+        "href": "chapter07.xhtml",
+        "ordinal": 7,
+        "title": "第7章"
+      },
+      {
+        "chapterID": "ch08",
+        "href": "chapter08.xhtml",
+        "ordinal": 8,
+        "title": "第8章"
+      }
+    ],
+    "title": "Fictive Book A — 记忆之河"
+  },
+  {
+    "author": "Synthetic",
+    "bookID": "book-02-d4e14bef",
+    "children": 90,
+    "parents": 30,
+    "resources": [
+      {
+        "chapterID": null,
+        "href": "cover.xhtml",
+        "ordinal": 0,
+        "title": null
+      },
+      {
+        "chapterID": "ch01",
+        "href": "chapter01.xhtml",
+        "ordinal": 1,
+        "title": "第1章"
+      },
+      {
+        "chapterID": "ch02",
+        "href": "chapter02.xhtml",
+        "ordinal": 2,
+        "title": "第2章"
+      },
+      {
+        "chapterID": "ch03",
+        "href": "chapter03.xhtml",
+        "ordinal": 3,
+        "title": "第3章"
+      },
+      {
+        "chapterID": "ch04",
+        "href": "chapter04.xhtml",
+        "ordinal": 4,
+        "title": "第4章"
+      },
+      {
+        "chapterID": "ch05",
+        "href": "chapter05.xhtml",
+        "ordinal": 5,
+        "title": "第5章"
+      },
+      {
+        "chapterID": "ch06",
+        "href": "chapter06.xhtml",
+        "ordinal": 6,
+        "title": "第6章"
+      },
+      {
+        "chapterID": "ch07",
+        "href": "chapter07.xhtml",
+        "ordinal": 7,
+        "title": "第7章"
+      },
+      {
+        "chapterID": "ch08",
+        "href": "chapter08.xhtml",
+        "ordinal": 8,
+        "title": "第8章"
+      }
+    ],
+    "title": "Fictive Book B — 记忆之河"
+  },
+  {
+    "author": "Synthetic",
+    "bookID": "book-03-42e24890",
+    "children": 90,
+    "parents": 30,
+    "resources": [
+      {
+        "chapterID": null,
+        "href": "cover.xhtml",
+        "ordinal": 0,
+        "title": null
+      },
+      {
+        "chapterID": "ch01",
+        "href": "chapter01.xhtml",
+        "ordinal": 1,
+        "title": "第1章"
+      },
+      {
+        "chapterID": "ch02",
+        "href": "chapter02.xhtml",
+        "ordinal": 2,
+        "title": "第2章"
+      },
+      {
+        "chapterID": "ch03",
+        "href": "chapter03.xhtml",
+        "ordinal": 3,
+        "title": "第3章"
+      },
+      {
+        "chapterID": "ch04",
+        "href": "chapter04.xhtml",
+        "ordinal": 4,
+        "title": "第4章"
+      },
+      {
+        "chapterID": "ch05",
+        "href": "chapter05.xhtml",
+        "ordinal": 5,
+        "title": "第5章"
+      },
+      {
+        "chapterID": "ch06",
+        "href": "chapter06.xhtml",
+        "ordinal": 6,
+        "title": "第6章"
+      },
+      {
+        "chapterID": "ch07",
+        "href": "chapter07.xhtml",
+        "ordinal": 7,
+        "title": "第7章"
+      },
+      {
+        "chapterID": "ch08",
+        "href": "chapter08.xhtml",
+        "ordinal": 8,
+        "title": "第8章"
+      }
+    ],
+    "title": "Fictive Book C — 记忆之河"
+  }
+]
