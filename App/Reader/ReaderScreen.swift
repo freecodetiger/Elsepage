@@ -1,3 +1,4 @@
+import Foundation
 import ReaderCore
 import ReflectionCore
 import SwiftUI
@@ -51,7 +52,10 @@ struct ReaderScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
-        .task { await model.prepare() }
+        .task {
+            model.perfOpenBeganAt = CFAbsoluteTimeGetCurrent()
+            await model.prepare()
+        }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .contents: ContentsSheet(model: model)

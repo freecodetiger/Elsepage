@@ -158,6 +158,7 @@ struct JournalEntryCard: View {
                         Text("· \(question.text)")
                             .font(.subheadline)
                             .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
                         if question.status == .answered {
                             Text("已回应").font(.caption2).foregroundStyle(.secondary)
                         }
@@ -203,6 +204,7 @@ struct JournalEntryCard: View {
                     Text("· \(change.changeType.rawValue)：\(change.summary)")
                         .font(.subheadline)
                         .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
             }
         }

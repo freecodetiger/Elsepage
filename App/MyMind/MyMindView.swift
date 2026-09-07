@@ -689,6 +689,7 @@ private struct BrainThoughtDetailView: View {
                     Text(thought.statement)
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
                 HStack(spacing: ElsepageTheme.Spacing.small) {
                     Text(brainStageLabel(thought.stage))
@@ -812,6 +813,7 @@ private struct BrainQuestionDetailView: View {
                     Text(question.question)
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
                 HStack(spacing: ElsepageTheme.Spacing.small) {
                     Text(brainStateLabel(question.state))
@@ -1091,6 +1093,7 @@ private struct BrainDiscussionSheet: View {
                             Text(reply.isEmpty ? "…" : reply)
                                 .font(.body)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
                         }
                     }
                     if finished {

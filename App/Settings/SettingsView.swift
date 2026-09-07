@@ -283,6 +283,9 @@ struct DiagnosticsView: View {
 
     var body: some View {
         Form {
+            if Perf.shared.isEnabled {
+                PerfDiagnosticsView()
+            }
             if let diagnostics = model.routingDiagnostics {
                 let fallbacks = diagnostics.fallbackCounts.sorted { $0.value > $1.value }
                     .map { "\($0.key): \($0.value)" }

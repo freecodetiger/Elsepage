@@ -420,14 +420,20 @@ private struct ThoughtEntryCard: View {
                 Text(message.author == .user ? "继续说" : "回应")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .copyMessageContextMenu(
+                        content: message.content,
+                        authorLabel: message.author == .user ? "我" : "Agent",
+                        date: message.createdAt
+                    )
                 if message.author == .agent {
                     AgentMarkdownText(
                         content: message.content,
                         provenance: entry.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
-                        openCitation: openEvidence
-                    ).font(.subheadline)
+                        openCitation: openEvidence,
+                        textStyle: .subheadline
+                    )
                 } else {
-                    Text(message.content).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    SelectableTextBody(content: message.content, textStyle: .subheadline)
                 }
             }
         }
@@ -442,6 +448,7 @@ private struct ThoughtEntryCard: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(4)
+                    .textSelection(.enabled)
                 if let locator = connection.sourceLocator {
                     Button("回到《\(connection.sourceBook.title)》") {
                         openSource(connection.sourceBook, locator)
@@ -464,10 +471,10 @@ private struct ThoughtEntryCard: View {
             AgentMarkdownText(
                 content: message.content,
                 provenance: entry.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
-                openCitation: openEvidence
+                openCitation: openEvidence,
+                textStyle: .subheadline,
+                isSecondary: true
             )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
             if let provenance = entry.responseProvenance[message.id], !provenance.evidence.isEmpty {
                 DisclosureGroup("查看本次使用的上下文") {
                     ForEach(provenance.evidence) { evidence in

@@ -1,5 +1,6 @@
 import SwiftUI
 import ReflectionCore
+import UIKit
 
 extension AgentEvidenceKind {
     /// Display label used when an evidence snapshot has no better title.
@@ -18,22 +19,36 @@ struct AgentMarkdownText: View {
     let content: String
     var provenance: AgentResponseProvenance = .init(evidence: [], citations: [])
     var openCitation: ((AgentResponseEvidence) -> Void)?
+    /// UITextView 需要显式字体/颜色——外层 `.font`/`.foregroundStyle` 不会透传进来。
+    var textStyle: UIFont.TextStyle = .body
+    var isSecondary = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        Text(attributedContent)
-            .fixedSize(horizontal: false, vertical: true)
-            .environment(\.openURL, OpenURLAction { url in
-                guard url.scheme == "elsepage-citation",
-                      let evidence = provenance.evidence.first(where: { $0.id == url.host() }) else {
-                    return .systemAction
-                }
-                openCitation?(evidence)
-                return .handled
-            })
+        let attributed = Perf.shared.timed(.markdownRender) {
+            makeSelectableMarkdown(
+                attributedContent,
+                textStyle: textStyle,
+                color: isSecondary ? .secondaryLabel : .label
+            )
+        }
+        return SelectableTextView(attributedText: attributed, linkHandler: handleURL)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 拦截 citation 链接的轻点;无法识别的 elsepage 链接吞掉,避免系统尝试打开未知 scheme 弹错。
+    private func handleURL(_ url: URL) -> Bool {
+        guard url.scheme == "elsepage-citation" else { return false }
+        if let evidence = provenance.evidence.first(where: { $0.id == url.host() }) {
+            openCitation?(evidence)
+        }
+        return true
     }
 
     private var attributedContent: AttributedString {
-        (try? AttributedString(
+        // 读取 typeSize,让 Dynamic Type 变化时按新字号重建富文本。
+        _ = typeSize
+        return (try? AttributedString(
             markdown: linkedContent,
             options: .init(
                 interpretedSyntax: .full,

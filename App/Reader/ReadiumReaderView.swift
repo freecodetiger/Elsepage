@@ -1,3 +1,4 @@
+import Foundation
 import ReaderCore
 import ReadiumAdapterGCDWebServer
 import ReadiumNavigator
@@ -33,6 +34,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         private var lastHighlights: [Highlight] = []
         private var lastJumpTarget: Data?
         private var openingTask: Task<Void, Never>?
+        /// Phase-0 perf: open() → first locationDidChange timing.
+        private var parseInterval: Perf.Interval?
+        private var navigatorReadyAt: CFTimeInterval = 0
+        private var firstPageRecorded = false
 
         init(model: ReaderModel) { self.model = model }
 
@@ -41,7 +46,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             openingTask = Task { [weak self, weak host] in
                 do {
                     guard let self, let host else { return }
+                    parseInterval = Perf.shared.begin(.readerParse)
                     let publication = try await model.readium.open(model.fileURL, allowUserInteraction: true)
+                    if let interval = parseInterval { Perf.shared.end(interval) }
+                    parseInterval = nil
                     try Task.checkCancellation()
                     self.publication = publication
                     model.searchHandler = { [weak self] query in
@@ -96,10 +104,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights(model.highlights)
+                    navigatorReadyAt = CFAbsoluteTimeGetCurrent()
                 } catch is CancellationError {
+                    self?.abortParseIfNeeded()
                     return
                 } catch {
                     guard !Task.isCancelled else { return }
+                    self?.abortParseIfNeeded()
                     self?.model.errorMessage = error.localizedDescription
                 }
                 self?.openingTask = nil
@@ -112,9 +123,30 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             navigator?.delegate = nil
         }
 
+        private func recordFirstPageIfNeeded() {
+            guard !firstPageRecorded else { return }
+            firstPageRecorded = true
+            let now = CFAbsoluteTimeGetCurrent()
+            if navigatorReadyAt > 0 {
+                Perf.shared.record(.readerToFirstPage, ms: (now - navigatorReadyAt) * 1000)
+            }
+            if model.perfOpenBeganAt > 0 {
+                Perf.shared.record(.readerOpen, ms: (now - model.perfOpenBeganAt) * 1000)
+            }
+            Perf.shared.signpostEvent("reader.firstPage")
+        }
+
+        private func abortParseIfNeeded() {
+            if let interval = parseInterval {
+                Perf.shared.abort(interval)
+                parseInterval = nil
+            }
+        }
+
         func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
             do {
                 let anchor = try Self.anchor(from: locator)
+                recordFirstPageIfNeeded()
                 AnnotationLog.event("locationChange href=\(locator.href) progression=\(locator.locations.progression ?? -1)")
                 model.save(locator: anchor)
                 model.currentChapterTitle = locator.title ?? model.currentChapterTitle

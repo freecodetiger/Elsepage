@@ -795,7 +795,9 @@ final class ReflectionConversationModel: Identifiable {
                     }
                 }
             case .textDelta(let text):
-                streamingResponse = Self.withoutCitationBlock(streamingResponse + text)
+                streamingResponse = Perf.shared.timed(.streamDelta) {
+                    Self.withoutCitationBlock(streamingResponse + text)
+                }
             case .citationsValidated(let provenance):
                 if let messageID = provenance.evidence.first?.messageID {
                     responseProvenance[messageID] = provenance
@@ -1091,6 +1093,11 @@ struct ReflectionConversationView: View {
                             deleteButton
                         }
                     }
+                    .copyMessageContextMenu(
+                        content: message.content,
+                        authorLabel: message.author == .user ? "我" : "Agent",
+                        date: message.createdAt
+                    )
                     if message.author == .agent {
                         AgentMarkdownText(
                             content: message.content,
@@ -1098,7 +1105,7 @@ struct ReflectionConversationView: View {
                             openCitation: openCitation
                         )
                     } else {
-                        Text(message.content).fixedSize(horizontal: false, vertical: true)
+                        SelectableTextBody(content: message.content)
                     }
                     provenance(for: message)
                 }
@@ -1127,13 +1134,13 @@ struct ReflectionConversationView: View {
                             .contentShape(Rectangle())
                         }
                     }
-                    Text(pending.content).fixedSize(horizontal: false, vertical: true)
+                    SelectableTextBody(content: pending.content)
                 }
                 .id(pending.id)
             }
 
             if !model.streamingResponse.isEmpty {
-                AgentMarkdownText(content: model.streamingResponse).foregroundStyle(.secondary)
+                AgentMarkdownText(content: model.streamingResponse, isSecondary: true)
             } else if model.isResponding {
                 HStack(spacing: ElsepageTheme.Spacing.small) {
                     ProgressView().controlSize(.small)
@@ -1223,7 +1230,12 @@ struct ReflectionConversationView: View {
                 Spacer()
                 if canDelete { deleteButton }
             }
-            Text(text).fixedSize(horizontal: false, vertical: true)
+            .copyMessageContextMenu(
+                content: text,
+                authorLabel: "我的 Reflection",
+                date: model.reflection.createdAt
+            )
+            SelectableTextBody(content: text)
         }
     }
 

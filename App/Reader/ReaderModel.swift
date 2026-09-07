@@ -101,6 +101,9 @@ final class ReaderModel {
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
     @ObservationIgnored var onSelectionFinished: (() -> Void)?
+    /// Phase-0 perf anchor: set by ReaderScreen when the cover opens; the
+    /// coordinator records readerOpen = now → first locationDidChange.
+    @ObservationIgnored var perfOpenBeganAt: CFTimeInterval = 0
 
     init(
         book: Book,

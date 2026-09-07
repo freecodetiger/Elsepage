@@ -38,6 +38,10 @@ final class AppModel {
     private let onboardingCompletionStore = OnboardingCompletionStore()
 
     func start() async {
+        #if DEBUG
+        // Phase-0: enable in-process interaction-performance sampling (Perf.swift).
+        Perf.shared.enable()
+        #endif
         guard library == nil, startupError == nil else { return }
         do {
             let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
