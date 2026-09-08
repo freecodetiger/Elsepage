@@ -162,8 +162,8 @@ public enum MemoryConfidence: String, Hashable, Codable, Sendable, CaseIterable 
 }
 
 /// Agent-reliable stable knowledge. Named `BrainMemory` (brain.md calls it
-/// `Memory`) to avoid confusion with the legacy `ReaderMemory` row model it is
-/// backfilled from; the semantics are the brain.md ones.
+/// `Memory`); it is the sole long-term memory model since the legacy memories
+/// table was retired (v26).
 public struct BrainMemory: Hashable, Sendable {
     public let id: BrainItemID
     public var content: String

@@ -44,35 +44,6 @@ import Testing
     #expect(withNilProvider?.reflection.id == lexicalHit.id)
 }
 
-// MARK: - Memory hybrid retrieval
-
-@Test func memoryRetrieverSemanticRecallPreservesSourcePolicyAndTopN() async {
-    let repository = MemoryRepositoryFake(memories: [
-        ReaderMemory(kind: .semantic, claim: "用户偏好简洁直接的回答风格", confidence: 0.9, status: .active),
-        ReaderMemory(kind: .episodic, claim: "上周去看了海边的日落", confidence: 0.8, status: .active),
-        ReaderMemory(kind: .preference, claim: "已经过时的旧记忆", confidence: 0.7, status: .superseded),
-    ])
-    // Semantic lane rescues the style memory even if lexical overlap were weak;
-    // the superseded memory never enters the eligible set (source policy intact).
-    let semantic = TextDrivenSemanticRanking(scores: ["用户偏好简洁直接的回答风格": 0.8, "上周去看了海边的日落": 0.05])
-    let retriever = MemoryRetriever(semantic: semantic)
-
-    let results = await retriever.matchingMemories(routingText: "回答风格简洁直接", in: repository, topN: 2)
-    #expect(results.count == 1)
-    #expect(results[0].claim == "用户偏好简洁直接的回答风格")
-    // Evidence-only: the result is plain memories — no connection concept.
-    #expect(results.map(\.id).filter { $0 == results[0].id }.count == 1)
-}
-
-@Test func memoryRetrieverWithoutSemanticKeepsLexicalBehavior() async {
-    let repository = MemoryRepositoryFake(memories: [
-        ReaderMemory(kind: .semantic, claim: "用户偏好简洁直接的回答风格", confidence: 0.9, status: .active),
-        ReaderMemory(kind: .episodic, claim: "上周去看了海边的日落", confidence: 0.8, status: .active),
-    ])
-    let results = await MemoryRetriever().matchingMemories(routingText: "回答风格简洁直接", in: repository, topN: 2)
-    #expect(results.map(\.claim) == ["用户偏好简洁直接的回答风格"])
-}
-
 // MARK: - Fusion unit
 
 @Test func hybridFusionMergesBothLanesWithoutDuplicatingSharedItems() {
@@ -115,7 +86,7 @@ import Testing
 
 @Test func queryTimeSemanticRankingReturnsNilWhenProviderUnavailable() async {
     let ranking = QueryTimeSemanticRanking(embeddingFactory: { nil })
-    let result = await ranking.scores(query: "q", items: [(id: "a", text: "x")], source: .memory)
+    let result = await ranking.scores(query: "q", items: [(id: "a", text: "x")], source: .pastReflection)
     #expect(result == nil) // caller degrades to lexical
 }
 
@@ -151,15 +122,4 @@ private struct SeededEmbeddingProvider: EmbeddingProvider {
         await recorder.record(texts)
         return texts.map(vectorFor)
     }
-}
-
-private actor MemoryRepositoryFake: MemoryRepository {
-    let stored: [ReaderMemory]
-    init(memories: [ReaderMemory]) { stored = memories }
-    func memories() async throws -> [ReaderMemory] { stored }
-    func memories(kind: MemoryKind) async throws -> [ReaderMemory] { stored.filter { $0.kind == kind } }
-    func save(_ memory: ReaderMemory) async throws {}
-    func delete(id: UUID) async throws {}
-    func deleteAll() async throws {}
-    func markInaccurate(id: UUID) async throws {}
 }

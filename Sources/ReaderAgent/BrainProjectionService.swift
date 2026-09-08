@@ -155,7 +155,15 @@ public struct BrainProjectionService: Sendable {
                 guard var questionItem = try await currentQuestion(itemID) else {
                     return BrainMutationOutcome(proposal: proposal, applied: false, corrections: ["target disappeared"])
                 }
-                questionItem.question = question
+                // 追溯纪律:措辞被替换时先降级为修订记录(与 updateThought 一致;
+                // 仅状态变化不新增修订)。
+                if questionItem.question != question {
+                    try await items.recordRevision(
+                        itemID: itemID, content: questionItem.question,
+                        triggerEvidenceID: reflectionID.description
+                    )
+                    questionItem.question = question
+                }
                 if let state { questionItem.state = state }
                 questionItem.updatedAt = Date()
                 try await items.save(.question(questionItem))

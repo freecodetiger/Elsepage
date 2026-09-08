@@ -12,7 +12,7 @@ import RetrievalCore
 
 /// Presentation state for the local Reflection archive, the structured Journal,
 /// and explicit ReaderAgent replies. It does not know provider HTTP, credentials,
-/// Memory, or retrieval details.
+/// or retrieval details.
 @MainActor @Observable
 final class ThoughtsModel {
     private let archive: ReflectionArchiveService
@@ -44,15 +44,13 @@ final class ThoughtsModel {
         readerAgent: ReaderAgent,
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
-        memoryRepository: (any MemoryRepository)? = nil,
         achievements: AchievementModel? = nil,
         recordAgentDiscussion: AgentDiscussionRecorder? = nil
     ) {
         archive = ReflectionArchiveService(books: books, reflections: reflections)
         journalService = JournalEntryService(
             books: books, reflections: reflections,
-            sessions: sessions, index: index, reading: reading, journal: journal,
-            memoryRepository: memoryRepository
+            sessions: sessions, index: index, reading: reading, journal: journal
         )
         self.reflections = reflections
         self.readerAgent = readerAgent

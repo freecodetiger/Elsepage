@@ -42,16 +42,15 @@ public struct SemanticContextPlan: Hashable, Sendable {
 /// One planned context source. A tagged union so invalid states are hard to
 /// represent: a book request cannot carry memory configuration, an absent
 /// request unambiguously means "this source was not planned", and per-source
-/// multiplicity is checkable. Long-term memory is deliberately absent — it is
-/// a deterministic system policy (always consulted as evidence), compiled by
-/// `ContextPolicyCompiler`, not an LLM decision.
+/// multiplicity is checkable.
 public enum ContextRequest: Hashable, Sendable {
     case nearby
     case book(BookContextRequest)
     case pastThought(PastThoughtContextRequest)
-    /// Retrieval over the user's own formed thinking (Thought/Question). The
-    /// LLM decides only whether the user is clearly reaching back to their own
-    /// ideas and provides a query; kinds and limits are compiled policy.
+    /// Retrieval over the user's own formed thinking (Thought/Question/Memory).
+    /// The LLM decides only whether the user is clearly reaching back to their
+    /// own ideas or stable knowledge and provides a query; kinds and limits are
+    /// compiled policy.
     case brain(BrainContextRequest)
 }
 

@@ -5,13 +5,13 @@ public enum ContextSource: String, Hashable, Codable, Sendable, CaseIterable {
     case nearbyPassage
     case bookPassage
     case pastReflection
-    /// Brain items (Thought/Question) — the user's own formed thinking, bridged
-    /// from BrainRetriever (phase 16). NOT the legacy memory lane (.memory).
+    /// Brain items (Thought/Question/Memory) — the user's own formed thinking
+    /// and stable knowledge, bridged from BrainRetriever (phase 16). Memory rides
+    /// this lane as non-citable context, not a separate evidence lane.
     case brain
     /// The user's explicitly active brain item (discussing one item in the Brain
     /// page) — pinned context that must deterministically enter the bundle,
     /// outranking every retrieved source.
     case pinnedBrain
-    case memory
     case conversation
 }

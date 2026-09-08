@@ -1,3 +1,4 @@
+import BrainCore
 import Foundation
 import GRDB
 import LibraryCore
@@ -62,7 +63,8 @@ import Testing
         "v11_polished_text", "v12_memory", "v13_embedding_config", "v14_reranker_config",
         "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference",
         "v19_journal_user_edited_thoughts", "v20_drop_streaming_flag", "v21_brain", "v22_brain_evidence_relations",
-        "v23_brain_item_embeddings", "v24_brain_item_revisions", "v25_brain_projection_traces"
+        "v23_brain_item_embeddings", "v24_brain_item_revisions", "v25_brain_projection_traces",
+        "v26_retire_legacy_memories"
     ])
 }
 
@@ -356,10 +358,10 @@ import Testing
     #expect(identifiers.contains("v11_polished_text"))
 }
 
-@Test func v11DatabaseUpgradesToV12MemoryWithoutDeletion() async throws {
+@Test func v11DatabaseUpgradesToHeadRetiringMemoriesWithoutDeletion() async throws {
     // A database created before v12 (e.g. an installed v1–v11 build) must upgrade
-    // to the memories table additively, preserving existing books/reflections and
-    // the already-derived journalMemoryChanges rows.
+    // to head: memories is created (v12) then retired (v26), and the pre-existing
+    // books/reflections and already-derived journalMemoryChanges rows survive.
     var configuration = Configuration(); configuration.foreignKeysEnabled = true
     let queue = try DatabaseQueue(configuration: configuration)
     try AppDatabase.migrator.migrate(queue, upTo: "v11_polished_text")
@@ -381,20 +383,82 @@ import Testing
         )
     }
 
-    // Upgrade to head (v12_memory).
+    // Upgrade to head (v26_retire_legacy_memories).
     try AppDatabase.migrator.migrate(queue)
     let database = try AppDatabase(writer: queue)
 
-    // v12 memories table exists (and starts empty — nothing has consumed proposals yet).
-    let tables = try await database.writer.read { db in
-        try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'")
+    // The legacy memories table is gone at head; the brain tables are present.
+    let tableNames = try await database.writer.read { db in
+        try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
     }
-    #expect(tables == ["memories"])
-    #expect(try await GRDBMemoryRepository(database: database).memories().isEmpty)
+    #expect(!tableNames.contains("memories"))
+    #expect(tableNames.contains("brainItems"))
+    #expect(tableNames.contains("journalMemoryChanges"))
 
     // Pre-existing data is intact.
     #expect(try await GRDBBookRepository(database: database).book(id: book.id) != nil)
     let reflections = try await GRDBReflectionRepository(database: database).reflections(for: book.id)
     #expect(reflections.count == 1)
     #expect(try await GRDBJournalRepository(database: database).memoryChanges(for: reflections[0].id).count == 1)
+}
+
+@Test func migratesV25DatabaseToV26BackfillingThenDroppingMemories() async throws {
+    // A v25 install with leftover legacy memories (rows the journal flow wrote
+    // after the v21 one-time backfill) must have them backfilled into brainItems
+    // deterministically, then have the memories table dropped.
+    var configuration = Configuration(); configuration.foreignKeysEnabled = true
+    let queue = try DatabaseQueue(configuration: configuration)
+    try AppDatabase.migrator.migrate(queue, upTo: "v25_brain_projection_traces")
+
+    // Seed a book/reflection so we can assert cascade behavior on a backfilled row.
+    let book = TestFixtures.book(fingerprint: "v25-to-v26")
+    let reflectionUUID = UUID()
+    let reflection = ReflectionID(rawValue: reflectionUUID)
+    try await queue.write { db in
+        try db.execute(
+            sql: "INSERT INTO books (id, fingerprint, title, fileName, fileSize, importedAt) VALUES (?, ?, ?, ?, ?, ?)",
+            arguments: [book.id.description, book.fingerprint.rawValue, book.title, book.fileName, book.fileSize, book.importedAt]
+        )
+        try db.execute(
+            sql: "INSERT INTO reflections (id, bookID, originalText, inputKind, createdAt) VALUES (?, ?, ?, 'text', ?)",
+            arguments: [reflection.description, book.id.description, "v25 来源反思", Date()]
+        )
+        try db.execute(sql: """
+            INSERT INTO memories (id, sourceReflectionID, kind, claim, confidence, status, userEdited, evidenceIDsJSON, createdAt, updatedAt)
+            VALUES ('v26-m1', NULL, 'semantic', '待确认的记忆', 0.6, 'provisional', 0, '[]', ?, ?),
+                   ('v26-m2', NULL, 'preference', '高置信的偏好', 0.85, 'active', 0, '[]', ?, ?),
+                   ('v26-m3', ?, 'semantic', '有据可依的记忆', 0.7, 'provisional', 0, '[]', ?, ?)
+            """, arguments: [Date(), Date(), Date(), Date(), reflection.description, Date(), Date()])
+    }
+
+    // Upgrade to head.
+    try AppDatabase.migrator.migrate(queue)
+    let database = try AppDatabase(writer: queue)
+
+    // memories is dropped.
+    let tableNames = try await database.writer.read { db in
+        try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    #expect(!tableNames.contains("memories"))
+
+    // Every legacy row backfilled with the deterministic mapping.
+    let brain = GRDBBrainRepository(database: database)
+    let items = try await brain.items(kind: .memory)
+    #expect(items.count == 3)
+    let byContent = Dictionary(uniqueKeysWithValues: items.compactMap { item -> (String, BrainMemory)? in
+        guard case .memory(let memory) = item else { return nil }
+        return (memory.content, memory)
+    })
+    #expect(byContent["待确认的记忆"]?.state == .needsReview)
+    #expect(byContent["待确认的记忆"]?.confidence == .medium)
+    #expect(byContent["高置信的偏好"]?.state == .active)
+    #expect(byContent["高置信的偏好"]?.confidence == .high)
+    #expect(byContent["有据可依的记忆"]?.provenance.originEvidence == .reflection(reflection.description))
+
+    // Deleting the source reflection cascades its backfilled brain memory.
+    try await GRDBReflectionRepository(database: database).delete(id: reflection)
+    let remaining = try await brain.items(kind: .memory)
+    #expect(remaining.map { $0.id.rawValue } == ["v26-m1", "v26-m2"].sorted())
+    // And v26 is in the wipe enumeration, which no longer lists memories.
+    #expect(!AppDatabase.userDataTableOrder.contains("memories"))
 }

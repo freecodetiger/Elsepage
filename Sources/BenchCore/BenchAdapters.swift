@@ -1,3 +1,4 @@
+import BrainCore
 import CryptoKit
 import Foundation
 import LibraryCore
@@ -30,32 +31,44 @@ func makeBookLocator(_ locator: BenchLocator) throws -> BookLocator {
     )
 }
 
-// MARK: - Memory repository (boundary adapter)
+// MARK: - Brain repository (boundary adapter)
 
-/// In-memory `MemoryRepository` fed from a sample's memory claims. The bench
-/// never writes memories; `save`/`delete` are no-ops kept for protocol conformance.
-final class BenchMemoryRepository: MemoryRepository, @unchecked Sendable {
-    private let stored: [ReaderMemory]
+/// In-memory `BrainRepository` fed from a sample's memory claims as active
+/// `BrainMemory` items (kind = memory). The bench never mutates brain state;
+/// evidence/relations/revisions are empty and mutating methods are no-ops kept
+/// for protocol conformance.
+final class BenchBrainRepository: BrainRepository, @unchecked Sendable {
+    private let stored: [BrainItem]
 
     init(_ claims: [BenchMemoryClaim], sampleID: String) {
         stored = claims.enumerated().map { index, claim in
-            ReaderMemory(
-                id: stableUUID("memory:\(sampleID):\(index)"),
-                kind: MemoryKind(rawValue: claim.kind ?? "") ?? .semantic,
-                claim: claim.claim,
-                confidence: 0.8,
-                status: .active,
-                createdAt: Date(timeIntervalSinceNow: -Double(index + 1) * 86_400)
-            )
+            let createdAt = Date(timeIntervalSinceNow: -Double(index + 1) * 86_400)
+            return BrainItem.memory(BrainMemory(
+                id: BrainItemID(rawValue: stableUUID("memory:\(sampleID):\(index)").uuidString.lowercased()),
+                content: claim.claim,
+                origin: .agentInferred,
+                confidence: .high,
+                state: .active,
+                provenance: BrainProvenance(originEvidence: nil),
+                createdAt: createdAt,
+                updatedAt: createdAt
+            ))
         }
     }
 
-    func memories() async throws -> [ReaderMemory] { stored }
-    func memories(kind: MemoryKind) async throws -> [ReaderMemory] { stored.filter { $0.kind == kind } }
-    func save(_ memory: ReaderMemory) async throws {}
-    func delete(id: UUID) async throws {}
-    func deleteAll() async throws {}
-    func markInaccurate(id: UUID) async throws {}
+    func items() async throws -> [BrainItem] { stored }
+    func items(kind: BrainItemKind) async throws -> [BrainItem] { stored.filter { $0.kind == kind } }
+    func item(id: BrainItemID) async throws -> BrainItem? { stored.first { $0.id == id } }
+    func save(_ item: BrainItem) async throws {}
+    func delete(id: BrainItemID) async throws {}
+    func evidence(for itemID: BrainItemID) async throws -> [BrainEvidence] { [] }
+    func attachEvidence(_ itemID: BrainItemID, source: BrainEvidenceSource, relation: EvidenceRelation, weight: Double) async throws {}
+    func relations(of itemID: BrainItemID) async throws -> [BrainRelation] { [] }
+    func relate(source: BrainItemID, target: BrainItemID, relation: BrainRelationType, weight: Double) async throws {
+        guard source != target else { throw BrainItemValidationError.selfRelation }
+    }
+    func revisions(for itemID: BrainItemID) async throws -> [BrainItemRevision] { [] }
+    func recordRevision(itemID: BrainItemID, content: String, triggerEvidenceID: String?) async throws {}
 }
 
 // MARK: - Book index boundary adapters

@@ -14,10 +14,12 @@ public struct BrainContextProvider: Sendable {
     }
 
     /// Retrieves brain items relevant to `query` and adapts them for the
-    /// assembler. Used when the planner requests brain retrieval.
+    /// assembler. Used when the planner requests brain retrieval. Memory
+    /// (kind=.memory) rides this lane as the user's stable knowledge; it reaches
+    /// the prompt as non-citable context like thoughts and questions.
     public func candidates(
         query: String,
-        kinds: Set<BrainItemKind> = [.thought, .question],
+        kinds: Set<BrainItemKind> = [.thought, .question, .memory],
         limit: Int = 3
     ) async -> [ContextCandidate] {
         let hits = await retriever.retrieve(query: query, kinds: kinds, limit: limit)

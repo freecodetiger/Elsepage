@@ -192,6 +192,47 @@ private final class ProjectionScriptedClient: ModelClient, @unchecked Sendable {
     #expect(afterSecond.first?.content == "自由的核心是承担选择。")
 }
 
+@Test func projectionUpdateRecordsPreviousQuestionAsRevisionButNotOnStateOnlyChange() async throws {
+    let (service, repository) = try await makeProjectionFixture()
+    let reflectionID = ReflectionID()
+    let seed = Question(
+        id: BrainItemID(rawValue: "q-rev"), question: "自由到底意味着什么？",
+        state: .open, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: Date(), updatedAt: Date()
+    )
+    try await repository.save(.question(seed))
+
+    // Observation shares the seed wording so retrieval surfaces it as a candidate.
+    _ = await service.observe(
+        observation: "自由到底意味着什么，我一直在想这个问题",
+        reflectionID: reflectionID,
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"updateQuestion\",\"itemID\":\"q-rev\",\"content\":\"自由是否意味着无限的选择？\"}"
+        ])
+    )
+    var revisions = try await repository.revisions(for: seed.id)
+    #expect(revisions.count == 1)
+    #expect(revisions.first?.revision == 1)
+    #expect(revisions.first?.content == "自由到底意味着什么？", "the REPLACED wording is preserved")
+    #expect(revisions.first?.triggerEvidenceID == reflectionID.description)
+
+    // A state-only update (same wording) must NOT record a new revision.
+    _ = await service.observe(
+        observation: "自由是否意味着无限的选择？现在我觉得接近答案了",
+        reflectionID: ReflectionID(),
+        using: ProjectionScriptedClient(responses: [
+            "{\"action\":\"updateQuestion\",\"itemID\":\"q-rev\",\"content\":\"自由是否意味着无限的选择？\",\"questionState\":\"partiallyResolved\"}"
+        ])
+    )
+    revisions = try await repository.revisions(for: seed.id)
+    #expect(revisions.count == 1, "state-only updates add no revision")
+    guard case .question(let updated) = try #require(try await repository.item(id: seed.id)) else {
+        Issue.record("expected question")
+        return
+    }
+    #expect(updated.state == .partiallyResolved)
+}
+
 @Test func revisionsRoundTripCascadeAndWipe() async throws {
     let database = try AppDatabase.inMemory()
     let repository = GRDBBrainRepository(database: database)

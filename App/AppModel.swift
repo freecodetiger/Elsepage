@@ -53,7 +53,6 @@ final class AppModel {
             let sessions = GRDBReadingSessionRepository(database: database)
             let reflections = GRDBReflectionRepository(database: database)
             let journal = GRDBJournalRepository(database: database)
-            let memories = GRDBMemoryRepository(database: database)
             let brain = GRDBBrainRepository(database: database)
             let brainStore = GRDBBrainEmbeddingStore(database: database)
             let bookIndex = GRDBBookIndexRepository(database: database)
@@ -81,9 +80,14 @@ final class AppModel {
                       let key = try? await secrets.secret(for: configuration.effectiveRerankerSecretReference), !key.isEmpty else { return nil }
                 return try? SiliconFlowReranker(configuration: configuration, apiKey: key)
             }
-            // 大脑维护路径(v1.1 Phase 17):检索 + 投影共用同一个 BrainRetriever。
+            // 大脑维护路径(v1.1 Phase 17):检索 + 投影共用同一个 BrainRetriever;
+            // 投影观测(v25)可选,接线以便在 Settings 诊断观测投影行为。
             let brainRetriever = BrainRetriever(items: brain, store: brainStore, embeddingProvider: makeEmbeddingProvider)
-            let brainProjection = BrainProjectionService(items: brain, retriever: brainRetriever)
+            let brainProjection = BrainProjectionService(
+                items: brain,
+                retriever: brainRetriever,
+                traceRepository: GRDBBrainProjectionTraceRepository(database: database)
+            )
             let readerAgent = ReaderAgent(
                 reflections: reflections,
                 models: modelClientFactory,
@@ -99,9 +103,9 @@ final class AppModel {
                 brainRetriever: brainRetriever,
                 projection: brainProjection,
                 traceRepository: routingTraces,
-                memories: memories,
-                // Reflection/Memory semantic recall lane (Phase 5): query-time embed
-                // behind a process-local cache; nil provider degrades to lexical.
+                // Reflection semantic recall lane (Phase 5): query-time embed behind
+                // a process-local cache; nil provider degrades to lexical. Memory
+                // recall rides the brain lane, not a separate semantic lane.
                 semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider)
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
@@ -151,7 +155,7 @@ final class AppModel {
                     sessions: sessions,
                     reflections: reflections,
                     journal: journal,
-                    memories: memories
+                    brain: brain
                 ),
                 indexCoordinator: indexCoordinator,
                 wipeService: LocalDataWipeService(database: database, secrets: secrets),
@@ -186,7 +190,6 @@ final class AppModel {
                 readerAgent: readerAgent,
                 makePolishService: makePolishService,
                 traceRepository: routingTraces,
-                memoryRepository: memories,
                 achievements: achievements,
                 recordAgentDiscussion: { [library] sessionID in
                     _ = try? await library?.sessionService.recordAgentDiscussion(id: sessionID)

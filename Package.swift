@@ -32,7 +32,7 @@ let package = Package(
         .target(name: "BrainCore"),
         .target(name: "ReaderCore", dependencies: ["LibraryCore"]),
         .target(name: "ReadingSessionCore", dependencies: ["LibraryCore", "ReaderCore"]),
-        .target(name: "ReflectionCore", dependencies: ["LibraryCore", "ReaderCore", "ReadingSessionCore", "RetrievalCore"]),
+        .target(name: "ReflectionCore", dependencies: ["BrainCore", "LibraryCore", "ReaderCore", "ReadingSessionCore", "RetrievalCore"]),
         .target(name: "SpeechCore"),
         .target(name: "AgentRuntime"),
         .target(name: "ContextRouting", dependencies: ["AgentRuntime", "LibraryCore"]),
@@ -52,7 +52,7 @@ let package = Package(
         .target(
             name: "BenchCore",
             dependencies: [
-                "AgentRuntime", "ContextEngineering", "ContextRouting", "LibraryCore",
+                "AgentRuntime", "BrainCore", "ContextEngineering", "ContextRouting", "LibraryCore",
                 "ModelProviders", "ReaderAgent", "ReaderCore", "ReflectionCore", "RetrievalCore",
             ]
         ),

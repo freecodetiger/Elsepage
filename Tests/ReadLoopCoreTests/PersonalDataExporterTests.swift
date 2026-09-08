@@ -1,4 +1,5 @@
 import AppInfrastructure
+import BrainCore
 import Foundation
 import LibraryCore
 import ModelProviders
@@ -16,6 +17,7 @@ import Testing
     let sessions = GRDBReadingSessionRepository(database: database)
     let reflections = GRDBReflectionRepository(database: database)
     let journal = GRDBJournalRepository(database: database)
+    let brain = GRDBBrainRepository(database: database)
 
     // A configured provider with a secret must NOT leak into the export.
     let configurations = GRDBProviderConfigurationRepository(database: database)
@@ -48,10 +50,15 @@ import Testing
     try await reflections.insert(second, linkedHighlightIDs: [], evidence: [])
     try await reflections.saveConnection(.init(reflectionID: first.id, sourceReflectionID: second.id, relevance: 0.8))
     try await journal.saveThought(.init(reflectionID: first.id, messageID: agentMessage.id, thought: "我想记住这句话"))
+    try await brain.save(.memory(BrainMemory(
+        id: .init(rawValue: "export-memory"), content: "用户偏好晚间阅读",
+        origin: .agentInferred, confidence: .high, state: .active,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
 
     let exporter = PersonalDataExporter(
         books: books, reading: reading, sessions: sessions, reflections: reflections,
-        journal: journal, memories: GRDBMemoryRepository(database: database)
+        journal: journal, brain: brain
     )
     let data = try await exporter.export()
 
@@ -74,6 +81,11 @@ import Testing
     #expect(firstEntry.evidence.count == 1)
     #expect(firstEntry.connections.count == 1)
     #expect(firstEntry.thoughts.map(\.thought) == ["我想记住这句话"])
+
+    // The brain section round-trips the seeded memory.
+    #expect(archive.brain.memories.map(\.id) == ["export-memory"])
+    #expect(archive.brain.memories.map(\.content) == ["用户偏好晚间阅读"])
+    #expect(archive.brain.memories.map(\.origin) == ["agentInferred"])
 
     let text = String(decoding: data, as: UTF8.self)
     #expect(!text.contains("apiKey"))
@@ -104,67 +116,79 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: store.url(for: book.id).path))
 }
 
-@Test func exportIncludesMemoriesAndReaderProfileProjection() async throws {
+@Test func exportIncludesBrainItemsAndRelations() async throws {
     let database = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: database)
     let reading = GRDBReadingRepository(database: database)
     let sessions = GRDBReadingSessionRepository(database: database)
     let reflections = GRDBReflectionRepository(database: database)
     let journal = GRDBJournalRepository(database: database)
-    let memories = GRDBMemoryRepository(database: database)
+    let brain = GRDBBrainRepository(database: database)
 
-    let book = TestFixtures.book(fingerprint: "export-memories")
+    let book = TestFixtures.book(fingerprint: "export-brain")
     try await books.insert(book)
 
     let now = Date(timeIntervalSince1970: 1_000_000)
-    let trait = ReaderMemory(
-        kind: .profileTrait, claim: "读者常在深夜阅读", confidence: 0.9, status: .active,
-        evidenceIDs: ["refl:e1"], createdAt: now, updatedAt: now.addingTimeInterval(30)
+    let thought = Thought(
+        id: .init(rawValue: "thought-1"), title: "自由与责任", statement: "自由必须包含承担选择的责任",
+        stage: .stable, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: now, updatedAt: now.addingTimeInterval(30)
     )
-    let edited = ReaderMemory(
-        kind: .semantic, claim: "用户自己修正过的理解", confidence: 0.7, status: .provisional,
-        userEdited: true, evidenceIDs: ["refl:e1", "msg:e2"], createdAt: now, updatedAt: now.addingTimeInterval(20)
+    let question = Question(
+        id: .init(rawValue: "question-1"), question: "如何权衡自由的边界?",
+        state: .open, provenance: BrainProvenance(originEvidence: nil), createdAt: now, updatedAt: now
     )
-    let superseded = ReaderMemory(
-        kind: .preference, claim: "已被否定的偏好", confidence: 0.4, status: .superseded,
-        createdAt: now, updatedAt: now.addingTimeInterval(10)
+    let activeMemory = BrainMemory(
+        id: .init(rawValue: "memory-active"), content: "读者常在深夜阅读",
+        origin: .userExplicit, confidence: .high, state: .active,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: now, updatedAt: now.addingTimeInterval(20)
     )
-    let episodic = ReaderMemory(
-        kind: .episodic, claim: "正在读的一本书", confidence: 0.5,
-        createdAt: now, updatedAt: now
+    let forgottenMemory = BrainMemory(
+        id: .init(rawValue: "memory-forgotten"), content: "已被否定的偏好",
+        origin: .agentInferred, confidence: .low, state: .forgotten,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: now, updatedAt: now
     )
-    for memory in [trait, edited, superseded, episodic] {
-        try await memories.save(memory)
-    }
+    try await brain.save(.thought(thought))
+    try await brain.save(.question(question))
+    try await brain.save(.memory(activeMemory))
+    try await brain.save(.memory(forgottenMemory))
+    // One item↔item relation (docs/brain.md §5).
+    try await brain.relate(source: thought.id, target: activeMemory.id, relation: .derivedMemory, weight: 1)
 
     let exporter = PersonalDataExporter(
         books: books, reading: reading, sessions: sessions, reflections: reflections,
-        journal: journal, memories: memories
+        journal: journal, brain: brain
     )
     let data = try await exporter.export()
 
-    // Round-trip: every exported memory equals its stored value, all fields included.
     let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
     let archive = try decoder.decode(PersonalDataArchive.self, from: data)
-    let stored = try await memories.memories()
     #expect(archive.books.count == 1)
-    #expect(archive.memories.count == 4)
-    #expect(archive.memories.sorted { $0.id.uuidString < $1.id.uuidString } == stored.sorted { $0.id.uuidString < $1.id.uuidString })
-
-    // The Reader Profile section is exactly the projection My Mind renders.
-    let projection = ReaderProfileProjection(memories: stored)
-    #expect(archive.readerProfile.profileTraits.map(\.id) == projection.profileTraits.map(\.id))
-    #expect(archive.readerProfile.activeMemories.map(\.id) == projection.activeMemories.map(\.id))
-    #expect(archive.readerProfile.supersededMemories.map(\.id) == projection.supersededMemories.map(\.id))
-    #expect(archive.readerProfile.profileTraits.map(\.claim).sorted() == ["读者常在深夜阅读", "用户自己修正过的理解"].sorted())
-    #expect(archive.readerProfile.supersededMemories.map(\.claim) == ["已被否定的偏好"])
+    // All three kinds, including the retired/forgotten memory (state preserved so
+    // the consumer can reconstruct My Mind's active-vs-retired split).
+    #expect(archive.brain.thoughts.map(\.id) == ["thought-1"])
+    #expect(archive.brain.thoughts.map(\.title) == ["自由与责任"])
+    #expect(archive.brain.questions.map(\.id) == ["question-1"])
+    #expect(Set(archive.brain.memories.map(\.id)) == Set(["memory-active", "memory-forgotten"]))
+    let active = try #require(archive.brain.memories.first { $0.id == "memory-active" })
+    #expect(active.state == "active")
+    #expect(active.origin == "userExplicit")
+    #expect(active.confidence == "high")
+    let forgotten = try #require(archive.brain.memories.first { $0.id == "memory-forgotten" })
+    #expect(forgotten.state == "forgotten")
+    // Relation appears exactly once.
+    let relations = archive.brain.relations
+    #expect(relations.count == 1)
+    #expect(relations[0].sourceItemID == "thought-1")
+    #expect(relations[0].targetItemID == "memory-active")
+    #expect(relations[0].relation == "derivedMemory")
+    #expect(relations[0].weight == 1)
 
     // My Mind-visible fields appear in the JSON; secrets never do.
     let text = String(decoding: data, as: UTF8.self)
-    #expect(text.contains("userEdited"))
-    #expect(text.contains("evidenceIDs"))
-    #expect(text.contains("confidence"))
-    #expect(text.contains("readerProfile"))
+    #expect(text.contains("userExplicit"))
+    #expect(text.contains("derivedMemory"))
+    #expect(text.contains("forgotten"))
     #expect(!text.contains("secretReference"))
     #expect(!text.contains("apiKey"))
 }
@@ -176,26 +200,30 @@ import Testing
     let sessions = GRDBReadingSessionRepository(database: database)
     let reflections = GRDBReflectionRepository(database: database)
     let journal = GRDBJournalRepository(database: database)
-    let memories = GRDBMemoryRepository(database: database)
+    let brain = GRDBBrainRepository(database: database)
 
     let book = TestFixtures.book(fingerprint: "wipe-then-export")
     try await books.insert(book)
-    try await memories.save(ReaderMemory(kind: .semantic, claim: "擦除前的记忆", confidence: 0.5))
+    try await brain.save(.memory(BrainMemory(
+        id: .init(rawValue: "wipe-memory"), content: "擦除前的记忆",
+        origin: .agentInferred, confidence: .medium, state: .active,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
 
     try await database.wipeAllUserData()
 
     let exporter = PersonalDataExporter(
         books: books, reading: reading, sessions: sessions, reflections: reflections,
-        journal: journal, memories: memories
+        journal: journal, brain: brain
     )
     let data = try await exporter.export()
 
     let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
     let archive = try decoder.decode(PersonalDataArchive.self, from: data)
     #expect(archive.books.isEmpty)
-    #expect(archive.memories.isEmpty)
-    #expect(archive.readerProfile.profileTraits.isEmpty)
-    #expect(archive.readerProfile.activeMemories.isEmpty)
-    #expect(archive.readerProfile.supersededMemories.isEmpty)
+    #expect(archive.brain.thoughts.isEmpty)
+    #expect(archive.brain.questions.isEmpty)
+    #expect(archive.brain.memories.isEmpty)
+    #expect(archive.brain.relations.isEmpty)
     #expect(archive.exportedAt <= Date())
 }

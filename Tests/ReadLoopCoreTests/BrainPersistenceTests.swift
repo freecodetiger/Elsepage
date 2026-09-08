@@ -85,69 +85,6 @@ import Testing
     }
 }
 
-@Test func memoriesBackfillIntoBrainItemsDeterministically() async throws {
-    let database = try AppDatabase.inMemory()
-    let memories = GRDBMemoryRepository(database: database)
-    try await memories.save(ReaderMemory(kind: .semantic, claim: "待确认的记忆", confidence: 0.6, status: .provisional))
-    try await memories.save(ReaderMemory(kind: .preference, claim: "高置信的偏好", confidence: 0.85, status: .active))
-    try await memories.save(ReaderMemory(kind: .semantic, claim: "已退役的记忆", confidence: 0.4, status: .superseded))
-    try await memories.save(ReaderMemory(kind: .episodic, claim: "用户改过的记忆", confidence: 0.9, status: .active, userEdited: true))
-
-    try await database.writer.write { db in try AppDatabase.backfillBrainItems(db) }
-    // Idempotent: re-running the backfill must not duplicate rows.
-    try await database.writer.write { db in try AppDatabase.backfillBrainItems(db) }
-
-    let repository = GRDBBrainRepository(database: database)
-    let items = try await repository.items(kind: .memory)
-    #expect(items.count == 4)
-    let byContent = Dictionary(uniqueKeysWithValues: items.compactMap { item -> (String, BrainMemory)? in
-        guard case .memory(let memory) = item else { return nil }
-        return (memory.content, memory)
-    })
-    #expect(byContent["待确认的记忆"]?.state == .needsReview)
-    #expect(byContent["待确认的记忆"]?.confidence == .medium)
-    #expect(byContent["高置信的偏好"]?.state == .active)
-    #expect(byContent["高置信的偏好"]?.confidence == .high)
-    #expect(byContent["已退役的记忆"]?.state == .superseded)
-    #expect(byContent["已退役的记忆"]?.confidence == .low)
-    for memory in byContent.values {
-        #expect(memory.origin == .agentInferred)
-        #expect(memory.provenance.originEvidence == nil)
-    }
-    // The legacy store keeps working untouched (MyMind switches in phase 13).
-    #expect(try await memories.memories().count == 4)
-}
-
-@Test func backfilledMemoryKeepsSourceReflectionProvenanceAndCascades() async throws {
-    let database = try AppDatabase.inMemory()
-    let books = GRDBBookRepository(database: database)
-    let reflections = GRDBReflectionRepository(database: database)
-    let book = TestFixtures.book()
-    try await books.insert(book)
-    let reflection = Reflection(bookID: book.id, originalText: "来源反思", inputKind: .text)
-    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
-
-    let memories = GRDBMemoryRepository(database: database)
-    try await memories.save(ReaderMemory(
-        sourceReflectionID: reflection.id, kind: .semantic,
-        claim: "有据可依的记忆", confidence: 0.7, status: .provisional
-    ))
-    try await database.writer.write { db in try AppDatabase.backfillBrainItems(db) }
-
-    let repository = GRDBBrainRepository(database: database)
-    let item = try #require(try await repository.items(kind: .memory).first)
-    guard case .memory(let memory) = item else {
-        Issue.record("expected memory")
-        return
-    }
-    #expect(memory.provenance.originEvidence == .reflection(reflection.id.description))
-
-    // The brainItems.sourceReflectionID cascade mirrors the legacy behavior:
-    // deleting the source reflection removes the derived memory.
-    try await reflections.delete(id: reflection.id)
-    #expect(try await repository.items(kind: .memory).isEmpty)
-}
-
 @Test func wipeAllUserDataRemovesBrainItems() async throws {
     let database = try AppDatabase.inMemory()
     let repository = GRDBBrainRepository(database: database)
@@ -487,6 +424,91 @@ private final class CountingEmbeddingProvider: EmbeddingProvider, @unchecked Sen
     #expect(try await repository.items().isEmpty)
 }
 
+// MARK: - §18 lifecycle (phase 18 writers)
+
+@Test func archiveStableThoughtAsMemoryWritesDerivedMemoryRelationAndDeduplicates() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let thought = Thought(
+        id: BrainItemID(rawValue: "t-lifecycle"), title: "自由与责任",
+        statement: "自由的核心是承担选择，而不是免于束缚。", stage: .stable,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )
+    try await repository.save(.thought(thought))
+
+    let first = try #require(try await BrainLifecycle.archiveAsMemory(thought, brain: repository))
+    // Idempotent: a second archive of the same thought is a no-op.
+    let second = try await BrainLifecycle.archiveAsMemory(thought, brain: repository)
+    #expect(second == nil)
+
+    let memories = try await repository.items(kind: .memory)
+    #expect(memories.count == 1)
+    guard case .memory(let memory) = try #require(memories.first) else {
+        Issue.record("expected memory")
+        return
+    }
+    #expect(memory.content == thought.statement)
+    #expect(memory.origin == .derivedFromThought)
+    #expect(memory.state == .active)
+    #expect(memory.confidence == .high)
+    #expect(first == memory.id)
+
+    // Exactly one derivedMemory relation, source thought ≠ target memory.
+    let relations = try await repository.relations(of: thought.id)
+    #expect(relations.count == 1)
+    #expect(relations.first?.relation == .derivedMemory)
+    #expect(relations.first?.sourceItemID == thought.id)
+    #expect(relations.first?.targetItemID == memory.id)
+    #expect(relations.first?.sourceItemID != relations.first?.targetItemID)
+}
+
+@Test func resolveQuestionWritesAddressesAndSetsResolved() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let question = Question(
+        id: BrainItemID(rawValue: "q-lifecycle"), question: "自由是否有边界？", state: .exploring,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )
+    let answer = Thought(
+        id: BrainItemID(rawValue: "t-answer"), title: "自由的边界", statement: "自由的边界是他人自由的起点。",
+        stage: .stable, provenance: BrainProvenance(originEvidence: nil),
+        createdAt: Date(), updatedAt: Date()
+    )
+    try await repository.save(.question(question))
+    try await repository.save(.thought(answer))
+
+    try await BrainLifecycle.resolveQuestion(question, answeredBy: answer.id, brain: repository)
+    // Idempotent per triple.
+    try await BrainLifecycle.resolveQuestion(question, answeredBy: answer.id, brain: repository)
+
+    let relations = try await repository.relations(of: question.id)
+    #expect(relations.count == 1)
+    #expect(relations.first?.relation == .addresses)
+    #expect(relations.first?.targetItemID == answer.id)
+
+    guard case .question(let updated) = try #require(try await repository.item(id: question.id)) else {
+        Issue.record("expected question")
+        return
+    }
+    #expect(updated.state == .resolved)
+}
+
+@Test func archivedThoughtCannotBeArchivedAsMemory() async throws {
+    let database = try AppDatabase.inMemory()
+    let repository = GRDBBrainRepository(database: database)
+    let archived = Thought(
+        id: BrainItemID(rawValue: "t-archived"), title: "已归档",
+        statement: "这句话不再成立", stage: .archived,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )
+    try await repository.save(.thought(archived))
+
+    let memoryID = try await BrainLifecycle.archiveAsMemory(archived, brain: repository)
+    #expect(memoryID == nil)
+    #expect(try await repository.items(kind: .memory).isEmpty)
+    #expect(try await repository.relations(of: archived.id).isEmpty)
+}
+
 // MARK: - Agent Bridge (phase 16)
 
 private func makeLocator(_ progression: Double) throws -> BookLocator {
@@ -534,7 +556,7 @@ private func makeLocator(_ progression: Double) throws -> BookLocator {
 
     let result = ContextAssembler().assemble(
         nearby: NearbyPassageCandidate(text: String(repeating: "近", count: 300), sourceID: "nearby", locator: evidenceLocator),
-        bookEvidence: [book], previousReflection: nil, memories: [],
+        bookEvidence: [book], previousReflection: nil,
         reflectionBookID: BookID(), budget: budget,
         brainCandidates: [pinned]
     )
@@ -627,7 +649,7 @@ private func makeLocator(_ progression: Double) throws -> BookLocator {
     let replyRequest = try #require(client.requests.count >= 2 ? client.requests[1] : nil)
     let promptText = replyRequest.messages.map(\.content).joined(separator: "\n")
     #expect(promptText.contains("自由的选择带来不可转嫁的责任"), "plan-requested brain item reaches the prompt")
-    #expect(promptText.contains("已成形想法与问题"))
+    #expect(promptText.contains("已成形想法、问题与关于用户的长期记忆"))
 
     // Pinned context reaches the prompt even when the plan does NOT request it.
     let noBrainPlanJSON = """
@@ -653,6 +675,55 @@ private func makeLocator(_ progression: Double) throws -> BookLocator {
     let pinnedPrompt = try #require(pinnedClient.requests.count >= 2 ? pinnedClient.requests[1] : nil)
         .messages.map(\.content).joined(separator: "\n")
     #expect(pinnedPrompt.contains("人与他人的距离"), "pinned context is never planner-vetoed")
+}
+
+@Test func brainBridgeRecallsActiveMemoryAsNonCitableContextWhenPlanRequestsBrain() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let brainRepo = GRDBBrainRepository(database: database)
+    let book = TestFixtures.book(); try await books.insert(book)
+    let reflection = Reflection(bookID: book.id, originalText: "我又在想要不要换个城市生活", inputKind: .text)
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    // Active memory is the recall target; a retired one must never surface.
+    try await brainRepo.save(.memory(BrainMemory(
+        id: BrainItemID(rawValue: "m-recall"), content: "读者正在考虑搬到另一个城市生活",
+        origin: .userExplicit, confidence: .high, state: .active,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
+    try await brainRepo.save(.memory(BrainMemory(
+        id: BrainItemID(rawValue: "m-forgotten"), content: "读者讨厌旅行",
+        origin: .agentInferred, confidence: .medium, state: .forgotten,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
+
+    // Call 1 = router plan (requests brain retrieval); call 2 = reply. No
+    // embedding provider is wired, so recall is lexical — the query shares the
+    // active memory's wording.
+    let planJSON = """
+    {"intent":"passageObservation","nearbyPassage":"omit","bookRetrieval":null,"pastThoughtRetrieval":null,"brainRetrieval":{"query":"正在考虑搬到另一个城市生活"},"response":{"length":"short","posture":"respondOnly"}}
+    """
+    let client = BrainBridgeScriptedClient(responses: [planJSON, "这和你之前考虑搬家是一致的。"])
+    let retriever = BrainRetriever(items: brainRepo)
+    let agent = ReaderAgent(
+        reflections: reflections, models: BrainBridgeClientFactory(client: client),
+        brainRetriever: retriever
+    )
+
+    var sawCompleted = false
+    for await event in agent.respond(to: reflection.id) {
+        if case .completed = event { sawCompleted = true }
+        if case .failed(let failure) = event { Issue.record("unexpected failure: \(failure)") }
+    }
+    #expect(sawCompleted)
+
+    let replyRequest = try #require(client.requests.count >= 2 ? client.requests[1] : nil)
+    let promptText = replyRequest.messages.map(\.content).joined(separator: "\n")
+    // Active memory rides the brain lane into the prompt as non-citable context.
+    #expect(promptText.contains("读者正在考虑搬到另一个城市"))
+    #expect(promptText.contains("长期记忆"))
+    // The forgotten memory is ineligible and never reaches the prompt.
+    #expect(!promptText.contains("读者讨厌旅行"))
 }
 
 private final class BrainBridgeScriptedClient: ModelClient, @unchecked Sendable {

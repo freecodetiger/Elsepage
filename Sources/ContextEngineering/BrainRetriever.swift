@@ -19,8 +19,8 @@ public struct BrainCandidate: Hashable, Sendable {
 }
 
 /// Brain 检索 primitive(docs/brain.md §12):lexical + persistent embedding +
-/// RRF over one eligible set, filterable by kind. Mirrors the MemoryRetriever
-/// lane pattern; the semantic lane reads PERSISTED item vectors
+/// RRF over one eligible set, filterable by kind. The semantic lane reads
+/// PERSISTED item vectors
 /// (`BrainEmbeddingStore`) instead of re-embedding items every query —
 /// contentHash guards make "create once, retrieve many" real, and a bounded
 /// refresh batch keeps worst-case query latency finite. Missing provider or
@@ -90,7 +90,7 @@ public struct BrainRetriever: Sendable {
         }
     }
 
-    // MARK: - Lexical lane (same contract as MemoryRetriever)
+    // MARK: - Lexical lane
 
     private func lexicalScores(for candidates: some Collection<BrainItem>, query: String) -> [(BrainItem, Double)] {
         let queryTokens = ReflectionLexicalMatcher.tokens(in: query)

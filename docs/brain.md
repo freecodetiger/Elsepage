@@ -806,7 +806,17 @@ enum BrainContextRequest {
 }
 ```
 
-Memory 仍然可以保持现有独立 source，因为它与 Thought / Question 的权限语义不同。
+Memory 与 Thought / Question 的权限语义不同（Memory 是 Agent 可稳定依赖的知识，
+Thought/Question 是过程性想法）。实现上 Memory（kind = memory，非 superseded/forgotten）
+随 brain lane 一起被 `BrainRetriever` 检索，作为**非可引用的上下文**进入 prompt，而不是
+独立的引用证据源。
+
+> **已接受的变更（legacy memory lane 退役）**:v1 里长期记忆是每次回复**确定性**召回、
+> 作为可引用「长期记忆」证据（`ReaderMemory` + `MemoryRetriever`）。收敛后该 lane 删除，
+> 记忆只在 **planner 请求 brain 检索**时进入上下文——用户明确提及过去的想法/问题/长期记忆
+> 才触发。My Mind 的「继续想想」pinned 路径不受影响。若未来需要恢复确定性召回，可在
+> `executionPlan.brain == nil` 时补一个 top-N active memory 的确定性 fallback（BrainRetriever
+> 已支持 `kinds: [.memory]`），当前刻意未实现以保持「记忆非每次必达」的新语义。
 
 ---
 
@@ -861,14 +871,16 @@ ContextCandidate
                            │
             ┌──────────────┼───────────────┐
             ↓              ↓               ↓
-        Book           Reflection        Memory
+        Book           Reflection        Brain
       Retriever         Retriever       Retriever
-            │              │               │
+            │              │          (Thought / Question /
+            │              │          Memory — kinds: code policy)
             │              └───────┐       │
             │                      │       │
             │                BrainRetriever
             │                 Thought
             │                 Question
+            │                 Memory
             │                      │
             └──────────────┬───────┘
                            ↓
@@ -885,6 +897,10 @@ ContextCandidate
 注意：
 
 > Brain 是新的 Context Source，不是新的主 Agent。
+>
+> 收敛后（legacy MemoryRetriever lane 退役）不再有独立的 Memory Retriever：Memory 由
+> `BrainRetriever(kinds: [.thought, .question, .memory])` 与 Thought/Question 一起召回，
+> 作为**非可引用上下文**进入 prompt，且仅在 Planner 请求 brain 检索时生效（见 §11B 的变更注）。
 
 ---
 
@@ -1123,6 +1139,19 @@ Memory：
 ```
 
 语义完全不同。
+
+### 生产写者(已实现)
+
+两条生命周期关系在 My Mind 由**用户动作**确定性写入(`BrainLifecycle`,
+`BrainCore/BrainLifecycle.swift`),幂等、双方记录都保留:
+
+- 想法详情页 `.stable` 想法 → **存档为记忆**:`Thought --derivedMemory--> Memory`,
+  派生 Memory 的 `origin = .derivedFromThought` / `state = .active` / `confidence = .high`。
+- 问题详情页 **标记已解决并关联想法**:`Question --addresses--> Thought`,并把
+  Question 置为 `.resolved`(从非 archived 想法中挑选)。
+
+`BrainProjectionService` 的 relation 动作(投影 LLM 直接写关系)是后续工作——关系本质
+依赖用户确认,现阶段由用户显式触发比模型推测更可信。
 
 ---
 

@@ -19,11 +19,11 @@ import Testing
 }
 
 @Test func rankerPacksBySourcePriorityWithinBudget() {
-    let memory = candidate("m1", source: .memory, content: "长期记忆", relevance: 0.9)
+    let past = candidate("p1", source: .pastReflection, content: "过去的想法", relevance: 0.9)
     let book = candidate("b1", source: .bookPassage, content: "书的段落内容较长占用预算", relevance: 0.8)
-    let budget = ContextBudgetProfile(totalCharacters: 12, perSource: [.bookPassage: 12, .memory: 12])
-    let result = ranker.build(from: [memory, book], budget: budget)
-    // bookPassage has higher priority than memory and fills the total budget first.
+    let budget = ContextBudgetProfile(totalCharacters: 12, perSource: [.bookPassage: 12, .pastReflection: 12])
+    let result = ranker.build(from: [past, book], budget: budget)
+    // bookPassage has higher priority than pastReflection and fills the total budget first.
     #expect(result.bundle.candidates.map(\.source) == [.bookPassage])
     #expect(result.bundle.candidates[0].content.count == 12) // truncated to remaining total
 }
@@ -47,23 +47,23 @@ import Testing
 @Test func rankerIsDeterministic() {
     let input = [
         candidate("b1", source: .bookPassage, content: "乙", relevance: 0.7),
-        candidate("m1", source: .memory, content: "记忆", relevance: 0.9),
+        candidate("br1", source: .brain, content: "想法", relevance: 0.9),
         candidate("n1", source: .nearbyPassage, content: "当前", relevance: 0.5),
         candidate("c1", source: .conversation, content: "对话", relevance: 0.8),
     ]
-    let budget = ContextBudgetProfile(totalCharacters: 200, perSource: [.nearbyPassage: 50, .bookPassage: 50, .memory: 50, .conversation: 50])
+    let budget = ContextBudgetProfile(totalCharacters: 200, perSource: [.nearbyPassage: 50, .bookPassage: 50, .brain: 50, .conversation: 50])
     let a = ranker.build(from: input, budget: budget)
     let b = ranker.build(from: input, budget: budget)
     #expect(a.bundle == b.bundle)
-    // Order respects source priority: nearby > book > memory > conversation.
-    #expect(a.bundle.candidates.map(\.source) == [.nearbyPassage, .bookPassage, .memory, .conversation])
+    // Order respects source priority: nearby > book > brain = pastReflection > conversation.
+    #expect(a.bundle.candidates.map(\.source) == [.nearbyPassage, .bookPassage, .brain, .conversation])
 }
 
 // MARK: - Helpers
 
 private let ranker = ContextCandidateRanker()
 
-private let unlimited = ContextBudgetProfile(totalCharacters: 10_000, perSource: [.nearbyPassage: 10_000, .bookPassage: 10_000, .pastReflection: 10_000, .memory: 10_000, .conversation: 10_000])
+private let unlimited = ContextBudgetProfile(totalCharacters: 10_000, perSource: [.nearbyPassage: 10_000, .bookPassage: 10_000, .pastReflection: 10_000, .brain: 10_000, .conversation: 10_000])
 
 private func candidate(_ id: String, source: ContextSource, content: String, relevance: Double, parent: String? = nil, ordinal: Int? = nil) -> ContextCandidate {
     var metadata: [String: String] = [:]

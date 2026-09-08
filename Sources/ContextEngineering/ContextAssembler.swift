@@ -55,28 +55,22 @@ public struct NearbyPassageCandidate: Hashable, Sendable {
     }
 }
 
-/// Turns raw evidence sources (nearby passage, book evidence, past reflection,
-/// memories) into a budgeted, deduplicated, source-prioritized evidence bundle
-/// for ReaderAgent. ReaderAgent no longer competes sources by hand — this layer
-/// owns source competition, per-source token budgeting and dedup; ReaderAgent maps
-/// the result back to `AgentResponseEvidence` (E-numbered) for the citation path.
-/// Budgets come from the compiled `ContextExecutionPlan` (planner protocol v2).
+/// Turns raw evidence sources (nearby passage, book evidence, past reflection)
+/// plus bridged brain candidates into a budgeted, deduplicated,
+/// source-prioritized bundle for ReaderAgent. ReaderAgent no longer competes
+/// sources by hand — this layer owns source competition, per-source token
+/// budgeting and dedup; ReaderAgent maps the result back to
+/// `AgentResponseEvidence` (E-numbered) for the citation path. Budgets come from
+/// the compiled `ContextExecutionPlan` (planner protocol v2).
 public struct ContextAssembler: Sendable {
     private let ranker: ContextCandidateRanker
 
     public init(ranker: ContextCandidateRanker = .init()) { self.ranker = ranker }
 
-    /// Memory isn't a field of `ContextBudget` (ADR-safe: traces keep decoding);
-    /// the memory lane gets a derived slice of the past-thought budget.
-    public static func derivedMemoryCharacters(from pastThoughtCharacters: Int) -> Int {
-        max(0, pastThoughtCharacters / 2)
-    }
-
     public func assemble(
         nearby: NearbyPassageCandidate?,
         bookEvidence: [BookEvidence],
         previousReflection: Reflection?,
-        memories: [ReaderMemory],
         reflectionBookID: BookID,
         budget: ContextBudget,
         brainCandidates: [ContextCandidate] = []
@@ -109,14 +103,6 @@ public struct ContextAssembler: Sendable {
                 AssembledEvidence(kind: .pastReflection, sourceID: previousReflection.id.description, bookID: reflectionBookID, title: "过去的想法", excerpt: previousReflection.originalText, locator: nil)
             )
         }
-        for memory in memories {
-            let id = memory.id.uuidString.lowercased()
-            register(
-                ContextCandidate(id: id, source: .memory, content: memory.claim, relevance: 1.0, tokenCost: memory.claim.count),
-                AssembledEvidence(kind: .pastReflection, sourceID: id, bookID: reflectionBookID, title: "长期记忆", excerpt: memory.claim, locator: nil)
-            )
-        }
-
         // Brain candidates are already ContextCandidates (bridged by
         // BrainContextProvider); they carry no citation provenance by design.
         candidates.append(contentsOf: brainCandidates)
@@ -127,7 +113,6 @@ public struct ContextAssembler: Sendable {
                 .nearbyPassage: budget.nearbyCharacters,
                 .bookPassage: budget.bookEvidenceCharacters,
                 .pastReflection: budget.pastThoughtCharacters,
-                .memory: Self.derivedMemoryCharacters(from: budget.pastThoughtCharacters),
                 // Compiled policy constants (phase 16): retrieved brain items get
                 // a bounded slice; the pinned item is unbounded within the total
                 // so it always enters the bundle.

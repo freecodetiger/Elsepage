@@ -162,9 +162,10 @@ public struct ReaderContextPlan: Hashable, Codable, Sendable {
     public let nearbyPassage: NearbyPassagePlan
     public let bookRetrieval: BookRetrievalPlan?
     public let pastThoughtRetrieval: PastThoughtRetrievalPlan?
-    /// Evidence-only memory source (never a ReflectionConnection). Optional so
-    /// pre-evolution plans decode; the validator defaults it on to preserve the
-    /// current always-consulted behavior.
+    /// DECODE-COMPAT ONLY (legacy memory lane retired): kept so pre-convergence
+    /// `ContextPlanTrace` JSON (v1 wire shape) keeps decoding in Settings
+    /// diagnostics. No consumer reads it; memory now rides the planner-requested
+    /// brain lane (kind = memory).
     public let memoryRetrieval: MemoryRetrievalPlan?
     public let responseGuidance: ResponseGuidance
     public let rationale: String?
@@ -189,6 +190,8 @@ public struct ContextPipelineMetrics: Hashable, Codable, Sendable {
     /// Book evidence units actually emitted (parent-anchored expanded windows).
     public var expandedEvidenceCount: Int?
     public var reflectionEvidenceCount: Int?
+    /// DECODE-COMPAT ONLY: no longer populated since the legacy memory lane was
+    /// retired (memory rides the brain lane); kept so old trace rows decode.
     public var memoryEvidenceCount: Int?
     /// Candidates removed by dedup in the assembly layer.
     public var deduplicatedCount: Int?

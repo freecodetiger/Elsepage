@@ -1,5 +1,6 @@
 import AchievementCore
 import AppInfrastructure
+import BrainCore
 import ContextRouting
 import Foundation
 import GRDB
@@ -16,15 +17,14 @@ import Testing
 /// Seeds every user-data table (books, index incl. FTS/embeddings and parent/
 /// child chunks, positions, highlights, notes, preferences, sessions,
 /// reflections with messages/evidence/connections/citations/journal rows,
-/// memories, achievements, provider configuration, routing traces) so the wipe
-/// tests can assert nothing survives.
+/// brain items, achievements, provider configuration, routing traces) so the
+/// wipe tests can assert nothing survives.
 private func seedFullUserData(database: AppDatabase) async throws {
     let books = GRDBBookRepository(database: database)
     let reading = GRDBReadingRepository(database: database)
     let sessions = GRDBReadingSessionRepository(database: database)
     let reflections = GRDBReflectionRepository(database: database)
     let journal = GRDBJournalRepository(database: database)
-    let memories = GRDBMemoryRepository(database: database)
     let index = GRDBBookIndexRepository(database: database)
     let traces = GRDBRoutingTraceRepository(database: database)
     let achievements = GRDBAchievementRepository(database: database)
@@ -61,12 +61,13 @@ private func seedFullUserData(database: AppDatabase) async throws {
     try await journal.saveQuestion(.init(reflectionID: reflection.id, messageID: agentMessage.id, text: "还想继续吗？"))
     try await journal.saveCitation(.init(reflectionID: reflection.id, messageID: agentMessage.id, sourceType: .bookLocator, bookID: book.id, locator: locator, title: "第一章", excerpt: "引用"))
     try await journal.saveMemoryChange(.init(journalID: reflection.id, changeType: .store, summary: "一次记忆变化"))
-    try await memories.save(ReaderMemory(
-        sourceReflectionID: reflection.id, kind: .semantic, claim: "长期记忆",
-        confidence: 0.6, evidenceIDs: ["refl:\(reflection.id)"]
-    ))
-    // Also a memory without a source reflection: cascade alone would not remove it.
-    try await memories.save(ReaderMemory(kind: .profileTrait, claim: "无来源记忆", confidence: 0.5))
+    // Brain item: cascade alone would not remove it, so the wipe must enumerate it.
+    let brainRepo = GRDBBrainRepository(database: database)
+    try await brainRepo.save(.memory(BrainMemory(
+        id: .init(rawValue: "wipe-brain-memory"), content: "长期记忆",
+        origin: .agentInferred, confidence: .medium, state: .active,
+        provenance: BrainProvenance(originEvidence: nil), createdAt: Date(), updatedAt: Date()
+    )))
 
     let version = BookIndexPipeline.currentVersion
     try await index.save(job: BookIndexJob(bookID: book.id, indexVersion: version, state: .ready))

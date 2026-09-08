@@ -7,9 +7,9 @@ import ReadingSessionCore
 import ReflectionCore
 import Testing
 
-// WS3 cross-book Personal Retrieval + long-term memory retrieval.
-// Same-book connections stay preferred (同书 > 跨书 > 记忆); memories surface as
-// evidence only and never create a ReflectionConnection.
+// WS3 cross-book Personal Retrieval. Same-book connections stay preferred
+// (同书 > 跨书). Long-term memory recall is covered by the brain-lane tests in
+// BrainPersistenceTests (memory now rides the brain lane, not a legacy lane).
 
 @Test func agentConnectsToCrossBookReflectionWhenSameBookHasNone() async throws {
     let database = try AppDatabase.inMemory()
@@ -63,72 +63,6 @@ import Testing
         Issue.record("Expected a completed agent reply")
         return
     }
-    #expect(try await reflections.connections(for: current.id).isEmpty)
-}
-
-@Test func matchingActiveMemorySurfacesLongTermMemoryEvidenceWithoutConnection() async throws {
-    let database = try AppDatabase.inMemory()
-    let books = GRDBBookRepository(database: database)
-    let reflections = GRDBReflectionRepository(database: database)
-    let memories = GRDBMemoryRepository(database: database)
-    let book = TestFixtures.book(fingerprint: "memory-book")
-    try await books.insert(book)
-
-    let current = Reflection(bookID: book.id, originalText: "我在想，自由与责任或许是一体两面的关系。", inputKind: .text)
-    try await reflections.insert(current, linkedHighlightIDs: [], evidence: [])
-    let memory = ReaderMemory(
-        kind: .semantic, claim: "读者反复思考自由与责任的关系。",
-        confidence: 0.7, status: .active, evidenceIDs: []
-    )
-    try await memories.save(memory)
-
-    let response = ModelResponse(content: "这呼应了你长期反复思考的自由与责任。")
-    let agent = ReaderAgent(
-        reflections: reflections,
-        models: CrossBookModelFactory(client: FakeModelClient(events: [.started, .completed(response)])),
-        memories: memories
-    )
-    let events = await collectCrossBook(agent.respond(to: current.id))
-    guard case .completed? = events.last(where: { if case .completed = $0 { return true }; return false }) else {
-        Issue.record("Expected a completed agent reply")
-        return
-    }
-    let provenance = events.compactMap { if case .citationsValidated(let p) = $0 { return p }; return nil }.first
-    let memoryEvidence = try #require(provenance?.evidence.first { $0.title == "长期记忆" })
-    #expect(memoryEvidence.kind == .pastReflection)
-    #expect(memoryEvidence.excerpt == memory.claim)
-    #expect(try await reflections.connections(for: current.id).isEmpty)
-}
-
-@Test func supersededMemoryIsIgnored() async throws {
-    let database = try AppDatabase.inMemory()
-    let books = GRDBBookRepository(database: database)
-    let reflections = GRDBReflectionRepository(database: database)
-    let memories = GRDBMemoryRepository(database: database)
-    let book = TestFixtures.book(fingerprint: "memory-book-superseded")
-    try await books.insert(book)
-
-    let current = Reflection(bookID: book.id, originalText: "我在想，自由与责任或许是一体两面的关系。", inputKind: .text)
-    try await reflections.insert(current, linkedHighlightIDs: [], evidence: [])
-    let memory = ReaderMemory(
-        kind: .semantic, claim: "读者反复思考自由与责任的关系。",
-        confidence: 0.7, status: .superseded, evidenceIDs: []
-    )
-    try await memories.save(memory)
-
-    let response = ModelResponse(content: "明白了。")
-    let agent = ReaderAgent(
-        reflections: reflections,
-        models: CrossBookModelFactory(client: FakeModelClient(events: [.started, .completed(response)])),
-        memories: memories
-    )
-    let events = await collectCrossBook(agent.respond(to: current.id))
-    guard case .completed? = events.last(where: { if case .completed = $0 { return true }; return false }) else {
-        Issue.record("Expected a completed agent reply")
-        return
-    }
-    let provenance = events.compactMap { if case .citationsValidated(let p) = $0 { return p }; return nil }.first
-    #expect(provenance?.evidence.contains { $0.title == "长期记忆" } != true)
     #expect(try await reflections.connections(for: current.id).isEmpty)
 }
 

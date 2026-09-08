@@ -263,7 +263,6 @@ private func routingInput(
     #expect(budget.pastThoughtCharacters == 0)
     #expect(execution.book == nil)
     #expect(execution.pastThought == nil)
-    #expect(execution.memory.topN == 2, "memory is an unconditional system policy")
     #expect(execution.responseGuidance.allowQuestion)
     #expect(!execution.responseGuidance.shouldNaturallyEnd)
 

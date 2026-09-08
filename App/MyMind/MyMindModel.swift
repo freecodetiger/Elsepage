@@ -12,11 +12,14 @@ struct ReflectionAgentUnavailable: Error {}
 
 /// Presentation state for the "我的大脑" surface (docs/brain.md §14). All three
 /// sections read the Brain store (brainItems) — since phase 17 the projection
-/// service is the single production writer for memories, so the legacy
-/// `memories` table is retired from this UI (v21 backfill covered old rows).
-/// Every memory is traceable to its source reflection and mutable
-/// (准确 / 不准确 / 修改 / 忘记 / 一键清除); Thought/Question are editable but
-/// never manually created — they form through reading.
+/// service is the single production writer for memories (the legacy `memories`
+/// table is retired, v26 drops it). Users additionally drive the §18 lifecycle
+/// from here: archive a stable Thought as a Memory (`derivedMemory`) or mark a
+/// Question resolved and link its answering Thought (`addresses`) — both are
+/// user-confirmed actions, so they are deterministic `BrainLifecycle` writes,
+/// not LLM proposals. Every memory is traceable to its source reflection and
+/// mutable (准确 / 不准确 / 修改 / 忘记 / 一键清除); Thought/Question are
+/// editable but never manually created — they form through reading.
 @MainActor @Observable
 final class MyMindModel {
     private let brain: any BrainRepository
@@ -243,6 +246,10 @@ final class MyMindModel {
     }
 
     func editQuestion(_ question: Question, text: String, state: QuestionState) async {
+        // 措辞被替换时先记录修订(与 editThought 一致);仅状态变化不新增修订。
+        if question.question != text {
+            try? await brain.recordRevision(itemID: question.id, content: question.question, triggerEvidenceID: nil)
+        }
         var updated = question
         updated.question = text
         updated.state = state
@@ -256,6 +263,29 @@ final class MyMindModel {
 
     func deleteQuestion(_ question: Question) async {
         await deleteBrainItem(id: question.id)
+    }
+
+    /// §18 lifecycle (user-driven, deterministic): archive a stable Thought as an
+    /// active Memory (derivedMemory relation). Idempotent; the source Thought and
+    /// the derived Memory both keep existing.
+    func archiveAsMemory(_ thought: Thought) async {
+        do {
+            _ = try await BrainLifecycle.archiveAsMemory(thought, brain: brain)
+            await reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// §18 lifecycle: mark a Question resolved and link the Thought that answers
+    /// it (addresses relation). Idempotent per (question, thought).
+    func resolveQuestion(_ question: Question, answeredBy thoughtID: BrainItemID) async {
+        do {
+            try await BrainLifecycle.resolveQuestion(question, answeredBy: thoughtID, brain: brain)
+            await reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func persistBrainItem(_ item: BrainItem) async {

@@ -1,3 +1,4 @@
+import BrainCore
 import Foundation
 import LibraryCore
 import ReaderCore
@@ -9,11 +10,9 @@ import ReadingSessionCore
 public struct PersonalDataArchive: Codable, Sendable {
     public var exportedAt: Date
     public var books: [BookEntry]
-    /// Every long-term memory with all of its fields (claim, confidence,
-    /// evidence IDs, status, userEdited), matching My Mind's data source.
-    public var memories: [ReaderMemory]
-    /// The "AI 眼中的我" projection exactly as My Mind renders it.
-    public var readerProfile: ReaderProfileEntry
+    /// The user's Personal Brain (Thought / Question / Memory items and the
+    /// relations between them) — the same store My Mind ("我的大脑") renders.
+    public var brain: BrainExport
 
     public struct BookEntry: Codable, Sendable {
         public var book: Book
@@ -74,30 +73,73 @@ public struct PersonalDataArchive: Codable, Sendable {
         }
     }
 
-    public init(exportedAt: Date, books: [BookEntry], memories: [ReaderMemory], readerProfile: ReaderProfileEntry) {
+    public init(exportedAt: Date, books: [BookEntry], brain: BrainExport) {
         self.exportedAt = exportedAt
         self.books = books
-        self.memories = memories
-        self.readerProfile = readerProfile
+        self.brain = brain
     }
 }
 
-/// The Reader Profile projection over the memory store — the same deterministic
-/// groupings My Mind ("AI 眼中的我") displays, so the export and the UI can never
-/// drift apart.
-public struct ReaderProfileEntry: Codable, Sendable {
-    /// Active profileTrait / preference / semantic memories, most recently updated first.
-    public var profileTraits: [ReaderMemory]
-    /// Every memory that has not been superseded (the "记忆" list).
-    public var activeMemories: [ReaderMemory]
-    /// Memories the user marked 不准确, newest first.
-    public var supersededMemories: [ReaderMemory]
+/// The Personal Brain as export payload. BrainCore domain structs deliberately
+/// stay non-Codable; these DTOs carry the fields the UI renders (state, origin,
+/// confidence) plus relations, so the JSON reconstructs My Mind's view.
+public struct BrainExport: Codable, Sendable {
+    public var thoughts: [BrainItemExport]
+    public var questions: [BrainItemExport]
+    public var memories: [BrainItemExport]
+    public var relations: [BrainRelationExport]
 
-    public init(memories: [ReaderMemory]) {
-        let projection = ReaderProfileProjection(memories: memories)
-        profileTraits = projection.profileTraits
-        activeMemories = projection.activeMemories
-        supersededMemories = projection.supersededMemories
+    public init(
+        thoughts: [BrainItemExport],
+        questions: [BrainItemExport],
+        memories: [BrainItemExport],
+        relations: [BrainRelationExport]
+    ) {
+        self.thoughts = thoughts
+        self.questions = questions
+        self.memories = memories
+        self.relations = relations
+    }
+}
+
+public struct BrainItemExport: Codable, Sendable {
+    public let id: String
+    public let title: String?
+    public let content: String
+    public let state: String
+    public let origin: String?
+    public let confidence: String?
+    public let createdAt: Date
+    public let updatedAt: Date
+
+    public init(
+        id: String, title: String?, content: String, state: String,
+        origin: String?, confidence: String?, createdAt: Date, updatedAt: Date
+    ) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.state = state
+        self.origin = origin
+        self.confidence = confidence
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct BrainRelationExport: Codable, Sendable {
+    public let sourceItemID: String
+    public let targetItemID: String
+    public let relation: String
+    public let weight: Double
+    public let createdAt: Date
+
+    public init(sourceItemID: String, targetItemID: String, relation: String, weight: Double, createdAt: Date) {
+        self.sourceItemID = sourceItemID
+        self.targetItemID = targetItemID
+        self.relation = relation
+        self.weight = weight
+        self.createdAt = createdAt
     }
 }
 
@@ -110,7 +152,7 @@ public struct PersonalDataExporter: Sendable {
     private let sessions: any ReadingSessionRepository
     private let reflections: any ReflectionRepository
     private let journal: any JournalRepository
-    private let memories: any MemoryRepository
+    private let brain: any BrainRepository
 
     public init(
         books: any BookRepository,
@@ -118,14 +160,14 @@ public struct PersonalDataExporter: Sendable {
         sessions: any ReadingSessionRepository,
         reflections: any ReflectionRepository,
         journal: any JournalRepository,
-        memories: any MemoryRepository
+        brain: any BrainRepository
     ) {
         self.books = books
         self.reading = reading
         self.sessions = sessions
         self.reflections = reflections
         self.journal = journal
-        self.memories = memories
+        self.brain = brain
     }
 
     public func export() async throws -> Data {
@@ -169,12 +211,56 @@ public struct PersonalDataExporter: Sendable {
                 reflections: reflectionEntries
             ))
         }
-        let memories = try await self.memories.memories()
         return PersonalDataArchive(
             exportedAt: Date(),
             books: entries,
-            memories: memories,
-            readerProfile: ReaderProfileEntry(memories: memories)
+            brain: try await makeBrainExport()
+        )
+    }
+
+    private func makeBrainExport() async throws -> BrainExport {
+        let items = try await brain.items()
+        var thoughts: [BrainItemExport] = []
+        var questions: [BrainItemExport] = []
+        var memories: [BrainItemExport] = []
+        var relationSet: [String: BrainRelationExport] = [:]
+        for item in items {
+            switch item {
+            case .thought(let thought):
+                thoughts.append(BrainItemExport(
+                    id: thought.id.rawValue, title: thought.title, content: thought.statement,
+                    state: thought.stage.rawValue, origin: nil, confidence: nil,
+                    createdAt: thought.createdAt, updatedAt: thought.updatedAt
+                ))
+            case .question(let question):
+                questions.append(BrainItemExport(
+                    id: question.id.rawValue, title: nil, content: question.question,
+                    state: question.state.rawValue, origin: nil, confidence: nil,
+                    createdAt: question.createdAt, updatedAt: question.updatedAt
+                ))
+            case .memory(let memory):
+                memories.append(BrainItemExport(
+                    id: memory.id.rawValue, title: nil, content: memory.content,
+                    state: memory.state.rawValue, origin: memory.origin.rawValue, confidence: memory.confidence.rawValue,
+                    createdAt: memory.createdAt, updatedAt: memory.updatedAt
+                ))
+            }
+            for relation in try await brain.relations(of: item.id) {
+                let key = "\(relation.sourceItemID.rawValue)|\(relation.targetItemID.rawValue)|\(relation.relation.rawValue)"
+                if relationSet[key] == nil {
+                    relationSet[key] = BrainRelationExport(
+                        sourceItemID: relation.sourceItemID.rawValue,
+                        targetItemID: relation.targetItemID.rawValue,
+                        relation: relation.relation.rawValue,
+                        weight: relation.weight,
+                        createdAt: relation.createdAt
+                    )
+                }
+            }
+        }
+        return BrainExport(
+            thoughts: thoughts, questions: questions, memories: memories,
+            relations: relationSet.values.sorted { $0.sourceItemID < $1.sourceItemID }
         )
     }
 }

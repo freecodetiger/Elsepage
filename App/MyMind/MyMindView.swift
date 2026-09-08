@@ -198,6 +198,9 @@ struct MyMindView: View {
             openSource: openSource,
             canContinueThinking: model.canContinueThinking,
             onContinueThinking: { discussingItem = .thought(thought) },
+            onArchiveAsMemory: {
+                Task { await model.archiveAsMemory(thought) }
+            },
             onEdit: { editingThought = thought },
             onDelete: {
                 Task {
@@ -209,7 +212,9 @@ struct MyMindView: View {
     }
 
     private func brainQuestionDestination(_ question: Question) -> some View {
-        BrainQuestionDetailView(
+        // 可被关联的非 archived 想法(§18 addresses);空则详情页不显示该动作。
+        let answerCandidates = model.thoughts.filter { $0.stage != .archived }
+        return BrainQuestionDetailView(
             question: question,
             evidenceLoader: { await model.brainEvidence(for: .question(question)) },
             contextLoader: { evidence in
@@ -220,6 +225,10 @@ struct MyMindView: View {
             openSource: openSource,
             canContinueThinking: model.canContinueThinking,
             onContinueThinking: { discussingItem = .question(question) },
+            answerCandidates: answerCandidates,
+            onResolve: { thoughtID in
+                Task { await model.resolveQuestion(question, answeredBy: thoughtID) }
+            },
             onEdit: { editingQuestion = question },
             onDelete: {
                 Task {
@@ -661,10 +670,9 @@ private struct BrainItemRow: View {
     }
 }
 
-/// Thought detail (brain.md §15, phase-14 subset): current statement, stage,
-/// evidence section, edit and delete. Evolution timeline arrives with
-/// revisions (phase 18); related-item sections arrive when phase 17 starts
-/// writing relations.
+/// Thought detail (brain.md §15): current statement, stage, evidence section,
+/// edit, delete, and — for a `.stable` thought — 存档为记忆 (§18: archive a
+/// confirmed thought as an active Memory via `derivedMemory`).
 private struct BrainThoughtDetailView: View {
     let thought: Thought
     let evidenceLoader: () async -> [BrainEvidence]
@@ -673,6 +681,7 @@ private struct BrainThoughtDetailView: View {
     let openSource: (Book, BookLocator) -> Void
     let canContinueThinking: Bool
     let onContinueThinking: () -> Void
+    let onArchiveAsMemory: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showsDelete = false
@@ -718,6 +727,11 @@ private struct BrainThoughtDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
+            if thought.stage == .stable {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("存档为记忆", action: onArchiveAsMemory)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("继续想想", action: onContinueThinking)
                     .disabled(!canContinueThinking)
@@ -788,9 +802,9 @@ private struct BrainRevisionSection: View {
     }
 }
 
-/// Question detail (brain.md §16, phase-14 subset): the question, its state,
-/// and where it came from. "正在形成的答案" arrives when phase 17 writes
-/// addresses relations.
+/// Question detail (brain.md §16): the question, its state, and where it came
+/// from. 标记已解决并关联想法 (§18) links the question to its answering thought
+/// via an `addresses` relation.
 private struct BrainQuestionDetailView: View {
     let question: Question
     let evidenceLoader: () async -> [BrainEvidence]
@@ -798,9 +812,13 @@ private struct BrainQuestionDetailView: View {
     let openSource: (Book, BookLocator) -> Void
     let canContinueThinking: Bool
     let onContinueThinking: () -> Void
+    /// 可被关联为"答案"的非 archived 想法(§18 addresses)。
+    let answerCandidates: [Thought]
+    let onResolve: (BrainItemID) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showsDelete = false
+    @State private var showsResolvePicker = false
     @State private var evidence: [BrainEvidence] = []
     @State private var contexts: [String: MemoryEvidence] = [:]
 
@@ -841,6 +859,11 @@ private struct BrainQuestionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
+            if question.state != .resolved && !answerCandidates.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("标记已解决") { showsResolvePicker = true }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("继续想想", action: onContinueThinking)
                     .disabled(!canContinueThinking)
@@ -860,6 +883,12 @@ private struct BrainQuestionDetailView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("删除后无法撤销。")
+        }
+        .confirmationDialog("这个问题已被哪个想法回答？", isPresented: $showsResolvePicker, titleVisibility: .visible) {
+            ForEach(answerCandidates, id: \.id) { thought in
+                Button(thought.title) { onResolve(thought.id) }
+            }
+            Button("取消", role: .cancel) {}
         }
     }
 

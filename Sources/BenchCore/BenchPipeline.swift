@@ -1,4 +1,5 @@
 import AgentRuntime
+import BrainCore
 import ContextEngineering
 import ContextRouting
 import Foundation
@@ -98,7 +99,7 @@ public struct BenchSampleRun: Codable, Sendable {
 ///
 ///   ContextRoutingInput (built like ReaderAgent.run)
 ///     → LLMReaderContextRouter → SemanticPlanValidator → ContextPolicyCompiler
-///     → ReflectionRetriever / MemoryRetriever (over sample history)
+///     → ReflectionRetriever (past thoughts) + brain lane over sample memory claims
 ///     → ReaderAgentContextBuilder (over sample evidence)
 ///     → ContextAssembler → ReaderAgentPolicy.input
 ///     → AgentExecutor → AgentCitationValidator
@@ -159,7 +160,7 @@ public struct BenchPipeline: Sendable {
                 session: nil, sessionHighlights: [], sessionNotes: [],
                 bookReflections: sameBookCandidates
             )
-            let memoryRepository = BenchMemoryRepository(sample.userHistory.memoryClaims, sampleID: sample.id)
+            let brainRepository = BenchBrainRepository(sample.userHistory.memoryClaims, sampleID: sample.id)
 
             // --- Routing (same construction as ReaderAgent.run) ---
             let routingInput = ContextRoutingInput(
@@ -190,10 +191,16 @@ public struct BenchPipeline: Sendable {
             let routingSeconds = Self.seconds(from: routingStart, to: clock.now)
             let (validatedSemanticPlan, _) = SemanticPlanValidator().validate(routingResult.plan, input: routingInput)
             let executionPlan = ContextPolicyCompiler().compile(validatedSemanticPlan, input: routingInput)
-            // Deterministic system policy: memory is always consulted as evidence.
-            let matchedMemories = await MemoryRetriever().matchingMemories(
-                routingText: reflection.originalText, in: memoryRepository, topN: executionPlan.memory.topN
-            )
+            // Brain lane over sample memory claims (same shape as ReaderAgent.run):
+            // active kind=memory items are recalled only when the planner requests
+            // brain retrieval. No embedding provider → lexical-only, deterministic.
+            var brainCandidates: [ContextCandidate] = []
+            if let brainPolicy = executionPlan.brain {
+                let retriever = BrainRetriever(items: brainRepository)
+                brainCandidates = await BrainContextProvider(retriever: retriever).candidates(
+                    query: brainPolicy.query, limit: brainPolicy.limit
+                )
+            }
 
             // --- Past-thought connection (WS3 same-book preference, as in ReaderAgent.run) ---
             var connection: ReflectionConnection?
@@ -240,9 +247,9 @@ public struct BenchPipeline: Sendable {
                 nearby: nearbyCandidate,
                 bookEvidence: bookContext?.evidence ?? [],
                 previousReflection: prior,
-                memories: matchedMemories,
                 reflectionBookID: bookID,
-                budget: executionPlan.budget
+                budget: executionPlan.budget,
+                brainCandidates: brainCandidates
             )
             let assemblySeconds = Self.seconds(from: assemblyStart, to: clock.now)
 
@@ -274,6 +281,9 @@ public struct BenchPipeline: Sendable {
                 nearbyCharacterBudget: executionPlan.budget.nearbyCharacters,
                 pastThoughtCharacterBudget: executionPlan.budget.pastThoughtCharacters,
                 conversationCharacterBudget: executionPlan.budget.conversationCharacters,
+                brainContext: assembly.brainCandidates.map { candidate in
+                    (title: candidate.metadata["brainTitle"] ?? "", content: candidate.content)
+                },
                 sessionContext: sessionContext
             )
             let promptCharacterCount = input.messages.reduce(0) { $0 + $1.content.count }
@@ -338,7 +348,7 @@ public struct BenchPipeline: Sendable {
                     usedFallback: routingResult.usedFallback,
                     fallbackReason: routingResult.fallbackReason?.rawValue,
                     connectedPastReflectionID: connection?.sourceReflectionID.description,
-                    memoryEvidenceCount: matchedMemories.count,
+                    memoryEvidenceCount: brainCandidates.filter { $0.metadata["brainKind"] == "memory" }.count,
                     assembledEvidenceCount: assembly.evidence.count
                 ),
                 timings: BenchTimings(

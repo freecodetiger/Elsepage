@@ -88,8 +88,7 @@ public struct ReaderAgent: Sendable {
     /// Fire-and-forget——失败只影响 Brain,绝不影响回复。
     private let projection: BrainProjectionService?
     private let traceRepository: (any RoutingTraceRepository)?
-    private let memories: (any MemoryRepository)?
-    /// Optional semantic recall lane for reflection/memory retrieval (Phase 5).
+    /// Optional semantic recall lane for reflection retrieval (Phase 5).
     /// Nil → the existing lexical-only behavior, unchanged.
     private let semanticRanking: (any SemanticRanking)?
 
@@ -106,7 +105,6 @@ public struct ReaderAgent: Sendable {
         brainRetriever: BrainRetriever? = nil,
         projection: BrainProjectionService? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
-        memories: (any MemoryRepository)? = nil,
         semanticRanking: (any SemanticRanking)? = nil
     ) {
         self.reflections = reflections
@@ -121,7 +119,6 @@ public struct ReaderAgent: Sendable {
         self.brainRetriever = brainRetriever
         self.projection = projection
         self.traceRepository = traceRepository
-        self.memories = memories
         self.semanticRanking = semanticRanking
     }
 
@@ -239,13 +236,9 @@ public struct ReaderAgent: Sendable {
                     // deterministically compiles the execution policy.
                     let (validatedSemanticPlan, corrections) = planValidator.validate(routingResult.plan, input: routingInput)
                     let executionPlan = policyCompiler.compile(validatedSemanticPlan, input: routingInput)
-                    // Deterministic system policy: long-term memory is always
-                    // consulted as evidence (never a plan-driven decision).
-                    let matchedMemories = await MemoryRetriever(semantic: semanticRanking).matchingMemories(
-                        routingText: routingText,
-                        in: memories,
-                        topN: executionPlan.memory.topN
-                    )
+                    // Long-term memory rides the brain lane as non-citable context:
+                    // it is recalled when the planner requests brain retrieval (the
+                    // deterministic legacy "长期记忆" evidence lane is retired).
                     let connection: ReflectionConnection?
                     if let pastPolicy = executionPlan.pastThought {
                         // Same-book preference is strict (WS3): a same-book match wins
@@ -304,7 +297,6 @@ public struct ReaderAgent: Sendable {
                         nearby: nearbyCandidate,
                         bookEvidence: bookContext?.evidence ?? [],
                         previousReflection: prior,
-                        memories: matchedMemories,
                         reflectionBookID: reflection.bookID,
                         budget: executionPlan.budget,
                         brainCandidates: brainCandidates
@@ -323,7 +315,6 @@ public struct ReaderAgent: Sendable {
                     pipelineMetrics.lexicalTermsCustomized = bookPolicy.map { $0.lexicalTerms != $0.query }
                     pipelineMetrics.expandedEvidenceCount = bookContext?.evidence.count
                     pipelineMetrics.reflectionEvidenceCount = prior == nil ? nil : 1
-                    pipelineMetrics.memoryEvidenceCount = matchedMemories.isEmpty ? nil : matchedMemories.count
                     pipelineMetrics.deduplicatedCount = assembly.stats.deduplicatedCount
                     pipelineMetrics.contextTokenBudget = executionPlan.budget.totalCharacters
                     pipelineMetrics.actualContextTokens = assembly.stats.usedCharacters

@@ -557,6 +557,18 @@ public final class AppDatabase: @unchecked Sendable {
                 t.column("traceJSON", .blob).notNull()
             }
         }
+
+        // Brain convergence (docs/brain.md): retire the legacy `memories` table
+        // once brainItems is the single source of truth. One final idempotent
+        // backfill catches any legacy rows written after the v21 backfill (rows
+        // the journal flow produced after the migration), then the table is
+        // dropped. Reuses the deterministic mapping in `backfillBrainItems`.
+        // Fresh installs create `memories` in v12 and drop it here — migrations
+        // are immutable history, and the create-then-drop is harmless.
+        migrator.registerMigration("v26_retire_legacy_memories") { db in
+            try Self.backfillBrainItems(db) // reads FROM memories — must run BEFORE the drop
+            try db.drop(table: "memories")
+        }
         return migrator
     }
 
@@ -580,10 +592,10 @@ public final class AppDatabase: @unchecked Sendable {
 
     /// Every user-data table in child-before-parent order, so the wipe succeeds
     /// with or without foreign-key enforcement on the writer. `books` sits last:
-    /// its cascade would reach most tables, but memories (nullable source),
-    /// providerConfigurations and achievements carry no foreign key and are
-    /// therefore listed explicitly. Public so tests can assert the wipe leaves
-    /// zero rows in every table — new user-data tables must be added here.
+    /// its cascade would reach most tables, but providerConfigurations and
+    /// achievements carry no foreign key and are therefore listed explicitly.
+    /// Public so tests can assert the wipe leaves zero rows in every table — new
+    /// user-data tables must be added here.
     public static let userDataTableOrder: [String] = [
         "brainProjectionTraces",
         "routingTraces",
@@ -597,7 +609,6 @@ public final class AppDatabase: @unchecked Sendable {
         "reflectionHighlights",
         "reflectionConnections",
         "reflectionEvidence",
-        "memories",
         "brainItemEmbeddings",
         "brainItemEvidence",
         "brainItemRevisions",
@@ -624,10 +635,11 @@ public final class AppDatabase: @unchecked Sendable {
     /// "清除所有本地数据" (PRD §13.3): deletes every row of user data — books and
     /// their EPUB-derived index, reading positions, highlights, notes, sessions,
     /// reflections (with journal tables, evidence, citations, connections),
-    /// memories, achievements, provider configurations and preferences — in one
-    /// transaction, leaving the schema (and every migration) intact. App
-    /// Keychain secrets and UserDefaults are cleared by the caller, and the
-    /// sandbox container structure itself is untouched.
+    /// brain items (thoughts/questions/memories with evidence, relations,
+    /// revisions, embeddings), achievements, provider configurations and
+    /// preferences — in one transaction, leaving the schema (and every migration)
+    /// intact. App Keychain secrets and UserDefaults are cleared by the caller,
+    /// and the sandbox container structure itself is untouched.
     public func wipeAllUserData() async throws {
         try await writer.write { db in
             // Children before parents inside bookChunks (self-referencing
