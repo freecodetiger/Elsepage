@@ -112,8 +112,7 @@ final class DataSettingsModel {
         do {
             let allBooks = try await books.allBooks()
             for book in allBooks {
-                let audioNames = try await reflections.reflections(for: book.id)
-                    .compactMap(\.audioFileName)
+                let audioNames = try await reflections.audioFileNames(for: book.id)
                 let stagedAudio = try audioStore.stageDeletion(fileNames: audioNames)
                 let trashed: TrashedBookFile?
                 do {

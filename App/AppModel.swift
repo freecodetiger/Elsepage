@@ -60,9 +60,7 @@ final class AppModel {
             let sessions = GRDBReadingSessionRepository(database: database)
             let reflections = GRDBReflectionRepository(database: database)
             let audioStore = AudioFileStore.live()
-            let referencedAudioFiles = Set(
-                try await reflections.allReflections().compactMap(\.audioFileName)
-            )
+            let referencedAudioFiles = Set(try await reflections.allAudioFileNames())
             _ = try audioStore.recover(referencedFileNames: referencedAudioFiles)
             let journal = GRDBJournalRepository(database: database)
             let brain = GRDBBrainRepository(database: database)

@@ -54,6 +54,8 @@ public struct PersonalDataArchive: Codable, Sendable {
         /// Base64 keeps the single-file JSON export self-contained. Nil means the
         /// Reflection had no saved audio or the file was unavailable.
         public var audioBase64: String?
+        /// Audio belonging to user follow-up messages, keyed by message UUID.
+        public var messageAudioBase64: [String: String]
 
         public init(
             reflection: Reflection,
@@ -64,7 +66,8 @@ public struct PersonalDataArchive: Codable, Sendable {
             questions: [AgentQuestion],
             citations: [ReflectionCitation],
             memoryChanges: [JournalMemoryChange],
-            audioBase64: String? = nil
+            audioBase64: String? = nil,
+            messageAudioBase64: [String: String] = [:]
         ) {
             self.reflection = reflection
             self.messages = messages
@@ -75,6 +78,7 @@ public struct PersonalDataArchive: Codable, Sendable {
             self.citations = citations
             self.memoryChanges = memoryChanges
             self.audioBase64 = audioBase64
+            self.messageAudioBase64 = messageAudioBase64
         }
     }
 
@@ -198,6 +202,13 @@ public struct PersonalDataExporter: Sendable {
                 let questions = try await journal.questions(for: reflection.id)
                 let citations = try await journal.citations(for: reflection.id)
                 let memoryChanges = try await journal.memoryChanges(for: reflection.id)
+                var messageAudioBase64: [String: String] = [:]
+                for message in messages {
+                    if let fileName = message.audioFileName,
+                       let data = audioData(fileName) {
+                        messageAudioBase64[message.id.uuidString.lowercased()] = data.base64EncodedString()
+                    }
+                }
                 reflectionEntries.append(PersonalDataArchive.ReflectionEntry(
                     reflection: reflection,
                     messages: messages,
@@ -207,7 +218,8 @@ public struct PersonalDataExporter: Sendable {
                     questions: questions,
                     citations: citations,
                     memoryChanges: memoryChanges,
-                    audioBase64: reflection.audioFileName.flatMap(audioData)?.base64EncodedString()
+                    audioBase64: reflection.audioFileName.flatMap(audioData)?.base64EncodedString(),
+                    messageAudioBase64: messageAudioBase64
                 ))
             }
             entries.append(PersonalDataArchive.BookEntry(

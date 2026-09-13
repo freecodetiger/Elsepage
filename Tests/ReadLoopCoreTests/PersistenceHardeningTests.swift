@@ -64,7 +64,8 @@ import Testing
         "v15_rag_role_endpoints", "v16_parent_child_retrieval", "v17_achievements", "v18_reader_highlight_color_preference",
         "v19_journal_user_edited_thoughts", "v20_drop_streaming_flag", "v21_brain", "v22_brain_evidence_relations",
         "v23_brain_item_embeddings", "v24_brain_item_revisions", "v25_brain_projection_traces",
-        "v26_retire_legacy_memories"
+        "v26_retire_legacy_memories",
+        "v27_reflection_message_audio"
     ])
 }
 
@@ -383,7 +384,7 @@ import Testing
         )
     }
 
-    // Upgrade to head (v26_retire_legacy_memories).
+    // Upgrade to head (v27_reflection_message_audio).
     try AppDatabase.migrator.migrate(queue)
     let database = try AppDatabase(writer: queue)
 
@@ -459,6 +460,6 @@ import Testing
     try await GRDBReflectionRepository(database: database).delete(id: reflection)
     let remaining = try await brain.items(kind: .memory)
     #expect(remaining.map { $0.id.rawValue } == ["v26-m1", "v26-m2"].sorted())
-    // And v26 is in the wipe enumeration, which no longer lists memories.
+    // v26 remains in migration history; v27 only adds message audio.
     #expect(!AppDatabase.userDataTableOrder.contains("memories"))
 }

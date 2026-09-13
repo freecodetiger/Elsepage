@@ -214,10 +214,24 @@ import Testing
     )
     try await repository.insert(first, linkedHighlightIDs: [], evidence: [])
     try await repository.insert(second, linkedHighlightIDs: [], evidence: [])
+    let followUp = try ReflectionMessage(
+        reflectionID: first.id,
+        author: .user,
+        source: .userInput,
+        content: "带录音的追问",
+        audioFileName: "follow-up.m4a"
+    )
+    try await repository.appendMessage(followUp)
+
+    #expect(Set(try await repository.audioFileNames(for: book.id)) == ["first.m4a", "second.m4a", "follow-up.m4a"])
+    #expect(Set(try await repository.allAudioFileNames()) == ["first.m4a", "second.m4a", "follow-up.m4a"])
 
     try await repository.clearAllAudio()
 
     let reloaded = try await repository.reflections(for: book.id)
     #expect(reloaded.map(\.audioFileName) == [nil, nil])
     #expect(Set(reloaded.map(\.originalText)) == ["第一条文字", "第二条文字"])
+    let reloadedFollowUp = try #require(try await repository.message(id: followUp.id))
+    #expect(reloadedFollowUp.audioFileName == nil)
+    #expect(reloadedFollowUp.content == "带录音的追问")
 }

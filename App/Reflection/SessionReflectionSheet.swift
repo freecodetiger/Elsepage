@@ -84,7 +84,23 @@ struct PendingReflectionMessage: Identifiable, Equatable {
 
     let id: UUID
     let content: String
+    var audioFileName: String?
+    var audioDraftURLs: [URL]
     var deliveryState: DeliveryState
+
+    init(
+        id: UUID,
+        content: String,
+        audioFileName: String? = nil,
+        audioDraftURLs: [URL] = [],
+        deliveryState: DeliveryState
+    ) {
+        self.id = id
+        self.content = content
+        self.audioFileName = audioFileName
+        self.audioDraftURLs = audioDraftURLs
+        self.deliveryState = deliveryState
+    }
 }
 
 struct ReflectionTextEditor: View {
@@ -669,6 +685,8 @@ final class ReflectionConversationModel: Identifiable {
     private(set) var isDeleted = false
     private(set) var pendingUserMessage: PendingReflectionMessage?
     private(set) var audioFileName: String?
+    var audioDraftURLs: [URL] = []
+    private(set) var audioNotice: String?
     var draft = ReflectionTextDraft()
     var followUpText: String {
         get { draft.selectedText }
@@ -745,12 +763,21 @@ final class ReflectionConversationModel: Identifiable {
     }
 
     func send() async {
-        guard !isResponding, !isDeleted, pendingUserMessage == nil,
-              let text = draft.takeSelectedTextForSending() else { return }
+        let text = draft.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isResponding, !isDeleted, pendingUserMessage == nil, !text.isEmpty else { return }
         let id = followUpID
         followUpID = UUID()
-        pendingUserMessage = .init(id: id, content: text, deliveryState: .sending)
-        await deliverPendingMessage(id: id, text: text)
+        let fileName = audioDraftURLs.isEmpty ? nil : "\(id.uuidString.lowercased()).m4a"
+        let pending = PendingReflectionMessage(
+            id: id,
+            content: text,
+            audioFileName: fileName,
+            audioDraftURLs: audioDraftURLs,
+            deliveryState: .sending
+        )
+        pendingUserMessage = pending
+        draft.clear()
+        await deliverPendingMessage(pending)
     }
 
     func retryPendingSend() async {
@@ -758,12 +785,49 @@ final class ReflectionConversationModel: Identifiable {
               let pendingUserMessage,
               pendingUserMessage.deliveryState == .failed else { return }
         self.pendingUserMessage?.deliveryState = .sending
-        await deliverPendingMessage(id: pendingUserMessage.id, text: pendingUserMessage.content)
+        await deliverPendingMessage(pendingUserMessage)
     }
 
-    private func deliverPendingMessage(id: UUID, text: String) async {
-        await consume(readerAgent.continueDiscussion(on: reflection.id, messageID: id, text: text))
-        if messages.contains(where: { $0.id == id }) {
+    private struct PendingMessageAudio {
+        let fileName: String
+        let promotion: AudioFileStore.StagedPromotion
+    }
+
+    private func prepareAudioForMessage(_ pending: PendingReflectionMessage) async -> PendingMessageAudio? {
+        guard let fileName = pending.audioFileName, !pending.audioDraftURLs.isEmpty else { return nil }
+        var mergedDraft: URL?
+        do {
+            let merged = try await audioStore.mergeDraftSegments(pending.audioDraftURLs)
+            mergedDraft = merged
+            for oldDraft in pending.audioDraftURLs where oldDraft != merged {
+                audioStore.discardDraft(at: oldDraft)
+            }
+            let promotion = try audioStore.stagePromotion(draftURL: merged, finalFileName: fileName)
+            return .init(fileName: fileName, promotion: promotion)
+        } catch {
+            audioStore.discardDraft(at: mergedDraft)
+            audioNotice = "这条追问可以继续发送，但录音未能保留。"
+            return nil
+        }
+    }
+
+    private func deliverPendingMessage(_ pending: PendingReflectionMessage) async {
+        let audio = await prepareAudioForMessage(pending)
+        await consume(readerAgent.continueDiscussion(
+            on: reflection.id,
+            messageID: pending.id,
+            text: pending.content,
+            audioFileName: audio?.fileName
+        ))
+        if messages.contains(where: { $0.id == pending.id }) {
+            if let audio {
+                do {
+                    try audioStore.commitPromotion(audio.promotion)
+                } catch {
+                    audioNotice = "录音已暂存，将在下次启动时完成保存。"
+                }
+            }
+            audioDraftURLs = []
             pendingUserMessage = nil
             // The follow-up persisted: one user-initiated discussion (FIX-01), and
             // the user's own words are now in the thread (Questioner signal).
@@ -773,8 +837,25 @@ final class ReflectionConversationModel: Identifiable {
             if let achievements {
                 await achievements.handle(.reflection(reflection, connectedSource: nil, now: Date()))
             }
-        } else if pendingUserMessage?.id == id {
+        } else if pendingUserMessage?.id == pending.id {
+            if let audio {
+                audioStore.rollbackPromotion(audio.promotion)
+                audioDraftURLs = [audio.promotion.draftURL]
+                pendingUserMessage?.audioDraftURLs = [audio.promotion.draftURL]
+            }
             pendingUserMessage?.deliveryState = .failed
+        }
+    }
+
+    func deleteMessageAudio(_ messageID: UUID) async {
+        guard let message = messages.first(where: { $0.id == messageID }),
+              let fileName = message.audioFileName else { return }
+        do {
+            try await repository.updateAudioFileName(nil, forMessageID: messageID)
+            audioStore.discardSaved(fileName: fileName)
+            try await reloadMessages()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -793,9 +874,11 @@ final class ReflectionConversationModel: Identifiable {
 
     func deleteLatestUserTurn() async -> Bool {
         guard !isResponding, !isDeleted else { return false }
+        let deletingAudioFileName = messages.last(where: { $0.author == .user })?.audioFileName
         do {
             switch try await repository.deleteLatestUserTurn(in: reflection.id) {
             case .deletedFollowUp:
+                audioStore.discardSaved(fileName: deletingAudioFileName)
                 try await reloadMessages()
                 agentNotice = nil
                 contextDisclosure = nil
@@ -1171,6 +1254,11 @@ struct ReflectionConversationView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
                     if let header { header }
+                    if let audioNotice = model.audioNotice {
+                        Label(audioNotice, systemImage: "waveform.badge.exclamationmark")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     userTurn(title: "你的 Reflection", text: model.reflection.displayText, canDelete: model.canDeleteRoot)
                     if let audioFileName = model.audioFileName {
                         ReflectionAudioAttachment(
@@ -1203,6 +1291,12 @@ struct ReflectionConversationView: View {
                         )
                     } else {
                         SelectableTextBody(content: message.content)
+                    }
+                    if message.author == .user, let audioFileName = message.audioFileName {
+                        ReflectionAudioAttachment(
+                            fileName: audioFileName,
+                            onDelete: { Task { await model.deleteMessageAudio(message.id) } }
+                        )
                     }
                     provenance(for: message)
                 }
@@ -1479,8 +1573,11 @@ private struct ReflectionComposer: View {
                         get: { model.draft.originalText },
                         set: { model.draft.updateOriginalText($0) }
                     ),
-                    audioDraftURLs: .constant([]),
-                    allowsAudioSaving: false,
+                    audioDraftURLs: Binding(
+                        get: { model.audioDraftURLs },
+                        set: { model.audioDraftURLs = $0 }
+                    ),
+                    allowsAudioSaving: true,
                     style: .compactComposer,
                     onRecordingStart: { model.draft.select(.original) },
                     onRecordingStateChange: { active in
@@ -1528,6 +1625,14 @@ private struct ReflectionComposer: View {
 
                 Spacer()
                 if !isVoiceInputActive { sendButton }
+            }
+
+            if let draftURL = model.audioDraftURLs.last {
+                ReflectionAudioAttachment(
+                    draftURL: draftURL,
+                    onDelete: { model.audioDraftURLs = [] }
+                )
+                .id(draftURL)
             }
 
             if let clearedDraft {

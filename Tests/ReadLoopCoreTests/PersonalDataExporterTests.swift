@@ -246,8 +246,17 @@ import Testing
         audioFileName: "voice.m4a"
     )
     try await reflections.insert(voice, linkedHighlightIDs: [], evidence: [])
+    let followUp = try ReflectionMessage(
+        reflectionID: voice.id,
+        author: .user,
+        source: .userInput,
+        content: "带录音的追问",
+        audioFileName: "follow-up.m4a"
+    )
+    try await reflections.appendMessage(followUp)
 
     let audioBytes = Data("test-audio".utf8)
+    let followUpAudioBytes = Data("follow-up-audio".utf8)
     let exporter = PersonalDataExporter(
         books: books,
         reading: reading,
@@ -255,7 +264,13 @@ import Testing
         reflections: reflections,
         journal: journal,
         brain: brain,
-        audioData: { fileName in fileName == "voice.m4a" ? audioBytes : nil }
+        audioData: { fileName in
+            switch fileName {
+            case "voice.m4a": audioBytes
+            case "follow-up.m4a": followUpAudioBytes
+            default: nil
+            }
+        }
     )
     let data = try await exporter.export()
     let decoder = JSONDecoder()
@@ -265,4 +280,8 @@ import Testing
     #expect(exportedVoice.reflection.id == voice.id)
 
     #expect(exportedVoice.audioBase64 == audioBytes.base64EncodedString())
+    #expect(
+        exportedVoice.messageAudioBase64[followUp.id.uuidString.lowercased()]
+            == followUpAudioBytes.base64EncodedString()
+    )
 }

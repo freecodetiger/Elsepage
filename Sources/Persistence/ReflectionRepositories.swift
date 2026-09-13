@@ -289,9 +289,42 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
         }
     }
 
+    public func updateAudioFileName(_ fileName: String?, forMessageID messageID: UUID) async throws {
+        try await db.writer.write { db in
+            try db.execute(
+                sql: "UPDATE reflectionMessages SET audioFileName = ? WHERE id = ? AND role = 'userFollowUp'",
+                arguments: [fileName, messageID.uuidString.lowercased()]
+            )
+        }
+    }
+
+    public func audioFileNames(for bookID: BookID) async throws -> [String] {
+        try await db.writer.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT audioFileName FROM reflections
+                WHERE bookID = ? AND audioFileName IS NOT NULL
+                UNION
+                SELECT m.audioFileName FROM reflectionMessages m
+                JOIN reflections r ON r.id = m.reflectionID
+                WHERE r.bookID = ? AND m.audioFileName IS NOT NULL
+                """, arguments: [bookID.description, bookID.description])
+        }
+    }
+
+    public func allAudioFileNames() async throws -> [String] {
+        try await db.writer.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT audioFileName FROM reflections WHERE audioFileName IS NOT NULL
+                UNION
+                SELECT audioFileName FROM reflectionMessages WHERE audioFileName IS NOT NULL
+                """)
+        }
+    }
+
     public func clearAllAudio() async throws {
         try await db.writer.write { db in
             try db.execute(sql: "UPDATE reflections SET audioFileName = NULL")
+            try db.execute(sql: "UPDATE reflectionMessages SET audioFileName = NULL")
         }
     }
 
@@ -501,11 +534,12 @@ private struct ReflectionRecord: Codable, FetchableRecord, PersistableRecord {
 private struct ReflectionMessageRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "reflectionMessages"
     var id, reflectionID, author, source, content: String
+    var audioFileName: String?
     var createdAt: Date
     init(_ message: ReflectionMessage) {
         id = message.id.uuidString.lowercased(); reflectionID = message.reflectionID.description
         author = message.author.rawValue; source = message.source.rawValue
-        content = message.content; createdAt = message.createdAt
+        content = message.content; audioFileName = message.audioFileName; createdAt = message.createdAt
     }
     func domain() throws -> ReflectionMessage {
         guard let decodedAuthor = ReflectionMessageAuthor(rawValue: author) else {
@@ -518,7 +552,8 @@ private struct ReflectionMessageRecord: Codable, FetchableRecord, PersistableRec
             return try ReflectionMessage(
                 id: decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id"),
                 reflectionID: .init(rawValue: decodeUUID(reflectionID, table: Self.databaseTableName, recordID: id, field: "reflectionID")),
-                author: decodedAuthor, source: decodedSource, content: content, createdAt: createdAt
+                author: decodedAuthor, source: decodedSource, content: content,
+                audioFileName: audioFileName, createdAt: createdAt
             )
         } catch is ReflectionValidationError {
             throw PersistenceError.corruptRecord(table: Self.databaseTableName, recordID: id, field: "author/source")

@@ -183,8 +183,7 @@ final class LibraryModel {
         deletingBookID = book.id
         defer { deletingBookID = nil }
         do {
-            let audioNames = try await reflectionRepository.reflections(for: book.id)
-                .compactMap(\.audioFileName)
+            let audioNames = try await reflectionRepository.audioFileNames(for: book.id)
             let stagedAudio = try audioStore.stageDeletion(fileNames: audioNames)
             let trashed: TrashedBookFile?
             do {

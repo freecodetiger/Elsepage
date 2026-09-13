@@ -578,6 +578,14 @@ public final class AppDatabase: @unchecked Sendable {
             try Self.backfillBrainItems(db) // reads FROM memories — must run BEFORE the drop
             try db.drop(table: "memories")
         }
+        // Every user request can now own audio, including follow-up messages.
+        // The root Reflection already stores audioFileName; this adds the same
+        // nullable reference to user/agent message rows. Agent rows remain nil.
+        migrator.registerMigration("v27_reflection_message_audio") { db in
+            try db.alter(table: "reflectionMessages") { t in
+                t.add(column: "audioFileName", .text)
+            }
+        }
         return migrator
     }
 

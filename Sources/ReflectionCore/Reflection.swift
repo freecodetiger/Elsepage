@@ -59,18 +59,23 @@ public struct ReflectionMessage: Hashable, Codable, Sendable, Identifiable {
     public let source: ReflectionMessageSource
     public let content: String
     public let citations: [AgentCitation]?
+    /// Optional audio for this specific user request. Follow-up messages use
+    /// the same lifecycle as the root Reflection audio.
+    public let audioFileName: String?
     public let createdAt: Date
 
     public init(
         id: UUID = UUID(), reflectionID: ReflectionID,
         author: ReflectionMessageAuthor, source: ReflectionMessageSource,
-        content: String, citations: [AgentCitation]? = nil, createdAt: Date = Date()
+        content: String, citations: [AgentCitation]? = nil,
+        audioFileName: String? = nil, createdAt: Date = Date()
     ) throws {
         guard (author == .user && source == .userInput) || (author == .agent && source == .agentGenerated) else {
             throw ReflectionValidationError.inconsistentMessageProvenance
         }
         self.id = id; self.reflectionID = reflectionID; self.author = author
         self.source = source; self.content = content; self.citations = citations
+        self.audioFileName = audioFileName
         self.createdAt = createdAt
     }
 
@@ -78,7 +83,8 @@ public struct ReflectionMessage: Hashable, Codable, Sendable, Identifiable {
     public func withCitations(_ attached: [AgentCitation]) -> ReflectionMessage {
         (try? ReflectionMessage(
             id: id, reflectionID: reflectionID, author: author, source: source,
-            content: content, citations: attached.isEmpty ? nil : attached, createdAt: createdAt
+            content: content, citations: attached.isEmpty ? nil : attached,
+            audioFileName: audioFileName, createdAt: createdAt
         )) ?? self
     }
 
@@ -226,6 +232,9 @@ public protocol ReflectionRepository: Sendable {
     /// after it. Otherwise deletes the root Reflection and its entire conversation.
     func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult
     func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws
+    func updateAudioFileName(_ fileName: String?, forMessageID messageID: UUID) async throws
+    func audioFileNames(for bookID: BookID) async throws -> [String]
+    func allAudioFileNames() async throws -> [String]
     func clearAllAudio() async throws
     func delete(id: ReflectionID) async throws
 }
@@ -238,6 +247,11 @@ public extension ReflectionRepository {
     func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws {
         throw ReflectionConversationDeletionError.unsupportedRepository
     }
+    func updateAudioFileName(_ fileName: String?, forMessageID messageID: UUID) async throws {
+        throw ReflectionConversationDeletionError.unsupportedRepository
+    }
+    func audioFileNames(for bookID: BookID) async throws -> [String] { [] }
+    func allAudioFileNames() async throws -> [String] { [] }
     func clearAllAudio() async throws {
         throw ReflectionConversationDeletionError.unsupportedRepository
     }

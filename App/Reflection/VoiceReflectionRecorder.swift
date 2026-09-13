@@ -246,6 +246,11 @@ struct VoiceReflectionControls: View {
         .onChange(of: recorder.draftAudioURLs) { _, urls in
             audioDraftURLs = allowsAudioSaving ? urls : []
         }
+        .onChange(of: audioDraftURLs) { _, urls in
+            if urls.isEmpty, !recorder.draftAudioURLs.isEmpty, !recorder.isRecording {
+                recorder.discardAudioDrafts()
+            }
+        }
         .onChange(of: recorder.state.failureMessage) { _, message in
             onFailureMessageChange(message)
         }

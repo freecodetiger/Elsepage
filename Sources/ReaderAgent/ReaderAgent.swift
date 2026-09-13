@@ -132,14 +132,19 @@ public struct ReaderAgent: Sendable {
         on reflectionID: ReflectionID,
         messageID: UUID,
         text: String,
+        audioFileName: String? = nil,
         activeBrain: BrainItem? = nil
     ) -> AsyncStream<ReaderAgentEvent> {
-        run(reflectionID: reflectionID, followUp: (messageID, text), activeBrain: activeBrain)
+        run(
+            reflectionID: reflectionID,
+            followUp: (messageID, text, audioFileName),
+            activeBrain: activeBrain
+        )
     }
 
     private func run(
         reflectionID: ReflectionID,
-        followUp: (id: UUID, text: String)?,
+        followUp: (id: UUID, text: String, audioFileName: String?)?,
         activeBrain: BrainItem? = nil
     ) -> AsyncStream<ReaderAgentEvent> {
         AsyncStream { continuation in
@@ -163,7 +168,8 @@ public struct ReaderAgent: Sendable {
                             reflectionID: reflectionID,
                             author: .user,
                             source: .userInput,
-                            content: content
+                            content: content,
+                            audioFileName: followUp.audioFileName
                         )
                         try await reflections.appendMessage(userMessage)
                         messages = try await reflections.messages(for: reflectionID)
