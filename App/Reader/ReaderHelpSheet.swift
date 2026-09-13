@@ -163,6 +163,12 @@ struct ReaderHelpSheet: View {
 
     private var disclosure: some View {
         Group {
+            if model.isLatestResponseTruncated {
+                Label("回答可能未完整显示，可以重试或继续追问。", systemImage: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let disclosure = model.contextDisclosure {
                 Label(disclosure, systemImage: "book.closed")
                     .font(.caption)

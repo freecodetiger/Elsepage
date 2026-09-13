@@ -45,6 +45,7 @@ final class ReaderHelpModel {
     private(set) var contextSummary: ReaderHelpContextSummary?
     private(set) var provenance: AgentResponseProvenance?
     private(set) var latestResponseID: UUID?
+    private(set) var isLatestResponseTruncated = false
     var saveError: String?
 
     private var savedResponseID: UUID?
@@ -185,6 +186,7 @@ final class ReaderHelpModel {
         contextSummary = nil
         provenance = nil
         latestResponseID = nil
+        isLatestResponseTruncated = false
         saveError = nil
         state = .preparing
         runTask?.cancel()
@@ -239,6 +241,7 @@ final class ReaderHelpModel {
             streamingContent = ""
             provenance = response.provenance
             latestResponseID = response.id
+            isLatestResponseTruncated = response.isTruncated
             state = .completed
             Perf.shared.event("readerHelp.complete")
             runTask = nil
