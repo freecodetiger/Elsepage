@@ -587,26 +587,43 @@
     }
 
     .detail-section {
-      margin-top: 27px;
+      margin-top: 22px;
     }
 
     .detail-section + .detail-section {
-      padding-top: 27px;
+      padding-top: 22px;
       border-top: 1px solid var(--phone-line);
     }
 
-    .message-heading {
+    .message-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .message-identity {
       display: flex;
-      align-items: center;
-      gap: 9px;
-      margin-bottom: 11px;
+      min-width: 0;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 7px;
+      padding-top: 1px;
     }
 
     .identity-name {
+      max-width: 64px;
+      overflow: hidden;
       color: var(--phone-ink);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 650;
-      line-height: 1;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message-content {
+      min-width: 0;
     }
 
     .avatar {
@@ -1020,29 +1037,20 @@
       `;
     }
 
-    function identityRow(kind) {
-      if (kind === "user") {
-        return `
-          <div class="message-heading">
-            <span class="avatar user-avatar" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <circle cx="12" cy="8" r="3.5"></circle>
-                <path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path>
-              </svg>
-            </span>
-            <span class="identity-name">${esc(identities.user)}</span>
-          </div>
-        `;
-      }
+    function messageRow(kind, content) {
+      const user = kind === "user";
+      const avatar = user
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="3.5"></circle><path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="8" width="14" height="10" rx="3"></rect><path d="M9 13h.01M15 13h.01M12 4v4M8 18v2M16 18v2"></path></svg>`;
+      const avatarClass = user ? "user-avatar" : "ai-avatar";
+      const name = user ? identities.user : identities.assistant;
       return `
-        <div class="message-heading">
-          <span class="avatar ai-avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="5" y="8" width="14" height="10" rx="3"></rect>
-              <path d="M9 13h.01M15 13h.01M12 4v4M8 18v2M16 18v2"></path>
-            </svg>
-          </span>
-          <span class="identity-name">${esc(identities.assistant)}</span>
+        <div class="message-row">
+          <div class="message-identity">
+            <span class="avatar ${avatarClass}" aria-hidden="true">${avatar}</span>
+            <span class="identity-name">${esc(name)}</span>
+          </div>
+          <div class="message-content">${content}</div>
         </div>
       `;
     }
@@ -1058,22 +1066,17 @@
           <p class="summary-copy">${esc(item.summary)}</p>
         </div>
         <section class="detail-section">
-          ${identityRow("user")}
-          <p class="detail-copy">${esc(item.original)}</p>
+          ${messageRow("user", `<p class="detail-copy">${esc(item.original)}</p>`)}
         </section>
         <section class="detail-section">
-          ${identityRow("ai")}
-          <p class="detail-copy">${esc(item.response)}</p>
-          ${evidenceDetails(item)}
+          ${messageRow("ai", `<p class="detail-copy">${esc(item.response)}</p>${evidenceDetails(item)}`)}
         </section>
         ${hasFollowUp ? `
           <section class="detail-section">
-            ${identityRow("user")}
-            <p class="detail-copy">${esc(item.followUp)}</p>
+            ${messageRow("user", `<p class="detail-copy">${esc(item.followUp)}</p>`)}
           </section>
           <section class="detail-section">
-            ${identityRow("ai")}
-            <p class="detail-copy">${esc(item.followUpResponse)}</p>
+            ${messageRow("ai", `<p class="detail-copy">${esc(item.followUpResponse)}</p>`)}
           </section>
         ` : ""}
         <div class="composer-placeholder">
