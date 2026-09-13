@@ -11,6 +11,7 @@
 - 在 Readium webview 中缓存最近一次 click/pointerup 的 client coordinate。
 - decoration 激活时使用 `clickableElements` 的真实 hit rect 查询同一点实际命中的 notes/highlights。
 - 回传并记录点击坐标、命中 group 和 decoration IDs。
+- 冲突菜单锚点从整条 decoration 的 bounding rect 改为实际点击 point。
 - Note 点击：
   - 只有该点同时命中 Highlight 时才显示选择器。
   - 未命中 Highlight 时直接打开 Note。
