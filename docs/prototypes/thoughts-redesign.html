@@ -596,18 +596,22 @@
     }
 
     .message-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
+      display: block;
+    }
+
+    .message-row::after {
+      content: "";
+      display: block;
+      clear: both;
     }
 
     .message-row > .avatar {
-      margin-top: 1px;
+      float: left;
+      margin: 1px 10px 4px 0;
     }
 
     .message-body {
       min-width: 0;
-      flex: 1 1 auto;
     }
 
     .identity-name {
