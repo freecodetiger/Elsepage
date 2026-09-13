@@ -35,6 +35,39 @@ public struct BookLocator: Hashable, Codable, Sendable {
         return lhs == rhs
     }
 
+    /// Conservative UI-hit disambiguation between text annotations. Readium
+    /// locators do not expose a portable end progression, so this combines the
+    /// exact anchor, resource identity, nearby progression and selected-text
+    /// containment. False negatives are safer than opening the wrong annotation.
+    public func appearsToOverlapText(with other: BookLocator) -> Bool {
+        if identifiesSameAnchor(as: other) { return true }
+        let lhsResource = Self.resourceIdentifier(href)
+        guard lhsResource == Self.resourceIdentifier(other.href) else { return false }
+
+        let lhsText = Self.normalizedText(textHighlight)
+        let rhsText = Self.normalizedText(other.textHighlight)
+        let sameText = !lhsText.isEmpty && lhsText == rhsText
+        let containsText = !lhsText.isEmpty && !rhsText.isEmpty
+            && (lhsText.contains(rhsText) || rhsText.contains(lhsText))
+
+        if let lhsProgression = progression, let rhsProgression = other.progression {
+            let distance = abs(lhsProgression - rhsProgression)
+            guard distance <= 0.02 else { return false }
+            return sameText || containsText
+        }
+        return sameText
+    }
+
+    private static func resourceIdentifier(_ href: String) -> String {
+        href.split(separator: "#", maxSplits: 1).first.map(String.init) ?? href
+    }
+
+    private static func normalizedText(_ text: String?) -> String {
+        (text ?? "")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive, .widthInsensitive], locale: .current)
+            .filter { !$0.isWhitespace }
+    }
+
     private static func canonicalJSON(_ data: Data) throws -> Data {
         let object = try JSONSerialization.jsonObject(with: data)
         return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])

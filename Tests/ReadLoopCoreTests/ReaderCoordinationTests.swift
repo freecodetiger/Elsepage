@@ -134,6 +134,27 @@ private actor PositionHarness {
     #expect(!first.identifiesSameAnchor(as: different))
 }
 
+@Test func locatorTextOverlapDisambiguatesNearbyAnnotationsConservatively() throws {
+    func locator(_ progression: Double, text: String, href: String = "chapter.xhtml") throws -> BookLocator {
+        let json = try JSONSerialization.data(withJSONObject: [
+            "href": href,
+            "locations": ["progression": progression],
+        ])
+        return try BookLocator(
+            json: json,
+            href: href,
+            progression: progression,
+            textHighlight: text
+        )
+    }
+
+    let highlight = try locator(0.20, text: "结构")
+    #expect(try locator(0.201, text: "结构会影响选择").appearsToOverlapText(with: highlight))
+    #expect(try locator(0.205, text: "结构").appearsToOverlapText(with: highlight))
+    #expect(!(try locator(0.30, text: "结构").appearsToOverlapText(with: highlight)))
+    #expect(!(try locator(0.20, text: "结构", href: "other.xhtml").appearsToOverlapText(with: highlight)))
+}
+
 @Test func locatorHistoryIsBoundedDeduplicatedAndReturnsNewestFirst() throws {
     func locator(_ progression: Double) throws -> BookLocator {
         try BookLocator(

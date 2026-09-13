@@ -383,6 +383,29 @@ final class ReaderModel {
         return .closed
     }
 
+    func hasNote(forHighlightID id: UUID) -> Bool {
+        note(forHighlightID: id) != nil
+    }
+
+    func openNote(forHighlightID id: UUID) {
+        dismissHighlightMenu()
+        if let note = note(forHighlightID: id) {
+            openNoteEditor(.note(note.id))
+        } else {
+            openNoteEditor(.highlight(id))
+        }
+    }
+
+    private func note(forHighlightID id: UUID) -> Note? {
+        if let attached = notes.first(where: { $0.highlightID == id }) {
+            return attached
+        }
+        guard let highlight = highlights.first(where: { $0.id == id }) else { return nil }
+        return notes
+            .filter { $0.highlightID == nil && $0.locator.appearsToOverlapText(with: highlight.locator) }
+            .max { $0.updatedAt < $1.updatedAt }
+    }
+
     /// Immediate programmatic dismissal (menu buttons, deletion) — no grace.
     func dismissHighlightMenu() {
         guard case .highlight(let current, _) = annotationMenu else { return }

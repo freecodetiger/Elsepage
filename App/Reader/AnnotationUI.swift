@@ -103,10 +103,7 @@ struct ReaderAnnotationOverlays: View {
                             model: model,
                             highlightID: id,
                             onSelectColor: { model.changeHighlightColor(id, to: $0) },
-                            onNote: {
-                                model.dismissHighlightMenu()
-                                model.openNoteEditor(.highlight(id))
-                            },
+                            onNote: { model.openNote(forHighlightID: id) },
                             onDelete: { model.deleteHighlightWithUndo(id) }
                         )
                     }
@@ -281,7 +278,7 @@ struct HighlightMenu: View {
     }
 
     private var hasNote: Bool {
-        model.notes.contains { $0.highlightID == highlightID }
+        model.hasNote(forHighlightID: highlightID)
     }
 
     var body: some View {
