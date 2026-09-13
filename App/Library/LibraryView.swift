@@ -1,3 +1,4 @@
+import AchievementCore
 import AppInfrastructure
 import LibraryCore
 import SwiftUI
@@ -6,7 +7,8 @@ import UniformTypeIdentifiers
 struct LibraryView: View {
     @Bindable var model: LibraryModel
     @Bindable var settings: SettingsRootModel
-    let onReflectionSaved: () -> Void
+    let achievements: AchievementModel?
+    @State private var nextActionModel: LibraryNextActionModel
     @State private var importing = false
     @State private var showsSettings = false
     @State private var selectedBook: Book?
@@ -15,10 +17,15 @@ struct LibraryView: View {
     /// Dynamic Type sizes instead of squeezing titles into half-width cells.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(model: LibraryModel, settings: SettingsRootModel, onReflectionSaved: @escaping () -> Void = {}) {
+    init(
+        model: LibraryModel,
+        settings: SettingsRootModel,
+        achievements: AchievementModel? = nil
+    ) {
         self.model = model
         self.settings = settings
-        self.onReflectionSaved = onReflectionSaved
+        self.achievements = achievements
+        _nextActionModel = State(initialValue: LibraryNextActionModel(library: model))
     }
 
     var body: some View {
@@ -59,13 +66,23 @@ struct LibraryView: View {
                 }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [UTType.epub], allowsMultipleSelection: false) { result in
-                if case .success(let urls) = result, let url = urls.first { Task { await model.importBook(url) } }
+                if case .success(let urls) = result, let url = urls.first {
+                    Task {
+                        _ = await model.importBook(url)
+                        await nextActionModel.reload()
+                    }
+                }
             }
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)
             }
             .navigationDestination(item: $selectedBook) { book in
-                ReaderScreen(model: model.readerModel(for: book), onReflectionSaved: onReflectionSaved)
+                ReaderScreen(model: model.readerModel(for: book)) {
+                    Task {
+                        await model.reload()
+                        await nextActionModel.reload()
+                    }
+                }
             }
             .searchable(text: $model.searchQuery, prompt: "搜索书名或作者")
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
@@ -85,6 +102,10 @@ struct LibraryView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 if model.isImporting { importStatus }
+            }
+            .task {
+                await model.reload()
+                await nextActionModel.reload()
             }
         }
     }
@@ -142,77 +163,90 @@ struct LibraryView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    // Fixed columns prevent SwiftUI from using a cover's ideal width
-                    // during grid measurement. Every cell gets the same finite width.
-                    LazyVGrid(
-                        columns: Array(
-                            repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
-                            count: columnCount
-                        ),
-                        spacing: ElsepageTheme.Spacing.xLarge
-                    ) {
-                ForEach(model.visibleBooks) { book in
-                    Button { selectedBook = book } label: {
-                        VStack(alignment: .leading, spacing: 10) {
-                            // Keep the geometry independent from the source image's
-                            // aspect ratio. Wide EPUB covers are cropped inside this
-                            // fixed 2:3 portrait frame instead of expanding the cell.
-                            ZStack {
-                                Color.clear
-                                ElsepageBookCover(
-                                    image: model.cover(for: book),
-                                    title: book.title,
-                                    author: book.author,
-                                    seed: Int(book.id.rawValue.uuid.0)
-                                )
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            }
-                            .frame(
-                                width: columnWidth,
-                                height: columnWidth / LibraryGridLayout.coverAspectRatio
+                    VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
+                        if case .offerReflection = nextActionModel.state {
+                            LibraryNextActionView(
+                                model: nextActionModel,
+                                achievements: achievements,
+                                onSaved: {
+                                    Task {
+                                        await model.reload()
+                                        await nextActionModel.reload()
+                                    }
+                                }
                             )
-                            .aspectRatio(LibraryGridLayout.coverAspectRatio, contentMode: .fit)
-                            .task(id: book.id) { await model.loadCover(for: book) }
-                            Text(book.title)
-                                .font(ElsepageTheme.Typography.itemTitle)
-                                .foregroundStyle(.primary)
-                                .lineLimit(2)
-                            Text(metadata(for: book))
-                                .font(ElsepageTheme.Typography.metadata)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            // Quiet card statistics (PRD §6.2): omitted entirely
-                            // until a book has reading time or annotations.
-                            if let statsLine = model.statsLine(for: book) {
-                                Text(statsLine)
-                                    .font(ElsepageTheme.Typography.metadata)
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                            }
-                            if let progress = model.progress(for: book) {
-                                ProgressView(value: progress)
-                                    .tint(.elsepageInteractive)
-                                    .accessibilityLabel("阅读进度")
-                                    .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
+                        }
+
+                        // Fixed columns prevent SwiftUI from using a cover's ideal width
+                        // during grid measurement. Every cell gets the same finite width.
+                        LazyVGrid(
+                            columns: Array(
+                                repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
+                                count: columnCount
+                            ),
+                            spacing: ElsepageTheme.Spacing.xLarge
+                        ) {
+                            ForEach(model.visibleBooks) { book in
+                                Button { selectedBook = book } label: {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        // Keep geometry independent from the source image's
+                                        // aspect ratio. Wide EPUB covers are cropped inside this
+                                        // fixed 2:3 portrait frame instead of expanding the cell.
+                                        ZStack {
+                                            Color.clear
+                                            ElsepageBookCover(
+                                                image: model.cover(for: book),
+                                                title: book.title,
+                                                author: book.author,
+                                                seed: Int(book.id.rawValue.uuid.0)
+                                            )
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        }
+                                        .frame(
+                                            width: columnWidth,
+                                            height: columnWidth / LibraryGridLayout.coverAspectRatio
+                                        )
+                                        .aspectRatio(LibraryGridLayout.coverAspectRatio, contentMode: .fit)
+                                        .task(id: book.id) { await model.loadCover(for: book) }
+                                        Text(book.title)
+                                            .font(ElsepageTheme.Typography.itemTitle)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(2)
+                                        Text(metadata(for: book))
+                                            .font(ElsepageTheme.Typography.metadata)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                        if let statsLine = model.statsLine(for: book) {
+                                            Text(statsLine)
+                                                .font(ElsepageTheme.Typography.metadata)
+                                                .foregroundStyle(.tertiary)
+                                                .lineLimit(1)
+                                        }
+                                        if let progress = model.progress(for: book) {
+                                            ProgressView(value: progress)
+                                                .tint(.elsepageInteractive)
+                                                .accessibilityLabel("阅读进度")
+                                                .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
+                                        }
+                                    }
+                                    .frame(width: columnWidth, alignment: .leading)
+                                    .clipped()
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(accessibilityLabel(for: book))
+                                .accessibilityHint("打开并继续阅读")
+                                .contextMenu {
+                                    Button(role: .destructive) { deletingBook = book } label: {
+                                        Label("从书架移除", systemImage: "trash")
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .frame(width: columnWidth, alignment: .leading)
                             }
                         }
-                        .frame(width: columnWidth, alignment: .leading)
-                        .clipped()
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(accessibilityLabel(for: book))
-                    .accessibilityHint("打开并继续阅读")
-                    .contextMenu {
-                        Button(role: .destructive) { deletingBook = book } label: {
-                            Label("从书架移除", systemImage: "trash")
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(width: columnWidth, alignment: .leading)
-                }
-                }
-                .padding(ElsepageTheme.Spacing.page)
+                    .padding(ElsepageTheme.Spacing.page)
                 }
             }
         }

@@ -5,6 +5,7 @@ import LibraryCore
 import Observation
 import ReaderAgent
 import ReaderCore
+import ReadingSessionCore
 import ReflectionCore
 
 /// 继续想想不可用(Agent 未装配/书架空/文字为空)。
@@ -25,6 +26,7 @@ final class MyMindModel {
     private let brain: any BrainRepository
     private let reflections: any ReflectionRepository
     private let books: any BookRepository
+    private let sessions: any ReadingSessionRepository
     /// 继续想想(phase 19,形态 C):nil → 详情页按钮隐藏。
     private let readerAgent: ReaderAgent?
     /// FIX-03: 修改/不准确 are the deterministic "Changed My Mind" signals —
@@ -34,6 +36,8 @@ final class MyMindModel {
     private(set) var memories: [BrainMemory] = []
     private(set) var thoughts: [Thought] = []
     private(set) var questions: [Question] = []
+    private(set) var readingStreak = ReadingStreak(days: 0)
+    private(set) var thinkingStreak = ThinkingStreak(days: 0)
     private(set) var isLoading = false
     var errorMessage: String?
 
@@ -41,12 +45,14 @@ final class MyMindModel {
         brain: any BrainRepository,
         reflections: any ReflectionRepository,
         books: any BookRepository,
+        sessions: any ReadingSessionRepository,
         achievements: AchievementModel? = nil,
         readerAgent: ReaderAgent? = nil
     ) {
         self.brain = brain
         self.reflections = reflections
         self.books = books
+        self.sessions = sessions
         self.achievements = achievements
         self.readerAgent = readerAgent
     }
@@ -83,6 +89,19 @@ final class MyMindModel {
             questions = brainItems.compactMap { item in
                 if case .question(let question) = item { return question } else { return nil }
             }.sorted { $0.updatedAt > $1.updatedAt }
+
+            let now = Date()
+            let calendar = Calendar.current
+            readingStreak = StreakCalculator.readingStreak(
+                sessionStartDates: try await sessions.allSessions().map(\.startedAt),
+                now: now,
+                calendar: calendar
+            )
+            thinkingStreak = StreakCalculator.thinkingStreak(
+                reflectionDates: try await reflections.allReflections().map(\.createdAt),
+                now: now,
+                calendar: calendar
+            )
             errorMessage = nil
         } catch is CancellationError {
             return

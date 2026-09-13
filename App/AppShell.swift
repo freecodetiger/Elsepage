@@ -9,22 +9,18 @@ struct AppShell: View {
     @Bindable var settings: SettingsRootModel
     @Bindable var achievements: AchievementModel
     @Bindable var appModel: AppModel
-    @State private var selection: AppTab = .today
+    @State private var selection: AppTab = .library
     @State private var readerDestination: ReaderDestination?
 
     var body: some View {
         TabView(selection: $selection) {
-            TodayView(library: library, achievements: achievements) { book in
-                readerDestination = .init(book: book, locator: nil)
-            } openLibrary: {
-                selection = .library
-            }
-            .tabItem { Label("今天", systemImage: "sun.max") }
-            .tag(AppTab.today)
-
-            LibraryView(model: library, settings: settings) { selection = .today }
-                .tabItem { Label("书架", systemImage: "books.vertical") }
-                .tag(AppTab.library)
+            LibraryView(
+                model: library,
+                settings: settings,
+                achievements: achievements
+            )
+            .tabItem { Label("书架", systemImage: "books.vertical") }
+            .tag(AppTab.library)
 
             ThoughtsView(model: thoughts, settings: settings) { book, locator in
                 readerDestination = .init(book: book, locator: locator)
@@ -43,7 +39,7 @@ struct AppShell: View {
             ReaderScreen(
                 model: library.readerModel(for: destination.book, locator: destination.locator),
                 achievements: achievements,
-                onReflectionSaved: { selection = .today }
+                onReflectionSaved: { selection = .library }
             )
         }
         // A document imported via "用 ReadLoop 打开" lands on 书架 so the result is visible.
@@ -75,7 +71,6 @@ private struct ReaderDestination: Identifiable {
 }
 
 private enum AppTab: Hashable {
-    case today
     case library
     case mind
     case myMind

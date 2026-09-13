@@ -225,6 +225,7 @@ final class AppModel {
                 brain: brain,
                 reflections: reflections,
                 books: books,
+                sessions: sessions,
                 achievements: achievements,
                 readerAgent: readerAgent
             )

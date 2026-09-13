@@ -36,7 +36,10 @@ struct MyMindView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isEmpty: Bool {
-        model.memories.isEmpty && !model.hasBrainItems
+        model.memories.isEmpty
+            && !model.hasBrainItems
+            && model.readingStreak.days == 0
+            && model.thinkingStreak.days == 0
     }
 
     init(
@@ -181,6 +184,7 @@ struct MyMindView: View {
 
     private var sectionsList: some View {
         LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
+            habitsSection
             thoughtsSection
             questionsSection
             memoriesSection
@@ -241,6 +245,41 @@ struct MyMindView: View {
                 }
             }
         )
+    }
+
+    private var habitsSection: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("阅读与思考")
+                    .font(.headline.weight(.semibold))
+                Spacer()
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: ElsepageTheme.Spacing.medium) {
+                    streakBadge(label: "连续阅读", days: model.readingStreak.days)
+                    streakBadge(label: "连续思考", days: model.thinkingStreak.days)
+                }
+                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                    streakBadge(label: "连续阅读", days: model.readingStreak.days)
+                    streakBadge(label: "连续思考", days: model.thinkingStreak.days)
+                }
+            }
+        }
+    }
+
+    private func streakBadge(label: String, days: Int) -> some View {
+        HStack(spacing: ElsepageTheme.Spacing.xSmall) {
+            Image(systemName: label == "连续阅读" ? "book" : "lightbulb")
+                .accessibilityHidden(true)
+            Text("\(label) \(days) 天")
+                .font(.subheadline.weight(.medium))
+        }
+        .foregroundStyle(Color.elsepageTextPrimary)
+        .padding(.horizontal, ElsepageTheme.Spacing.medium)
+        .padding(.vertical, ElsepageTheme.Spacing.small)
+        .background(Color.elsepageSurfaceSecondary, in: Capsule())
+        .overlay(Capsule().stroke(Color.elsepageBorder))
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Thoughts / Questions (brain.md §14)
