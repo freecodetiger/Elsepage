@@ -1272,7 +1272,7 @@ struct ReflectionConversationView: View {
 
     private var userAuthorship: MessageAuthorship {
         MessageAuthorship(
-            name: userDisplayName,
+            name: normalizedIdentity(userDisplayName, fallback: "我"),
             avatarSymbolName: userAvatarSymbol,
             style: .user
         )
@@ -1280,10 +1280,15 @@ struct ReflectionConversationView: View {
 
     private var assistantAuthorship: MessageAuthorship {
         MessageAuthorship(
-            name: assistantDisplayName,
+            name: normalizedIdentity(assistantDisplayName, fallback: "页外"),
             avatarSymbolName: assistantAvatarSymbol,
             style: .assistant
         )
+    }
+
+    private func normalizedIdentity(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
     }
 
     var body: some View {

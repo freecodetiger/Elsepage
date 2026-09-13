@@ -11,6 +11,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("voice.saveAudioByDefault") private var saveAudioByDefault = true
+    @AppStorage("profile.userDisplayName") private var userDisplayName = "我"
+    @AppStorage("profile.assistantDisplayName") private var assistantDisplayName = "页外"
     @Bindable var model: SettingsRootModel
 
     var body: some View {
@@ -54,6 +56,19 @@ struct SettingsView: View {
                     Text("仅在你主动开始录音后生效；打开反思页面不会自动开启麦克风。当前录音仍可在保存前关闭。")
                 }
 
+                Section("表达") {
+                    NavigationLink {
+                        ConversationIdentitySettingsView()
+                    } label: {
+                        statusRow(
+                            title: "对话身份",
+                            status: "\(normalizedIdentity(userDisplayName, fallback: "我")) · \(normalizedIdentity(assistantDisplayName, fallback: "页外"))",
+                            muted: true,
+                            icon: "person.2"
+                        )
+                    }
+                }
+
                 Section("诊断") {
                     NavigationLink {
                         DiagnosticsView(model: model.diagnostics)
@@ -76,6 +91,11 @@ struct SettingsView: View {
             .task { await model.loadAll() }
             .onDisappear { model.clearTransientSecrets() }
         }
+    }
+
+    private func normalizedIdentity(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
     }
 
     private func statusRow(title: String, status: String, muted: Bool, icon: String) -> some View {
