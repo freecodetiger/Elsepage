@@ -1254,6 +1254,13 @@ struct SessionReflectionSheet: View {
 struct ReflectionConversationView: View {
     @Bindable var model: ReflectionConversationModel
     var header: AnyView? = nil
+    /// Optional content rendered after the conversation's messages but before
+    /// the composer. The Thoughts record world uses this for “这次留下” and
+    /// evidence without duplicating the conversation state machine.
+    var recordExtras: AnyView? = nil
+    var rootTitle: String = "你的想法"
+    var rootTextOverride: String? = nil
+    var showsInlineProvenance: Bool = true
     var openCitation: ((AgentResponseEvidence) -> Void)?
     var onConversationDeleted: @MainActor () -> Void = {}
     @State private var confirmsDeletion = false
@@ -1270,7 +1277,11 @@ struct ReflectionConversationView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    userTurn(title: "你的想法", text: model.reflection.displayText, canDelete: model.canDeleteRoot)
+                    userTurn(
+                        title: rootTitle,
+                        text: rootTextOverride ?? model.reflection.displayText,
+                        canDelete: model.canDeleteRoot
+                    )
                     if let audioFileName = model.audioFileName {
                         ReflectionAudioAttachment(
                             fileName: audioFileName,
@@ -1309,7 +1320,9 @@ struct ReflectionConversationView: View {
                             onDelete: { Task { await model.deleteMessageAudio(message.id) } }
                         )
                     }
-                    provenance(for: message)
+                    if showsInlineProvenance {
+                        provenance(for: message)
+                    }
                 }
             }
 
@@ -1363,6 +1376,11 @@ struct ReflectionConversationView: View {
                 Label(disclosureLine(disclosure), systemImage: "doc.text.magnifyingglass")
                     .font(.caption).foregroundStyle(.tertiary).textSelection(.enabled)
             }
+
+                    if let recordExtras {
+                        Divider()
+                        recordExtras
+                    }
 
                     Divider()
                     ReflectionComposer(

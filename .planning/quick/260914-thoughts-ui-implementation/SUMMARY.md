@@ -22,7 +22,10 @@
   - removed archive mode and filters
   - collapsed cards show only book, Chinese date and summary
   - all cards share identical resting styling
-  - expanded cards show 概要 / 我的原话 / AI 回应 / 这次留下 / 继续对话 / 更多依据
+  - tapping a card pushes a dedicated record world instead of expanding inline
+  - the record world shows 概要 / 我的原话 / AI 回应 / 这次留下 / 对话输入 / 依据
+  - evidence is a normal section, not another required disclosure
+  - compact width uses NavigationStack; regular width is specified for split view
 - Added Chinese date formatting through `ElsepageDateFormat`.
 - Set project development language to `zh-Hans`.
 - Kept glass for navigation and overlays; content cards use neutral surfaces.
@@ -37,7 +40,7 @@
 
 ## Pending User Acceptance
 
-- Xcode build and device check for the new Thoughts card hierarchy.
+- Xcode build and device check for the list → record-world navigation.
 - Verify automatic first response and summary appear after a fresh Reflection.
 - Verify light/dark surfaces and glass chrome on device.
 - Verify Chinese date formatting across device language settings.
