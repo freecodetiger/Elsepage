@@ -66,7 +66,8 @@ import Testing
         "v23_brain_item_embeddings", "v24_brain_item_revisions", "v25_brain_projection_traces",
         "v26_retire_legacy_memories",
         "v27_reflection_message_audio",
-        "v28_text_annotations"
+        "v28_text_annotations",
+        "v29_reflection_summaries"
     ])
 }
 

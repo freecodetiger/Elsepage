@@ -39,7 +39,7 @@ private func makeBook(fingerprint: String = "abc") -> Book {
         try AppDatabase.migrator.completedMigrations(db)
     }
 
-    #expect(completed.last == "v28_text_annotations")
+    #expect(completed.last == "v29_reflection_summaries")
     #expect(try await database.writer.read { db in
         try Bool.fetchOne(db, sql: "SELECT 1") == true
     })

@@ -10,6 +10,7 @@ public struct ReflectionArchiveEntry: Hashable, Sendable, Identifiable {
     public let evidence: [ReflectionEvidence]
     public let connections: [ReflectionArchiveConnection]
     public let responseProvenance: [UUID: AgentResponseProvenance]
+    public let summary: ReflectionSummary?
 
     public var derivedAgentResponse: ReflectionMessage? {
         messages.last(where: { $0.source == .agentGenerated })
@@ -27,7 +28,8 @@ public struct ReflectionArchiveEntry: Hashable, Sendable, Identifiable {
         messages: [ReflectionMessage] = [],
         evidence: [ReflectionEvidence] = [],
         connections: [ReflectionArchiveConnection] = [],
-        responseProvenance: [UUID: AgentResponseProvenance] = [:]
+        responseProvenance: [UUID: AgentResponseProvenance] = [:],
+        summary: ReflectionSummary? = nil
     ) {
         self.reflection = reflection
         self.book = book
@@ -35,6 +37,7 @@ public struct ReflectionArchiveEntry: Hashable, Sendable, Identifiable {
         self.evidence = evidence
         self.connections = connections
         self.responseProvenance = responseProvenance
+        self.summary = summary
     }
 }
 
@@ -82,6 +85,7 @@ public struct ReflectionArchiveService: Sendable {
                     responseProvenance[message.id] = try await reflections.provenance(for: message.id)
                 }
                 let connections = try await reflections.connections(for: reflection.id)
+                let summary = try await reflections.summary(for: reflection.id)
                 var archiveConnections: [ReflectionArchiveConnection] = []
                 for connection in connections {
                     guard let source = try await reflections.reflection(id: connection.sourceReflectionID),
@@ -100,7 +104,8 @@ public struct ReflectionArchiveService: Sendable {
                     messages: messages,
                     evidence: evidence,
                     connections: archiveConnections,
-                    responseProvenance: responseProvenance
+                    responseProvenance: responseProvenance,
+                    summary: summary
                 ))
             }
         }

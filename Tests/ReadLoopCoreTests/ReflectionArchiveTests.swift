@@ -1,6 +1,7 @@
 import Foundation
 import LibraryCore
 import Persistence
+import ReaderAgent
 import ReflectionCore
 import Testing
 
@@ -33,12 +34,20 @@ import Testing
         source: .userInput,
         content: "不能作为派生回应"
     ))
-    try await reflections.appendMessage(.init(
+    let agentMessage = try ReflectionMessage(
         reflectionID: later.id,
         author: .agent,
         source: .agentGenerated,
         content: "这是可选的派生回应"
-    ))
+    )
+    try await reflections.appendMessage(agentMessage)
+    let summary = try ReflectionSummary(
+        reflectionID: later.id,
+        text: "后来真正留下来的想法。",
+        sourceMessageID: agentMessage.id,
+        promptVersion: ReflectionSummaryService.promptVersion
+    )
+    _ = try await reflections.saveSummaryIfAbsent(summary)
 
     let archive = ReflectionArchiveService(books: books, reflections: reflections)
     let entries = try await archive.recentEntries()
@@ -47,7 +56,9 @@ import Testing
     #expect(entries[0].book.id == secondBook.id)
     #expect(entries[0].reflection.originalText == "后来真正留下来的想法")
     #expect(entries[0].derivedAgentResponse?.content == "这是可选的派生回应")
+    #expect(entries[0].summary?.text == "后来真正留下来的想法。")
     #expect(entries[1].derivedAgentResponse == nil)
+    #expect(entries[1].summary == nil)
 }
 
 @Test func thoughtsArchiveProjectionSearchesSourceBookAndConversationAndAppliesFilters() throws {
@@ -128,4 +139,45 @@ import Testing
     let books = ThoughtsArchiveProjection.bookSections(entries)
     #expect(books.map(\.book.title) == ["第二本", "第一本"])
     #expect(books[1].entries.map(\.reflection.originalText) == ["二月较早", "一月"])
+}
+
+
+@Test func reflectionSummaryIsImmutableAndCascadesWithReflection() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let book = TestFixtures.book(fingerprint: "summary-cascade")
+    try await books.insert(book)
+
+    let reflection = Reflection(
+        bookID: book.id,
+        originalText: "第一次留下的想法",
+        inputKind: .text
+    )
+    try await reflections.insert(reflection, linkedHighlightIDs: [], evidence: [])
+    let firstMessage = try ReflectionMessage(
+        reflectionID: reflection.id,
+        author: .agent,
+        source: .agentGenerated,
+        content: "第一次回应"
+    )
+    let first = try ReflectionSummary(
+        reflectionID: reflection.id,
+        text: "第一次概要",
+        sourceMessageID: firstMessage.id,
+        promptVersion: "reflection-summary-v1"
+    )
+    let second = try ReflectionSummary(
+        reflectionID: reflection.id,
+        text: "不应覆盖",
+        sourceMessageID: UUID(),
+        promptVersion: "reflection-summary-v2"
+    )
+
+    #expect(try await reflections.saveSummaryIfAbsent(first).text == "第一次概要")
+    #expect(try await reflections.saveSummaryIfAbsent(second).text == "第一次概要")
+    #expect(try await reflections.summary(for: reflection.id)?.text == "第一次概要")
+
+    try await reflections.delete(id: reflection.id)
+    #expect(try await reflections.summary(for: reflection.id) == nil)
 }

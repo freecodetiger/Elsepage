@@ -117,7 +117,8 @@ final class AppModel {
                 // Reflection semantic recall lane (Phase 5): query-time embed behind
                 // a process-local cache; nil provider degrades to lexical. Memory
                 // recall rides the brain lane, not a separate semantic lane.
-                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider)
+                semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider),
+                summaryService: ReflectionSummaryService(clientFactory: modelClientFactory)
             )
             let readerHelpService = ReaderHelpService(
                 models: modelClientFactory,

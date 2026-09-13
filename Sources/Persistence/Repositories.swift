@@ -103,6 +103,7 @@ public final class GRDBReadingRepository: ReadingRepository, @unchecked Sendable
 public enum PersistenceError: Error {
     case inconsistentHighlightNote
     case inconsistentReflectionContext
+    case missingReflection
     case missingReadingSession
     case corruptRecord(table: String, recordID: String, field: String)
 }

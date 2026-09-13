@@ -51,6 +51,7 @@ public struct PersonalDataArchive: Codable, Sendable {
         public var questions: [AgentQuestion]
         public var citations: [ReflectionCitation]
         public var memoryChanges: [JournalMemoryChange]
+        public var summary: ReflectionSummary?
         /// Base64 keeps the single-file JSON export self-contained. Nil means the
         /// Reflection had no saved audio or the file was unavailable.
         public var audioBase64: String?
@@ -66,6 +67,7 @@ public struct PersonalDataArchive: Codable, Sendable {
             questions: [AgentQuestion],
             citations: [ReflectionCitation],
             memoryChanges: [JournalMemoryChange],
+            summary: ReflectionSummary? = nil,
             audioBase64: String? = nil,
             messageAudioBase64: [String: String] = [:]
         ) {
@@ -77,6 +79,7 @@ public struct PersonalDataArchive: Codable, Sendable {
             self.questions = questions
             self.citations = citations
             self.memoryChanges = memoryChanges
+            self.summary = summary
             self.audioBase64 = audioBase64
             self.messageAudioBase64 = messageAudioBase64
         }
@@ -202,6 +205,7 @@ public struct PersonalDataExporter: Sendable {
                 let questions = try await journal.questions(for: reflection.id)
                 let citations = try await journal.citations(for: reflection.id)
                 let memoryChanges = try await journal.memoryChanges(for: reflection.id)
+                let summary = try await reflections.summary(for: reflection.id)
                 var messageAudioBase64: [String: String] = [:]
                 for message in messages {
                     if let fileName = message.audioFileName,
@@ -218,6 +222,7 @@ public struct PersonalDataExporter: Sendable {
                     questions: questions,
                     citations: citations,
                     memoryChanges: memoryChanges,
+                    summary: summary,
                     audioBase64: reflection.audioFileName.flatMap(audioData)?.base64EncodedString(),
                     messageAudioBase64: messageAudioBase64
                 ))

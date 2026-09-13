@@ -207,6 +207,10 @@ public enum ReflectionConversationDeletionError: LocalizedError, Equatable, Send
 public protocol ReflectionRepository: Sendable {
     func reflection(id: ReflectionID) async throws -> Reflection?
     func reflections(for bookID: BookID) async throws -> [Reflection]
+    /// Immutable browsing summary for one Reflection.
+    func summary(for reflectionID: ReflectionID) async throws -> ReflectionSummary?
+    /// Persists the first summary only. Existing summaries are returned unchanged.
+    func saveSummaryIfAbsent(_ summary: ReflectionSummary) async throws -> ReflectionSummary
     /// Every reflection across all books, newest first. Derived indicators
     /// (streaks) and cross-book retrieval consume this. Fakes inherit an empty
     /// default; the GRDB implementation loads the real table.
@@ -241,6 +245,8 @@ public protocol ReflectionRepository: Sendable {
 
 public extension ReflectionRepository {
     func allReflections() async throws -> [Reflection] { [] }
+    func summary(for reflectionID: ReflectionID) async throws -> ReflectionSummary? { nil }
+    func saveSummaryIfAbsent(_ summary: ReflectionSummary) async throws -> ReflectionSummary { summary }
     func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult {
         throw ReflectionConversationDeletionError.unsupportedRepository
     }

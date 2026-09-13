@@ -593,6 +593,21 @@ public final class AppDatabase: @unchecked Sendable {
         migrator.registerMigration("v28_text_annotations") { db in
             try Self.migrateTextAnnotations(db)
         }
+        // Browsing summaries are immutable derived data for one Reflection.
+        // A separate table keeps the source Reflection record untouched and
+        // makes the one-summary-per-reflection invariant explicit.
+        migrator.registerMigration("v29_reflection_summaries") { db in
+            try db.create(table: "reflectionSummaries", ifNotExists: true) { t in
+                t.column("reflectionID", .text).primaryKey()
+                    .references("reflections", onDelete: .cascade)
+                t.column("text", .text).notNull()
+                t.column("sourceMessageID", .text).notNull()
+                t.column("promptVersion", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.check(sql: "length(trim(text)) > 0 AND length(text) <= 36")
+                t.check(sql: "length(trim(promptVersion)) > 0")
+            }
+        }
         return migrator
     }
 
@@ -841,6 +856,7 @@ public final class AppDatabase: @unchecked Sendable {
         "reflectionHighlights",
         "reflectionConnections",
         "reflectionEvidence",
+        "reflectionSummaries",
         "brainItemEmbeddings",
         "brainItemEvidence",
         "brainItemRevisions",

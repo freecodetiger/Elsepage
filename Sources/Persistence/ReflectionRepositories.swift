@@ -83,6 +83,25 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
         }
     }
 
+    public func summary(for reflectionID: ReflectionID) async throws -> ReflectionSummary? {
+        try await db.writer.read { db in
+            try ReflectionSummaryRecord.fetchOne(db, key: reflectionID.description)?.domain()
+        }
+    }
+
+    public func saveSummaryIfAbsent(_ summary: ReflectionSummary) async throws -> ReflectionSummary {
+        try await db.writer.write { db in
+            if let existing = try ReflectionSummaryRecord.fetchOne(db, key: summary.reflectionID.description) {
+                return try existing.domain()
+            }
+            guard try ReflectionRecord.fetchOne(db, key: summary.reflectionID.description) != nil else {
+                throw PersistenceError.missingReflection
+            }
+            try ReflectionSummaryRecord(summary).insert(db)
+            return summary
+        }
+    }
+
     public func insert(
         _ reflection: Reflection, linkedHighlightIDs: [UUID] = [], evidence: [ReflectionEvidence] = []
     ) async throws {
@@ -494,6 +513,42 @@ private struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             bookID: .init(rawValue: try decodeUUID(bookID, table: Self.databaseTableName, recordID: id, field: "bookID")),
             startedAt: startedAt, endedAt: endedAt, startLocator: start, endLocator: end,
             highlightCount: highlightCount, noteCount: noteCount, agentDiscussionCount: agentDiscussionCount
+        )
+    }
+}
+
+private struct ReflectionSummaryRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "reflectionSummaries"
+    var reflectionID, text, sourceMessageID, promptVersion: String
+    var createdAt: Date
+
+    init(_ summary: ReflectionSummary) {
+        reflectionID = summary.reflectionID.description
+        text = summary.text
+        sourceMessageID = summary.sourceMessageID.uuidString.lowercased()
+        promptVersion = summary.promptVersion
+        createdAt = summary.createdAt
+    }
+
+    func domain() throws -> ReflectionSummary {
+        guard let messageID = UUID(uuidString: sourceMessageID) else {
+            throw PersistenceError.corruptRecord(
+                table: Self.databaseTableName,
+                recordID: reflectionID,
+                field: "sourceMessageID"
+            )
+        }
+        return try ReflectionSummary(
+            reflectionID: .init(rawValue: decodeUUID(
+                reflectionID,
+                table: Self.databaseTableName,
+                recordID: reflectionID,
+                field: "reflectionID"
+            )),
+            text: text,
+            sourceMessageID: messageID,
+            promptVersion: promptVersion,
+            createdAt: createdAt
         )
     }
 }

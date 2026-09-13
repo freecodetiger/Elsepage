@@ -46,6 +46,12 @@ import Testing
     try await reflections.appendMessage(try ReflectionMessage(reflectionID: first.id, author: .user, source: .userInput, content: "用户追问", createdAt: Date(timeIntervalSince1970: 100)))
     let agentMessage = try ReflectionMessage(reflectionID: first.id, author: .agent, source: .agentGenerated, content: "Agent 回应", createdAt: Date(timeIntervalSince1970: 200))
     try await reflections.appendMessage(agentMessage)
+    _ = try await reflections.saveSummaryIfAbsent(try ReflectionSummary(
+        reflectionID: first.id,
+        text: "自由意味着承担选择。",
+        sourceMessageID: agentMessage.id,
+        promptVersion: "reflection-summary-v1"
+    ))
     let second = Reflection(bookID: book.id, originalText: "另一条想法", inputKind: .text)
     try await reflections.insert(second, linkedHighlightIDs: [], evidence: [])
     try await reflections.saveConnection(.init(reflectionID: first.id, sourceReflectionID: second.id, relevance: 0.8))
@@ -81,6 +87,7 @@ import Testing
     #expect(firstEntry.evidence.count == 1)
     #expect(firstEntry.connections.count == 1)
     #expect(firstEntry.thoughts.map(\.thought) == ["我想记住这句话"])
+    #expect(firstEntry.summary?.text == "自由意味着承担选择。")
 
     // The brain section round-trips the seeded memory.
     #expect(archive.brain.memories.map(\.id) == ["export-memory"])

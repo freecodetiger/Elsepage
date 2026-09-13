@@ -17,6 +17,7 @@ public enum ReaderAgentEvent: Equatable, Sendable {
     /// Carried to the UI so it can render provenance without a separate query.
     case citationsValidated(AgentResponseProvenance)
     case completed(ReflectionMessage)
+    case summaryGenerated(ReflectionSummary)
     case contextDisclosed(ContextDisclosure)
     case cancelled
     case failed(ReaderAgentFailure)
@@ -70,7 +71,7 @@ public enum ReaderAgentFailure: Error, Equatable, Sendable {
     case persistence
 }
 
-/// Product module for optional feedback on a Reflection already stored locally.
+/// Product module for the automatic first response on a Reflection already stored locally.
 public struct ReaderAgent: Sendable {
     private let reflections: any ReflectionRepository
     private let models: any ModelClientFactory
@@ -91,6 +92,7 @@ public struct ReaderAgent: Sendable {
     /// Optional semantic recall lane for reflection retrieval (Phase 5).
     /// Nil → the existing lexical-only behavior, unchanged.
     private let semanticRanking: (any SemanticRanking)?
+    private let summaryService: ReflectionSummaryService?
 
     public init(
         reflections: any ReflectionRepository,
@@ -105,7 +107,8 @@ public struct ReaderAgent: Sendable {
         brainRetriever: BrainRetriever? = nil,
         projection: BrainProjectionService? = nil,
         traceRepository: (any RoutingTraceRepository)? = nil,
-        semanticRanking: (any SemanticRanking)? = nil
+        semanticRanking: (any SemanticRanking)? = nil,
+        summaryService: ReflectionSummaryService? = nil
     ) {
         self.reflections = reflections
         self.models = models
@@ -120,6 +123,7 @@ public struct ReaderAgent: Sendable {
         self.projection = projection
         self.traceRepository = traceRepository
         self.semanticRanking = semanticRanking
+        self.summaryService = summaryService
     }
 
     public func respond(to reflectionID: ReflectionID, activeBrain: BrainItem? = nil) -> AsyncStream<ReaderAgentEvent> {
@@ -156,6 +160,7 @@ public struct ReaderAgent: Sendable {
                         return
                     }
                     var messages = try await reflections.messages(for: reflectionID)
+                    var firstAgentResponse = messages.first(where: { $0.author == .agent })
                     if let followUp {
                         let content = followUp.text.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !content.isEmpty else {
@@ -176,11 +181,25 @@ public struct ReaderAgent: Sendable {
                         if let index = messages.firstIndex(where: { $0.id == followUp.id }),
                            let completed = messages.dropFirst(index + 1).first(where: { $0.author == .agent }) {
                             continuation.yield(.completed(completed))
+                            if let firstAgent = messages.first(where: { $0.author == .agent }) {
+                                await yieldSummaryIfNeeded(
+                                    reflection: reflection,
+                                    firstAgentResponse: firstAgent,
+                                    continuation: continuation
+                                )
+                            }
                             continuation.finish()
                             return
                         }
                     } else if let completed = messages.last(where: { $0.author == .agent }) {
                         continuation.yield(.completed(completed))
+                        if let firstAgent = messages.first(where: { $0.author == .agent }) {
+                            await yieldSummaryIfNeeded(
+                                reflection: reflection,
+                                firstAgentResponse: firstAgent,
+                                continuation: continuation
+                            )
+                        }
                         continuation.finish()
                         return
                     }
@@ -442,6 +461,7 @@ public struct ReaderAgent: Sendable {
                             }
                             continuation.yield(.completed(message))
                             completedMessage = message
+                            if firstAgentResponse == nil { firstAgentResponse = message }
                             // 大脑维护路径(phase 17):fire-and-forget。失败只
                             // 影响 Brain,绝不阻塞/破坏回复。
                             if let projection {
@@ -478,6 +498,13 @@ public struct ReaderAgent: Sendable {
                             replyUsage: replyUsage,
                             pipelineMetrics: pipelineMetrics
                         )
+                        if let firstAgentResponse {
+                            await yieldSummaryIfNeeded(
+                                reflection: reflection,
+                                firstAgentResponse: firstAgentResponse,
+                                continuation: continuation
+                            )
+                        }
                     }
                 } catch is CancellationError {
                     continuation.yield(.cancelled)
@@ -488,6 +515,27 @@ public struct ReaderAgent: Sendable {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    private func yieldSummaryIfNeeded(
+        reflection: Reflection,
+        firstAgentResponse: ReflectionMessage,
+        continuation: AsyncStream<ReaderAgentEvent>.Continuation
+    ) async {
+        guard let summaryService else { return }
+        if (try? await reflections.summary(for: reflection.id)) != nil { return }
+        guard let text = try? await summaryService.summarize(
+            reflection: reflection,
+            firstAgentResponse: firstAgentResponse.content
+        ), let summary = try? ReflectionSummary(
+            reflectionID: reflection.id,
+            text: text,
+            sourceMessageID: firstAgentResponse.id,
+            promptVersion: ReflectionSummaryService.promptVersion
+        ), let saved = try? await reflections.saveSummaryIfAbsent(summary) else {
+            return
+        }
+        continuation.yield(.summaryGenerated(saved))
     }
 
     private func saveTrace(
