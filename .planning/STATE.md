@@ -105,3 +105,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Annotation 点击坐标冲突消歧完成（`.planning/quick/260913-annotation-overlap-hit-fix/SUMMARY.md`）；按 decoration clickableElements 的 hit rect 判定，且菜单锚定实际点击点，只有点击点同时命中 Note 和 Highlight 才显示选择器。
 - 2026-09-13：UI 语言与信息架构重构完成（`.planning/quick/260913-ui-language-and-ia/SUMMARY.md`）；锁定“页外 / 今天 / 书架 / 想法 / 我的”和阅读记录/看法/问题/记忆语义，应用壳层改为中性黑白 token，拆分交互色与状态色，重构想法/我的页层级；Spec 见 `docs/UI_LANGUAGE_AND_IA_SPEC.md`，swift test 全绿（388 Swift Testing + XCTest 0 failures），Xcode/真机视觉验收待用户。
 - 2026-09-14：想法页减法 HTML 原型完成（`.planning/quick/260914-thoughts-html-prototype/SUMMARY.md`）；交付 `docs/prototypes/thoughts-redesign.html`，删除档案入口，覆盖固定概要、扫读/展开、明暗预览与中文日期；已完成 Chrome 实渲染，待用户审阅视觉方向。
+- 2026-09-14：想法页 UI 重构 Spec 完成（`.planning/quick/260914-thoughts-ui-redesign-spec/SUMMARY.md`）；新增 `docs/THOUGHTS_UI_REDESIGN_SPEC.md`，锁定删除档案入口/状态/筛选、自动 AI 回应、首次两输入生成不可变概要、玻璃仅用于导航浮层、卡片只留书名中文日期与概要；旧 UI 规范已同步指向新 spec。
