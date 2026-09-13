@@ -137,6 +137,12 @@ final class VoiceReflectionRecorder {
         draftAudioURLs.removeAll()
         state.audioFileName = nil
     }
+
+    func removeDraftAudio(at url: URL) {
+        audioStore.discardDraft(at: url)
+        draftAudioURLs.removeAll { $0 == url }
+        state.audioFileName = draftAudioURLs.last?.lastPathComponent
+    }
 }
 
 enum VoiceReflectionControlStyle: Equatable {
@@ -218,6 +224,15 @@ struct VoiceReflectionControls: View {
                         || recorder.state.phase == .stopping
                         || recorder.isRecording
                 )
+            }
+            if style == .fullDraft,
+               allowsAudioSaving,
+               let draftURL = recorder.draftAudioURLs.last {
+                ReflectionAudioAttachment(
+                    draftURL: draftURL,
+                    onDelete: { recorder.removeDraftAudio(at: draftURL) }
+                )
+                .id(draftURL)
             }
         }
         .frame(maxWidth: style == .fullDraft ? .infinity : nil)
@@ -366,7 +381,12 @@ struct VoiceReflectionControls: View {
 
 @MainActor @Observable
 final class ReflectionAudioPlayerModel {
-    private let fileName: String
+    enum Source: Equatable {
+        case saved(fileName: String)
+        case draft(URL)
+    }
+
+    private let source: Source
     private let audioStore: AudioFileStore
     private var player: AVAudioPlayer?
     private var ticker: Task<Void, Never>?
@@ -377,15 +397,24 @@ final class ReflectionAudioPlayerModel {
     private(set) var metadata: AudioFileMetadata?
     private(set) var errorMessage: String?
 
-    init(fileName: String, audioStore: AudioFileStore = .live()) {
-        self.fileName = fileName
+    init(source: Source, audioStore: AudioFileStore = .live()) {
+        self.source = source
         self.audioStore = audioStore
+    }
+
+    private func resolvedSource() throws -> (url: URL, fileName: String) {
+        switch source {
+        case .saved(let fileName):
+            return (try audioStore.url(for: fileName), fileName)
+        case .draft(let url):
+            return (url, url.lastPathComponent)
+        }
     }
 
     func prepare() {
         guard player == nil else { return }
         do {
-            let url = try audioStore.url(for: fileName)
+            let url = try resolvedSource().url
             guard FileManager.default.fileExists(atPath: url.path) else {
                 throw AudioFileStoreError.missingDraft
             }
@@ -400,7 +429,11 @@ final class ReflectionAudioPlayerModel {
     }
 
     func loadMetadata() async {
-        metadata = try? await audioStore.metadata(for: fileName)
+        guard let resolved = try? resolvedSource() else { return }
+        metadata = try? await audioStore.metadata(
+            forDraftURL: resolved.url,
+            fileName: resolved.fileName
+        )
     }
 
     func togglePlayback() {
@@ -478,7 +511,6 @@ final class ReflectionAudioPlayerModel {
 /// Reflection. Missing files degrade to text without interrupting the thread.
 @MainActor
 struct ReflectionAudioAttachment: View {
-    let fileName: String
     let onDelete: (() -> Void)?
 
     @State private var model: ReflectionAudioPlayerModel
@@ -487,9 +519,13 @@ struct ReflectionAudioAttachment: View {
     @State private var wasPlayingBeforeScrub = false
 
     init(fileName: String, onDelete: (() -> Void)? = nil) {
-        self.fileName = fileName
         self.onDelete = onDelete
-        _model = State(initialValue: ReflectionAudioPlayerModel(fileName: fileName))
+        _model = State(initialValue: ReflectionAudioPlayerModel(source: .saved(fileName: fileName)))
+    }
+
+    init(draftURL: URL, onDelete: (() -> Void)? = nil) {
+        self.onDelete = onDelete
+        _model = State(initialValue: ReflectionAudioPlayerModel(source: .draft(draftURL)))
     }
 
     var body: some View {
