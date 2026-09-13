@@ -91,7 +91,7 @@ Xcode 覆盖安装并启动后服务自动恢复；仅安装而未启动、App �
 - `swift test`：349 Swift Testing + 26 XCTest 通过。新测试验证真实 GRDB 保存、来源证据、幂等重试、环境隔离和空白拒绝。
 - `python3 -m unittest discover -s Scripts -p test_debug_loop.py`：5 个执行器/连接管理测试通过，包含“页面成功但数据库文本错误”必须 FAIL。
 - `xcodegen generate` 已完成；它只生成工程，不是构建。
-- 2026-09-12：用户构建安装后，已在 iPhone 上运行 `save` 并 PASS；无令牌自启动版本也通过，protocolVersion=1、instrumentationVersion=5。保存、重试与空白拒绝的原始结果见 [设备验收证据](testing/debug-loop/2026-09-12-device-save.json)。后续 instrumentationVersion=6 已连接并读取性能数据；当前版本 7 增加文本缓存统计，但这不自动构成未来代码改动的回归通过。
+- 2026-09-12：用户构建安装后，已在 iPhone 上运行 `save` 并 PASS；无令牌自启动版本也通过，protocolVersion=1、instrumentationVersion=5。保存、重试与空白拒绝的原始结果见 [设备验收证据](testing/debug-loop/2026-09-12-device-save.json)。后续 instrumentationVersion=6 已连接并读取性能数据；版本 7 增加文本缓存统计；当前版本 8 通过 `/perf` 暴露 annotation 点击坐标、hit rect 和冲突命中事件，但这不自动构成未来代码改动的回归通过。
 
 ## 后续扩展
 
