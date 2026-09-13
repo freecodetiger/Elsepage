@@ -364,7 +364,7 @@ private struct ThoughtRecordHeader: View {
 }
 
 private struct ThoughtRecordExtras: View {
-    let journal: JournalEntry?
+    let journal: JournalEntry
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
