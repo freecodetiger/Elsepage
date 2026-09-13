@@ -55,8 +55,9 @@ struct ReaderNoteEditorRequest: Identifiable, Equatable {
 struct ReaderTransientNotice: Equatable, Identifiable {
     enum Kind: Equatable {
         case copied
-        case deletedHighlight(Highlight, notes: [Note])
-        case deletedNote(Note)
+        case highlightOverlap
+        case deletedHighlight(TextAnnotation)
+        case deletedNote(TextAnnotation)
         /// 从 Agent Citation 跳回原文 (PRD §10.3) — chrome-level acknowledgment
         /// only; the EPUB content itself never animates (P1).
         case returnedToSource
@@ -75,6 +76,7 @@ final class ReaderModel {
     let reflectionRepository: any ReflectionRepository
     let readerAgent: ReaderAgent
     let readerHelpService: ReaderHelpService
+    let textAnnotationRepository: any TextAnnotationRepository
     let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     /// Injected by ReaderScreen so reflection models built here can report
     /// achievement events (unlock badges are App-layer, not part of ReaderAgent).
@@ -86,6 +88,7 @@ final class ReaderModel {
     var preferences: ReaderPreferences = .default
     var highlights: [Highlight] = []
     var notes: [Note] = []
+    private(set) var textAnnotations: [TextAnnotation] = []
     var searchResults: [ReaderSearchResult] = []
     var isSearching = false
     var chapters: [ReaderChapter] = []
@@ -130,6 +133,7 @@ final class ReaderModel {
         reflections: any ReflectionRepository,
         readerAgent: ReaderAgent,
         readerHelpService: ReaderHelpService,
+        textAnnotations: any TextAnnotationRepository,
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         requestedLocator: BookLocator? = nil,
         readium: ReadiumServices
@@ -138,6 +142,7 @@ final class ReaderModel {
         self.sessions = sessions; reflectionRepository = reflections
         self.readerAgent = readerAgent
         self.readerHelpService = readerHelpService
+        self.textAnnotationRepository = textAnnotations
         self.makePolishService = makePolishService
         self.readium = readium
         if let requestedLocator {
@@ -167,18 +172,16 @@ final class ReaderModel {
             preferences = loadedPreferences
             isPrepared = true
 
-            let repository = self.repository
+            let annotations = textAnnotationRepository
             let books = self.books
             let bookID = book.id
             deferredPreparationTask = Task { [weak self] in
                 do {
-                    async let highlightsTask = repository.highlights(for: bookID)
-                    async let notesTask = repository.notes(for: bookID)
-                    let (loadedHighlights, loadedNotes) = try await (highlightsTask, notesTask)
+                    let loadedAnnotations = try await annotations.annotations(for: bookID)
                     try Task.checkCancellation()
                     guard let self else { return }
-                    self.highlights = loadedHighlights
-                    self.notes = loadedNotes
+                    self.textAnnotations = loadedAnnotations
+                    self.refreshAnnotationProjections()
                     try await books.markOpened(bookID, at: Date())
                 } catch is CancellationError {
                     return
@@ -228,21 +231,117 @@ final class ReaderModel {
             showHighlightMenu(for: highlight.id, anchor: nil)
         }
     }
-    @discardableResult
-    func saveHighlight(locator: BookLocator, color: HighlightColor) -> Highlight? {
-        if let existing = highlights.first(where: { $0.locator.identifiesSameAnchor(as: locator) }) {
-            return existing
+    private func annotation(for locator: BookLocator) -> TextAnnotation? {
+        let range = AnnotationRange(
+            bookID: book.id,
+            resourceHref: locator.href,
+            startLocator: locator,
+            endLocator: locator
+        )
+        return textAnnotations.first { $0.range.rangeKey == range.rangeKey }
+    }
+
+    private func annotation(forHighlightID id: UUID) -> TextAnnotation? {
+        textAnnotations.first { $0.id == id }
+    }
+
+    private func annotation(forNoteID id: UUID) -> TextAnnotation? {
+        textAnnotations.first { annotation in annotation.notes.contains { $0.id == id } }
+    }
+
+    private func replaceAnnotation(_ annotation: TextAnnotation) {
+        if let index = textAnnotations.firstIndex(where: { $0.id == annotation.id }) {
+            textAnnotations[index] = annotation
+        } else {
+            textAnnotations.append(annotation)
         }
-        let highlight = Highlight(bookID: book.id, locator: locator, color: color)
-        highlights.append(highlight)
-        Task {
-            do { try await repository.save(highlight: highlight) }
+        textAnnotations.sort { $0.createdAt < $1.createdAt }
+        refreshAnnotationProjections()
+        Task { [weak self] in
+            do { try await self?.textAnnotationRepository.save(annotation: annotation) }
             catch {
-                highlights.removeAll { $0.id == highlight.id }
-                errorMessage = error.localizedDescription
+                await self?.reloadAnnotations(after: error)
             }
         }
-        return highlight
+    }
+
+    private func removeAnnotation(id: UUID) {
+        textAnnotations.removeAll { $0.id == id }
+        refreshAnnotationProjections()
+        Task { [weak self] in
+            do { try await self?.textAnnotationRepository.deleteAnnotation(id: id) }
+            catch {
+                await self?.reloadAnnotations(after: error)
+            }
+        }
+    }
+
+    private func refreshAnnotationProjections() {
+        highlights = textAnnotations.compactMap { annotation in
+            guard let layer = annotation.highlight else { return nil }
+            return Highlight(
+                id: annotation.id,
+                bookID: annotation.range.bookID,
+                locator: annotation.range.startLocator,
+                color: layer.color,
+                createdAt: layer.createdAt
+            )
+        }
+        notes = textAnnotations.flatMap { annotation in
+            annotation.notes.map { entry in
+                Note(
+                    id: entry.id,
+                    bookID: annotation.range.bookID,
+                    highlightID: nil,
+                    locator: annotation.range.startLocator,
+                    body: entry.body,
+                    createdAt: entry.createdAt,
+                    updatedAt: entry.updatedAt
+                )
+            }
+        }
+        notes.sort { $0.createdAt < $1.createdAt }
+    }
+
+    @discardableResult
+    func saveHighlight(locator: BookLocator, color: HighlightColor) -> Highlight? {
+        let now = Date()
+        if var existing = annotation(for: locator) {
+            if var highlight = existing.highlight {
+                highlight.color = color
+                highlight.updatedAt = now
+                existing.highlight = highlight
+                existing.updatedAt = now
+                replaceAnnotation(existing)
+            } else {
+                existing.highlight = HighlightLayer(color: color, createdAt: now, updatedAt: now)
+                existing.updatedAt = now
+                replaceAnnotation(existing)
+            }
+            return highlights.first { $0.id == existing.id }
+        }
+
+        let range = AnnotationRange(
+            bookID: book.id,
+            resourceHref: locator.href,
+            startLocator: locator,
+            endLocator: locator
+        )
+        if textAnnotations.contains(where: {
+            $0.highlight != nil && $0.range.appearsToOverlapText(with: range)
+        }) {
+            showNotice(.highlightOverlap)
+            return nil
+        }
+
+        let annotation = TextAnnotation(
+            range: range,
+            highlight: HighlightLayer(color: color, createdAt: now, updatedAt: now),
+            createdAt: now,
+            updatedAt: now
+        )
+        replaceAnnotation(annotation)
+        return highlights.first { $0.id == annotation.id }
     }
 
     // MARK: Selection toolbar
@@ -271,20 +370,31 @@ final class ReaderModel {
         onSelectionFinished?()
         preferences.lastUsedHighlightColor = color
         savePreferences()
-        if let existing = highlights.first(where: { $0.locator.identifiesSameAnchor(as: context.locator) }) {
-            update(highlight: existing, color: color)
-            return
+        if saveHighlight(locator: context.locator, color: color) != nil {
+            AnnotationHaptics.highlightCreated()
         }
-        saveHighlight(locator: context.locator, color: color)
-        AnnotationHaptics.highlightCreated()
     }
 
     func beginNoteFromSelection() {
         guard case .selection(let context) = annotationMenu else { return }
         annotationMenu = nil
         onSelectionFinished?()
-        guard let highlight = saveHighlight(locator: context.locator, color: preferences.lastUsedHighlightColor) else { return }
-        openNoteEditor(.highlight(highlight.id))
+        let now = Date()
+        var annotation = annotation(for: context.locator) ?? TextAnnotation(
+            range: AnnotationRange(
+                bookID: book.id,
+                resourceHref: context.locator.href,
+                startLocator: context.locator,
+                endLocator: context.locator
+            ),
+            createdAt: now,
+            updatedAt: now
+        )
+        let entry = NoteEntry(body: "", createdAt: now, updatedAt: now)
+        annotation.notes.append(entry)
+        annotation.updatedAt = now
+        replaceAnnotation(annotation)
+        openNoteEditor(.note(entry.id))
     }
 
     /// Opens the note editor for a highlight's note or a standalone note.
@@ -400,8 +510,8 @@ final class ReaderModel {
     }
 
     func handleHighlightActivation(for id: UUID, anchor: CGRect?) {
-        guard highlights.contains(where: { $0.id == id }) else { return }
-        if let note = conflictingStandaloneNote(forHighlightID: id) {
+        guard let annotation = annotation(forHighlightID: id) else { return }
+        if let note = annotation.notes.first {
             showAnnotationConflict(noteID: note.id, highlightID: id, anchor: anchor)
         } else {
             showHighlightMenu(for: id, anchor: anchor)
@@ -409,14 +519,18 @@ final class ReaderModel {
     }
 
     func handleNoteActivation(for id: UUID, anchor: CGRect?) {
-        guard let note = notes.first(where: { $0.id == id }) else { return }
-        if let highlightID = note.highlightID {
-            showHighlightMenu(for: highlightID, anchor: anchor)
-        } else if let highlight = overlappingHighlight(for: note) {
-            showAnnotationConflict(noteID: note.id, highlightID: highlight.id, anchor: anchor)
-        } else {
-            openNoteEditor(.note(id))
+        guard let annotation = annotation(forNoteID: id) else { return }
+        if annotation.highlight != nil {
+            showAnnotationConflict(noteID: id, highlightID: annotation.id, anchor: anchor)
+            return
         }
+        if let overlappingHighlight = textAnnotations.first(where: {
+            $0.highlight != nil && $0.range.appearsToOverlapText(with: annotation.range)
+        }) {
+            showAnnotationConflict(noteID: id, highlightID: overlappingHighlight.id, anchor: anchor)
+            return
+        }
+        openNoteEditor(.note(id))
     }
 
     func chooseNoteFromConflict(_ conflict: ReaderAnnotationConflict) {
@@ -430,42 +544,16 @@ final class ReaderModel {
     }
 
     func hasNote(forHighlightID id: UUID) -> Bool {
-        note(forHighlightID: id) != nil
+        annotation(forHighlightID: id)?.notes.isEmpty == false
     }
 
     func openNote(forHighlightID id: UUID) {
         dismissHighlightMenu()
-        if let note = note(forHighlightID: id) {
-            openNoteEditor(.note(note.id))
-        } else {
+        guard let note = annotation(forHighlightID: id)?.notes.first else {
             openNoteEditor(.highlight(id))
+            return
         }
-    }
-
-    private func note(forHighlightID id: UUID) -> Note? {
-        if let attached = notes.first(where: { $0.highlightID == id }) {
-            return attached
-        }
-        return conflictingStandaloneNote(forHighlightID: id)
-    }
-
-    private func conflictingStandaloneNote(forHighlightID id: UUID) -> Note? {
-        guard let highlight = highlights.first(where: { $0.id == id }) else { return nil }
-        return notes
-            .filter { $0.highlightID == nil && $0.locator.appearsToOverlapText(with: highlight.locator) }
-            .max { $0.updatedAt < $1.updatedAt }
-    }
-
-    private func overlappingHighlight(for note: Note) -> Highlight? {
-        let matches = highlights.filter { $0.locator.appearsToOverlapText(with: note.locator) }
-        if let exact = matches.first(where: { $0.locator.identifiesSameAnchor(as: note.locator) }) {
-            return exact
-        }
-        return matches.min { lhs, rhs in
-            let lhsDistance = abs((lhs.locator.progression ?? 0) - (note.locator.progression ?? 0))
-            let rhsDistance = abs((rhs.locator.progression ?? 0) - (note.locator.progression ?? 0))
-            return lhsDistance < rhsDistance
-        }
+        openNoteEditor(.note(note.id))
     }
 
     private func showAnnotationConflict(noteID: UUID, highlightID: UUID, anchor: CGRect?) {
@@ -483,39 +571,33 @@ final class ReaderModel {
     }
 
     func changeHighlightColor(_ id: UUID, to color: HighlightColor) {
-        guard let highlight = highlights.first(where: { $0.id == id }) else { return }
-        guard highlight.color != color else { return }
+        guard var annotation = annotation(forHighlightID: id),
+              var highlight = annotation.highlight,
+              highlight.color != color else { return }
         preferences.lastUsedHighlightColor = color
         savePreferences()
-        update(highlight: highlight, color: color)
+        highlight.color = color
+        highlight.updatedAt = Date()
+        annotation.highlight = highlight
+        annotation.updatedAt = Date()
+        replaceAnnotation(annotation)
     }
 
-    /// Deletes a highlight immediately, keeps its notes as standalone notes
-    /// (persisting the unlink, unlike the old in-memory-only rewrite), and
-    /// offers a one-tap undo before the notice expires.
+    /// Removes only the highlight layer. NoteEntry values stay on the same
+    /// TextAnnotation and remain visible as underline annotations.
     func deleteHighlightWithUndo(_ id: UUID) {
-        guard let highlight = highlights.first(where: { $0.id == id }) else { return }
+        guard var annotation = annotation(forHighlightID: id) else { return }
+        let snapshot = annotation
         dismissHighlightMenu()
-        let linkedNotes = notes.filter { $0.highlightID == id }
-        let unlinkedNotes = linkedNotes.map(\.detachedFromHighlight)
-        highlights.removeAll { $0.id == id }
-        for note in unlinkedNotes {
-            if let index = notes.firstIndex(where: { $0.id == note.id }) {
-                notes[index] = note
-            }
+        annotation.highlight = nil
+        annotation.updatedAt = Date()
+        if annotation.isEmpty {
+            removeAnnotation(id: annotation.id)
+        } else {
+            replaceAnnotation(annotation)
         }
         AnnotationHaptics.annotationDeleted()
-        showNotice(.deletedHighlight(highlight, notes: linkedNotes))
-        Task {
-            do {
-                try await repository.deleteHighlight(id: id)
-                for note in unlinkedNotes {
-                    try await repository.save(note: note)
-                }
-            } catch {
-                await reloadAnnotations(after: error)
-            }
-        }
+        showNotice(.deletedHighlight(snapshot))
     }
 
     // MARK: Transient annotation UI
@@ -547,128 +629,95 @@ final class ReaderModel {
         transientNotice = nil
     }
 
-    func undoNotice() {        guard let notice = transientNotice else { return }
+    func undoNotice() {
+        guard let notice = transientNotice else { return }
         switch notice.kind {
-        case .copied, .returnedToSource:
+        case .copied, .returnedToSource, .highlightOverlap:
             clearNotice()
-        case .deletedHighlight(let highlight, let removedNotes):
+        case .deletedHighlight(let snapshot), .deletedNote(let snapshot):
             clearNotice()
-            guard !highlights.contains(where: { $0.id == highlight.id }) else { return }
-            highlights.append(highlight)
-            let relinkedNotes = removedNotes.map { $0.attached(to: highlight.id) }
-            for note in relinkedNotes {
-                if let index = notes.firstIndex(where: { $0.id == note.id }) {
-                    notes[index] = note
-                } else {
-                    notes.append(note)
-                }
-            }
-            Task {
-                do {
-                    try await repository.save(highlight: highlight)
-                    for note in relinkedNotes {
-                        try await repository.save(note: note)
-                    }
-                } catch {
-                    await reloadAnnotations(after: error)
-                }
-            }
-        case .deletedNote(let note):
-            clearNotice()
-            guard !notes.contains(where: { $0.id == note.id }) else { return }
-            notes.append(note)
-            notes.sort { $0.createdAt < $1.createdAt }
-            Task {
-                do { try await repository.save(note: note) }
-                catch {
-                    notes.removeAll { $0.id == note.id }
-                    errorMessage = error.localizedDescription
-                }
-            }
+            replaceAnnotation(snapshot)
         }
     }
 
     func update(highlight: Highlight, color: HighlightColor) {
-        guard let index = highlights.firstIndex(where: { $0.id == highlight.id }) else { return }
-        var updated = highlight
-        updated.color = color
-        highlights[index] = updated
-        Task {
-            do { try await repository.save(highlight: updated) }
-            catch {
-                if let currentIndex = self.highlights.firstIndex(where: { $0.id == highlight.id }) {
-                    self.highlights[currentIndex] = highlight
-                }
-                self.errorMessage = error.localizedDescription
-            }
-        }
+        changeHighlightColor(highlight.id, to: color)
     }
+
     func saveNote(for highlight: Highlight, body: String) {
-        guard !notes.contains(where: { $0.highlightID == highlight.id }) else { return }
-        let note = Note(bookID: book.id, highlightID: highlight.id, locator: highlight.locator, body: body)
-        notes.append(note)
-        Task {
-            do { try await repository.save(note: note) }
-            catch {
-                notes.removeAll { $0.id == note.id }
-                errorMessage = error.localizedDescription
-            }
-        }
+        guard var annotation = annotation(forHighlightID: highlight.id) else { return }
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let now = Date()
+        annotation.notes.append(NoteEntry(body: trimmed, createdAt: now, updatedAt: now))
+        annotation.updatedAt = now
+        replaceAnnotation(annotation)
     }
 
     func saveHelpNote(anchor: BookLocator, body: String) async throws {
-        let highlightID = highlights.first(where: {
-            $0.locator.identifiesSameAnchor(as: anchor)
-        })?.id
-        let note = Note(
-            bookID: book.id,
-            highlightID: highlightID,
-            locator: anchor,
-            body: body
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let now = Date()
+        var annotation = annotation(for: anchor) ?? TextAnnotation(
+            range: AnnotationRange(
+                bookID: book.id,
+                resourceHref: anchor.href,
+                startLocator: anchor,
+                endLocator: anchor
+            ),
+            createdAt: now,
+            updatedAt: now
         )
-        try await repository.save(note: note)
-        notes.append(note)
-        notes.sort { $0.createdAt < $1.createdAt }
+        annotation.notes.append(NoteEntry(body: trimmed, createdAt: now, updatedAt: now))
+        annotation.updatedAt = now
+        try await textAnnotationRepository.save(annotation: annotation)
+        if let index = textAnnotations.firstIndex(where: { $0.id == annotation.id }) {
+            textAnnotations[index] = annotation
+        } else {
+            textAnnotations.append(annotation)
+        }
+        textAnnotations.sort { $0.createdAt < $1.createdAt }
+        refreshAnnotationProjections()
     }
+
+    @discardableResult
+    func appendNoteEntry(after noteID: UUID) -> UUID? {
+        guard var annotation = annotation(forNoteID: noteID) else { return nil }
+        let now = Date()
+        let entry = NoteEntry(body: "", createdAt: now, updatedAt: now)
+        annotation.notes.append(entry)
+        annotation.updatedAt = now
+        replaceAnnotation(annotation)
+        return entry.id
+    }
+
     func update(note: Note, body: String) {
-        guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        let original = notes[index]
-        var updated = original
-        updated.body = body
-        updated.updatedAt = Date()
-        notes[index] = updated
-        let generation = (noteSaveGenerations[note.id] ?? 0) &+ 1
-        noteSaveGenerations[note.id] = generation
-        let previous = noteSaveTasks[note.id]
-        noteSaveTasks[note.id] = Task { [weak self] in
-            await previous?.value
-            guard let self else { return }
-            do { try await self.repository.save(note: updated) }
-            catch {
-                if self.noteSaveGenerations[note.id] == generation,
-                   let current = self.notes.firstIndex(where: { $0.id == original.id }) {
-                    self.notes[current] = original
-                }
-                self.errorMessage = error.localizedDescription
-            }
-            if self.noteSaveGenerations[note.id] == generation {
-                self.noteSaveTasks[note.id] = nil
-            }
+        guard var annotation = annotation(forNoteID: note.id),
+              let index = annotation.notes.firstIndex(where: { $0.id == note.id }) else { return }
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            deleteNoteWithUndo(note)
+            return
         }
+        annotation.notes[index].body = trimmed
+        annotation.notes[index].updatedAt = Date()
+        annotation.updatedAt = Date()
+        replaceAnnotation(annotation)
     }
-    /// Removes a note immediately with a one-tap undo. Used when the user
-    /// clears a note's text entirely — the note is never silently lost.
+
+    /// Removes one NoteEntry with one-tap undo. Other entries and highlight
+    /// layers on the same annotation remain untouched.
     func deleteNoteWithUndo(_ note: Note) {
-        notes.removeAll { $0.id == note.id }
-        showNotice(.deletedNote(note))
-        Task {
-            do { try await repository.deleteNote(id: note.id) }
-            catch {
-                notes.append(note)
-                notes.sort { $0.createdAt < $1.createdAt }
-                errorMessage = error.localizedDescription
-            }
+        guard var annotation = annotation(forNoteID: note.id) else { return }
+        let snapshot = annotation
+        annotation.notes.removeAll { $0.id == note.id }
+        annotation.updatedAt = Date()
+        if annotation.isEmpty {
+            removeAnnotation(id: annotation.id)
+        } else {
+            replaceAnnotation(annotation)
         }
+        showNotice(.deletedNote(snapshot))
     }
 
     /// Waits for any debounced note writes so dismissal cannot lose the last
@@ -870,8 +919,8 @@ final class ReaderModel {
     }
     private func reloadAnnotations(after error: Error) async {
         do {
-            highlights = try await repository.highlights(for: book.id)
-            notes = try await repository.notes(for: book.id)
+            textAnnotations = try await textAnnotationRepository.annotations(for: book.id)
+            refreshAnnotationProjections()
         } catch {}
         errorMessage = error.localizedDescription
     }

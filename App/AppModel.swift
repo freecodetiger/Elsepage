@@ -123,6 +123,7 @@ final class AppModel {
                 models: modelClientFactory,
                 contextBuilder: readerContextBuilder
             )
+            let textAnnotations = GRDBTextAnnotationRepository(database: database)
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
             // Re-checked every time a reflection sheet opens, so the polish button appears as soon
             // as a provider is configured even if the key is added after launch.
@@ -153,6 +154,7 @@ final class AppModel {
                 reflections: reflections,
                 readerAgent: readerAgent,
                 readerHelpService: readerHelpService,
+                textAnnotations: textAnnotations,
                 makePolishService: makePolishService,
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),

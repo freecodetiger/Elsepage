@@ -110,7 +110,6 @@ struct ReaderAnnotationOverlays: View {
                             model: model,
                             highlightID: id,
                             onSelectColor: { model.changeHighlightColor(id, to: $0) },
-                            onNote: { model.openNote(forHighlightID: id) },
                             onDelete: { model.deleteHighlightWithUndo(id) }
                         )
                     }
@@ -313,15 +312,10 @@ struct HighlightMenu: View {
     let model: ReaderModel
     let highlightID: UUID
     let onSelectColor: (HighlightColor) -> Void
-    let onNote: () -> Void
     let onDelete: () -> Void
 
     private var highlight: Highlight? {
         model.highlights.first { $0.id == highlightID }
-    }
-
-    private var hasNote: Bool {
-        model.hasNote(forHighlightID: highlightID)
     }
 
     var body: some View {
@@ -354,7 +348,6 @@ struct HighlightMenu: View {
                 Divider()
                     .frame(height: 26)
 
-                toolButton("笔记", showNoteDot: hasNote, action: onNote)
                 toolButton("删除", destructive: true, action: onDelete)
             }
             .padding(.leading, 6)
@@ -368,22 +361,17 @@ struct HighlightMenu: View {
         }
     }
 
-    private func toolButton(_ title: String, showNoteDot: Bool = false, destructive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func toolButton(_ title: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 3) {
-                Text(title)
-                if showNoteDot {
-                    Circle().fill(Color.elsepageAccent).frame(width: 4, height: 4)
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
-            .padding(.horizontal, 8)
-            .frame(minHeight: 40)
-            .contentShape(Rectangle())
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+                .padding(.horizontal, 8)
+                .frame(minHeight: 40)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityHint(title == "删除" ? "删除这个高亮，可在短时间内撤销" : (showNoteDot ? "查看或编辑这条笔记" : "为这个高亮添加笔记"))
+        .accessibilityHint(title == "删除" ? "删除这个高亮，可在短时间内撤销" : "")
     }
 }
 
@@ -398,6 +386,7 @@ struct TransientNoticePill: View {
     private var label: String {
         switch notice.kind {
         case .copied: "已复制"
+        case .highlightOverlap: "这里和已有高亮部分重叠，先保留原来的高亮吧"
         case .deletedHighlight: "已删除高亮"
         case .deletedNote: "已删除笔记"
         case .returnedToSource: "已回到原文"
@@ -406,7 +395,7 @@ struct TransientNoticePill: View {
 
     private var canUndo: Bool {
         switch notice.kind {
-        case .copied, .returnedToSource: false
+        case .copied, .returnedToSource, .highlightOverlap: false
         case .deletedHighlight, .deletedNote: true
         }
     }
@@ -456,19 +445,24 @@ struct NoteEditorSheet: View {
 
     @FocusState private var editorFocused: Bool
     @State private var mode: Mode = .preview
+    @State private var activeTarget: ReaderNoteEditorTarget?
     @State private var text = ""
     @State private var loadedTarget: ReaderNoteEditorTarget?
     @State private var saveTask: Task<Void, Never>?
     @State private var finished = false
 
+    private var effectiveTarget: ReaderNoteEditorTarget {
+        activeTarget ?? target
+    }
+
     private var highlight: Highlight? {
-        guard case .highlight(let id) = target else { return nil }
+        guard case .highlight(let id) = effectiveTarget else { return nil }
         return model.highlights.first { $0.id == id }
     }
 
     private var note: Note? {
-        switch target {
-        case .highlight(let id): model.notes.first { $0.highlightID == id }
+        switch effectiveTarget {
+        case .highlight: nil
         case .note(let id): model.notes.first { $0.id == id }
         }
     }
@@ -477,12 +471,51 @@ struct NoteEditorSheet: View {
         highlight?.locator.textHighlight ?? note?.locator.textHighlight
     }
 
+    private var relatedNotes: [Note] {
+        guard let note else { return [] }
+        return model.notes
+            .filter { $0.locator.canonicalKey == note.locator.canonicalKey }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var currentNoteIndex: Int? {
+        guard let note else { return nil }
+        return relatedNotes.firstIndex { $0.id == note.id }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack {
                 Text("笔记")
                     .font(.system(.headline, design: .serif))
                 Spacer()
+                if case .note = effectiveTarget {
+                    if relatedNotes.count > 1, let index = currentNoteIndex {
+                        Menu("第 \(index + 1) 条") {
+                            ForEach(Array(relatedNotes.enumerated()), id: \.element.id) { offset, item in
+                                Button("笔记 \(offset + 1)") {
+                                    activeTarget = .note(item.id)
+                                    text = item.body
+                                    mode = .preview
+                                }
+                            }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
+                    }
+
+                    Button("追加") {
+                        guard let id = note?.id, let appendedID = model.appendNoteEntry(after: id) else { return }
+                        activeTarget = .note(appendedID)
+                        text = ""
+                        mode = .edit
+                        editorFocused = true
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .disabled(note == nil)
+                }
+
                 Picker("显示模式", selection: $mode) {
                     ForEach(Mode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
@@ -536,6 +569,7 @@ struct NoteEditorSheet: View {
         .onAppear {
             guard loadedTarget != target else { return }
             loadedTarget = target
+            activeTarget = target
             text = note?.body ?? ""
             mode = .preview
             editorFocused = false
@@ -577,15 +611,9 @@ struct NoteEditorSheet: View {
     /// Live-save: creates the note on first content, keeps it in sync after.
     private func persist() {
         let trimmed = trimmedText
-        switch target {
-        case .highlight(let highlightID):
-            if let note {
-                if note.body != trimmed {
-                    model.update(note: note, body: trimmed)
-                }
-            } else if !trimmed.isEmpty, let highlight = model.highlights.first(where: { $0.id == highlightID }) {
-                model.saveNote(for: highlight, body: trimmed)
-            }
+        switch effectiveTarget {
+        case .highlight:
+            break
         case .note(let noteID):
             if let note = model.notes.first(where: { $0.id == noteID }), note.body != trimmed {
                 model.update(note: note, body: trimmed)

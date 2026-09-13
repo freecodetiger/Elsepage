@@ -268,10 +268,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             guard let navigator else { return }
             guard notes != lastNotes else { return }
             lastNotes = notes
+            var seenRanges = Set<String>()
             let decorations = notes.compactMap { note -> Decoration? in
-                // Notes attached to a highlight already have a visible mark.
-                // Standalone notes get a quiet underline as their only in-text anchor.
-                guard note.highlightID == nil,
+                // One underline per TextRange, regardless of NoteEntry count.
+                guard seenRanges.insert(note.locator.canonicalKey).inserted,
                       let locator = try? Self.readiumLocator(from: note.locator.json) else { return nil }
                 return Decoration(
                     id: note.id.uuidString.lowercased(),
