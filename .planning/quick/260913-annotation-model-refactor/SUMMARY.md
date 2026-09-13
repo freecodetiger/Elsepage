@@ -20,6 +20,10 @@
 - App Reader 文件纯语法解析通过。
 - Package.resolved 已恢复。
 
+## 已知残余
+
+- Readium selection 当前只提供单一 Locator；新标注暂以同一 locator 作为 start/end，真实范围编辑仍需后续补充 end locator。
+
 ## 待用户验收
 
 - App target xcodebuild。

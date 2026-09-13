@@ -564,3 +564,17 @@ Highlighter 保持纯粹；Note 不再依附 Highlight；Range 成为唯一且�
 - 新增 v27→v28 迁移测试。
 - 新增历史交叉 Highlight 保留较新者测试。
 - App Reader 文件纯语法解析通过。
+
+
+---
+
+## 13. 已知残余
+
+- v28 已存储独立的 startLocator/endLocator，但当前 Readium selection 回调仍只提供单一 Locator。
+- 新建高亮和笔记暂时使用同一个 selection locator 作为 start/end。
+- 因此：
+  - 相同 canonical Locator 会稳定合并；
+  - 不同 canonical Locator 会保持不同对象；
+  - 真正的“部分交叉”判断仍依赖 progression + 文本包含的保守 heuristic。
+- 旧数据的 endLocator 同样回填为 startLocator。
+- 要完全满足任意 start/end 的范围模型，需要在 Readium selection 层补充真正的 end locator 或稳定 range key；这不阻塞当前句子级高亮/笔记，但需要在后续范围编辑能力前闭环。
