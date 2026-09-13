@@ -1,9 +1,9 @@
 # ReadLoop Annotation Model Refactor Spec
 
-> 状态：Draft / 待决策（2026-09-13）
+> 状态：Decisions Locked（2026-09-13）
 > 分支：`codex/reader-help-spec`
 > 适用范围：阅读器 Highlight、Note、下划线、TextAnnotation 的领域模型、交互、迁移和验收
-> 核心结论：**Range 是唯一身份；Highlight 和 Note 是同一标注对象上的独立视觉层。**
+> 核心结论：**Range 是唯一身份；Highlight 和 Note 是彼此独立的标注层。**
 
 ---
 
@@ -16,75 +16,105 @@ Highlight
 └── Note(highlightID: HighlightID)
 ```
 
-这导致高亮、笔记和它们各自的 locator 同时参与身份判断，最终产生：
+这导致：
 
-- 同一段文字既像一个 Highlight，又像一个 Note；
-- Note 可以独立存在，也可以依附 Highlight；
-- 两者部分重叠时，点击命中依赖 Readium decoration group 顺序；
-- 删除 Highlight 与保留 Note 的关系不清晰；
-- 代码需要通过 conflict picker 临时解决视觉歧义；
-- “高亮”和“笔记”的语义边界不稳定。
+- 高亮和笔记同时拥有 locator，身份来源重复；
+- Note 可以独立，也可以依附 Highlight；
+- 高亮菜单曾经包含笔记入口；
+- 删除高亮与保留 Note 的关系不清晰；
+- 重叠命中依赖 Readium decoration group 顺序；
+- UI 需要 conflict picker 临时消歧。
 
-本 spec 决定把模型改成：
+目标模型：
 
 ```text
 TextAnnotation
 ├── Range（唯一身份）
-├── HighlightLayer（可选）
-└── NoteLayer（可选）
+├── HighlightLayer?（独立视觉层）
+└── NoteEntry[]（独立内容层）
 ```
 
-### 核心不变量
+Highlighter 不再拥有笔记附属语义。高亮只负责背景色和删除；笔记只负责下划线和内容管理。两者即使落在同一个 Range，也仍然是两个独立的交互层。
+
+---
+
+## 2. 已锁定决策
+
+### Q1：Note 是否允许交叉？
+
+**决定：B。**
+
+- Note 可以部分交叉。
+- 不同 start/end 永远属于不同 TextAnnotation。
+- 视觉重叠时，使用选择器让用户选择具体 Note。
+- Note 不建立父子嵌套语义。
+
+### Q2：同一 Range 同时有 Highlight 和 Note 时如何显示？
+
+**决定：A。**
+
+- 高亮背景和下划线同时显示。
+- Highlighter 不再有 Note 附属语义。
+- 高亮菜单只包含：
+  - 更换颜色；
+  - 删除高亮。
+- 笔记独立通过下划线进入 Note Sheet。
+- 点击重叠区域时使用选择器：
+  - 高亮；
+  - 笔记。
+
+### Q3：用户尝试创建交叉高亮时怎么处理？
+
+**决定：A。**
+
+- 拒绝创建。
+- 给出温柔、明确的提示。
+- 不自动合并、扩展或覆盖已有高亮。
+- 不破坏已存在的用户数据。
+
+### Q4：同一 Range 的 Note 是单份还是多条历史？
+
+**决定：B。**
+
+- 同一 Range 的笔记使用数组。
+- 每次追加笔记创建新的 NoteEntry。
+- 已有 NoteEntry 可以独立编辑或删除。
+- Range 的下划线只表示“这里存在笔记”，不表示笔记数量。
+
+### Q5：历史交叉高亮如何处理？
+
+**决定：C。**
+
+- 迁移时按高亮更新时间保留较新的高亮。
+- 删除较旧的高亮。
+- 迁移必须：
+  - 在单事务内执行；
+  - 生成迁移统计；
+  - 保留旧表用于回滚和审计；
+  - 不删除任何 Note。
+
+---
+
+## 3. 核心不变量
 
 1. `Range` 的 start/end 完全相同，视为同一个 `TextAnnotation`。
 2. start 或 end 不完全相同，视为不同 `TextAnnotation`。
-3. 高亮和笔记不再是父子关系。
-4. 高亮是纯视觉层，不包含笔记内容。
-5. 笔记是纯内容层，不再拥有 `highlightID`。
-6. 同一 Range 最多有一个 HighlightLayer 和一个 NoteLayer。
-7. 高亮范围不允许交叉；相同范围只能复用或更新。
-8. 笔记可以没有高亮，高亮也可以没有笔记。
-9. 同一 Range 同时有高亮和笔记时，点击进入同一个标注详情面板，不再做“二选一”。
-10. 旧数据不得静默删除；历史交叉数据需要迁移或显式标记。
+3. 一个 Range 最多有一个 HighlightLayer。
+4. 一个 Range 可以有多个 NoteEntry。
+5. 高亮和笔记没有父子关系。
+6. 高亮是纯视觉层，不包含笔记内容。
+7. 笔记是纯内容层，不拥有 `highlightID`。
+8. 高亮范围不允许交叉。
+9. 相同 Range 再次高亮只更新颜色，不创建第二个高亮对象。
+10. Note 允许交叉，但不同 Range 的 Note 永远是不同 TextAnnotation。
+11. 点击时如果出现多个可操作层，使用选择器。
+12. 无冲突时直接进入唯一的层。
 
 ---
 
-## 2. 当前实现证据
+## 4. 目标领域模型
 
-### 2.1 Domain
-
-- `Sources/ReaderCore/BookLocator.swift`
-  - `Highlight` 只有一个 `locator`。
-  - `Note` 有 `highlightID: UUID?` 和独立 `locator`。
-- `Sources/ReaderCore/ReaderCoordination.swift`
-  - 高亮使用 locator identity 去重。
-- `App/Reader/ReaderModel.swift`
-  - `saveNote(for highlight:)` 创建依附 Note。
-  - `deleteHighlightWithUndo` 会把关联 Note 脱钩为独立 Note。
-  - Reader Help 保存 Note 时会主动挂到相同 anchor 的 Highlight。
-  - 当前冲突选择器在 `handleHighlightActivation` / `handleNoteActivation` 中临时消歧。
-
-### 2.2 Persistence
-
-- `Sources/Persistence/AppDatabase.swift`
-  - `highlights` 与 `notes` 是两张表。
-  - `notes.highlightID` 可空，并带 `onDelete: .setNull`。
-- `Sources/Persistence/Repositories.swift`
-  - `save(highlight:note:)` 强制校验 `note.highlightID == highlight.id`。
-  - `deleteHighlight` 会让 Note 与 Highlight 脱钩。
-- 现有数据结构缺少明确的 `startLocator` / `endLocator`，无法精确判断两个文本范围是否完全一致或部分交叉。
-
-### 2.3 UI / Readium
-
-- Highlight 和 Note 使用不同的 decoration group。
-- Note underline 与 Highlight 重叠时，Readium 的命中结果依赖 group 创建顺序。
-- 当前 conflict picker 是过渡方案，不是长期领域模型。
-
----
-
-## 3. 目标领域模型
-
-### 3.1 TextRange
+### 4.1 TextRange
 
 ```swift
 public struct TextRange: Hashable, Codable, Sendable {
@@ -97,34 +127,34 @@ public struct TextRange: Hashable, Codable, Sendable {
 
 要求：
 
-- start/end 都必须可序列化。
-- resource 必须一致；跨 resource 的范围在当前版本不允许创建。
-- start/end 用于范围判断，而不是只依赖 `textHighlight` 或一个 progression。
-- 旧数据缺少 endLocator 时，迁移层使用 legacy 标记，不伪装成完整 Range。
+- start/end 必须可序列化。
+- 同一个 Range 的 resource 必须一致。
+- 跨 resource 范围在 v1 不允许创建。
+- 旧数据缺少 endLocator 时，使用 legacy 标记，不伪装成精确 Range。
 
-### 3.2 TextAnnotation
+### 4.2 TextAnnotation
 
 ```swift
 public struct TextAnnotation: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
     public let range: TextRange
     public var highlight: HighlightLayer?
-    public var note: NoteLayer?
+    public var notes: [NoteEntry]
     public let createdAt: Date
     public var updatedAt: Date
 }
 ```
 
-语义：
+职责：
 
+- Range 是业务身份。
 - `id` 是持久化对象 id。
-- `range` 是业务身份。
-- `highlight` 和 `note` 都是可选层。
-- 删除一层不删除另一层。
-- 两层都为空时，删除整个对象。
-- 一个 Range 不允许产生两个 TextAnnotation；数据库需要唯一约束或事务级 upsert。
+- `highlight` 和 `notes` 是独立层。
+- 删除 HighlightLayer 不影响 NoteEntry。
+- 删除最后一个 NoteEntry 不影响 HighlightLayer。
+- 两层都为空时，删除 TextAnnotation。
 
-### 3.3 HighlightLayer
+### 4.3 HighlightLayer
 
 ```swift
 public struct HighlightLayer: Hashable, Codable, Sendable {
@@ -136,15 +166,16 @@ public struct HighlightLayer: Hashable, Codable, Sendable {
 
 职责：
 
-- 只表达视觉高亮。
-- 不存储笔记内容。
-- 不允许跨范围交叉。
-- 相同 Range 的高亮操作只更新颜色或复用已有层。
+- 只管理高亮颜色。
+- 渲染为背景色 decoration。
+- 不允许交叉。
+- 不包含、不访问、不管理 Note。
 
-### 3.4 NoteLayer
+### 4.4 NoteEntry
 
 ```swift
-public struct NoteLayer: Hashable, Codable, Sendable {
+public struct NoteEntry: Hashable, Codable, Sendable, Identifiable {
+    public let id: UUID
     public var body: String
     public let createdAt: Date
     public var updatedAt: Date
@@ -153,158 +184,143 @@ public struct NoteLayer: Hashable, Codable, Sendable {
 
 职责：
 
-- 只表达能力/内容。
-- 渲染为 underline，而不是 Highlight 的附属 UI。
-- 不再有 `highlightID`。
-- 同一 Range 默认只有一个 NoteLayer。
+- 一条独立笔记内容。
+- 多个 NoteEntry 可以属于同一个 TextAnnotation。
+- 渲染为 underline 层。
+- 不拥有 highlightID。
+- 可以独立编辑和删除。
 
-### 3.5 AnnotationRangeKey
-
-范围身份建议使用规范化 key：
+### 4.5 RangeKey
 
 ```text
 bookID + resourceHref + canonical(startLocator) + canonical(endLocator)
 ```
 
-规范化要求：
+RangeKey 用于：
 
-- JSON key 排序稳定；
-- 忽略无意义的 JSON 顺序差异；
-- 不把 `textBefore` / `textAfter` 当作身份的一部分；
-- 同一 Range 的文本变更不应产生新对象，除非 start/end 确实变化。
+- 判断两个范围是否完全一致；
+- 事务化 upsert TextAnnotation；
+- 高亮交叉检测；
+- Note 与 Highlight 的同 Range 合并。
 
 ---
 
-## 4. 核心规则
+## 5. 行为规则
 
-### 4.1 范围身份
+### 5.1 Range 身份
 
 | 情况 | 结果 |
 |---|---|
 | start/end 完全相同 | 同一个 TextAnnotation |
 | start 或 end 不同 | 不同 TextAnnotation |
-| 同一 resource 但范围部分重叠 | 不同对象，进入冲突/边界政策 |
+| 同一 resource 部分重叠 | 不同对象；允许 Note，不允许 Highlight |
 | 跨 resource | v1 不允许 |
-| endLocator 缺失的旧数据 | legacy 模式，不能当作精确 Range |
+| endLocator 缺失的旧数据 | legacy 模式，使用保守匹配 |
 
-### 4.2 高亮规则
+### 5.2 Highlight 创建与更新
 
-1. 一个 Range 最多一个 HighlightLayer。
-2. 创建高亮时先按 RangeKey 查询。
-3. 相同 Range 已存在高亮：
-   - 不创建第二个高亮对象；
-   - 更新颜色或返回已有对象。
-4. 部分交叉：
-   - 拒绝创建；
-   - 不自动拆分或覆盖用户已有高亮；
-   - UI 提供打开已有高亮或取消。
-5. 完全不相交：
-   - 创建新的 TextAnnotation。
-6. 高亮禁止交叉，包括：
-   - A 包含 B；
-   - A 与 B 部分重叠；
-   - 两端交叉但没有完全包含。
-
-### 4.3 笔记规则
-
-1. 相同 Range 已有 TextAnnotation：
-   - 已有 NoteLayer 则编辑；
-   - 没有 NoteLayer 则追加。
+1. 按 RangeKey 查询既有 TextAnnotation。
 2. 相同 Range 已有 HighlightLayer：
-   - 不把 Note 当作 Highlight 的 child；
-   - 将 NoteLayer 追加到同一个 TextAnnotation。
-3. 不同 Range：
-   - 创建新的 TextAnnotation，即使视觉上相邻或部分重叠。
-4. 一个 Range 默认只保留一份 NoteLayer，不建立多条笔记历史。
-5. 笔记的 visual 归属是 underline，不是 highlight。
-6. 笔记是否允许与另一笔记/高亮部分交叉，见待决问题 Q1。
+   - 不创建第二个高亮；
+   - 更新颜色；
+   - 更新 `updatedAt`。
+3. 与其他 HighlightLayer 部分交叉：
+   - 拒绝；
+   - 显示温柔提示，例如“这里和已有高亮部分重叠，先保留原来的高亮吧”；
+   - 提供“打开已有高亮”作为可选操作。
+4. 完全不相交：
+   - 创建新的 TextAnnotation 和 HighlightLayer。
+5. HighlightLayer 永远不因为 Note 的存在而被禁用；是否共用同一个 TextAnnotation 只由 Range 决定。
 
-### 4.4 点击与选择
+### 5.3 Note 创建与追加
 
-新模型下：
+1. 按 RangeKey 查询 TextAnnotation。
+2. 没有 TextAnnotation：
+   - 创建 TextAnnotation。
+   - 创建第一条 NoteEntry。
+3. 已有 TextAnnotation：
+   - 追加新的 NoteEntry；
+   - 不修改 HighlightLayer；
+   - 不把 NoteEntry 变成 Highlight 的 child。
+4. 相同 Range 有多个 NoteEntry：
+   - underline 只渲染一次；
+   - 点击进入 Note Sheet；
+   - Sheet 展示该 Range 的 NoteEntry 列表。
+5. 不同 Range 的 Note：
+   - 永远属于不同 TextAnnotation；
+   - 即使视觉范围部分交叉，也不合并。
+6. Note Sheet 允许：
+   - 新增一条 NoteEntry；
+   - 编辑单条 NoteEntry；
+   - 删除单条 NoteEntry；
+   - 删除整个 Range 的所有 NoteEntry。
 
-- 点击 HighlightLayer：打开对应 TextAnnotation 详情。
-- 点击 NoteLayer underline：打开对应 TextAnnotation 详情。
-- 同一 Range 同时存在两层：打开同一个详情面板。
-- 不再回答“这是高亮还是笔记”。
-- 仅当两个不同 Range 的真实范围重叠时，才显示二次选择器。
-- conflict picker 保留为迁移兼容和真正的跨 Range 冲突兜底。
+### 5.4 点击与选择器
 
-### 4.5 删除
+当点击点只对应一个可操作层：
+
+- HighlightLayer → 打开高亮菜单。
+- NoteEntry → 打开 Note Sheet。
+
+当点击点对应多个可操作层：
+
+- 高亮和笔记同时覆盖 → 显示“高亮 / 笔记”选择器。
+- 多个不同 TextAnnotation 的 Note 覆盖 → 显示 Note 选择器。
+- 多个 Highlight 理论上不应存在；若旧数据出现，显示冲突选择器并标记 legacy conflict。
+
+选择器要求：
+
+- 只在真实重叠时出现。
+- 无冲突时不出现。
+- 选项标题必须明确说明操作对象。
+- 选择后进入对应的层 UI，不重新创建对象。
+
+### 5.5 高亮菜单
+
+高亮菜单只保留：
+
+- 更换颜色；
+- 删除高亮。
+
+不再包含：
+
+- 笔记入口；
+- 笔记内容；
+- 把笔记绑定到高亮的动作。
+
+### 5.6 Note Sheet
+
+Note Sheet 负责：
+
+- 展示当前 Range 的 NoteEntry 列表；
+- 新建 NoteEntry；
+- Markdown 预览；
+- 编辑单条 NoteEntry；
+- 删除单条 NoteEntry；
+- 删除整个 Range 的笔记层。
+
+视觉规则：
+
+- NoteLayer 统一使用 underline。
+- 不因 NoteEntry 数量改变 underline 样式。
+- NoteEntry 内容使用 Markdown 预览和编辑双态。
+
+### 5.7 删除语义
 
 | 操作 | 结果 |
 |---|---|
-| 删除高亮 | 只删除 HighlightLayer，保留 NoteLayer |
-| 删除笔记 | 只删除 NoteLayer，保留 HighlightLayer |
-| 两层都删除 | 删除 TextAnnotation |
-| 删除书籍 | 级联删除该书的 TextAnnotation |
-| 清除所有数据 | 删除全部 TextAnnotation 及派生索引 |
+| 删除高亮 | 只删除 HighlightLayer，保留所有 NoteEntry |
+| 删除单条笔记 | 只删除该 NoteEntry |
+| 删除全部笔记 | 保留 HighlightLayer |
+| 两层都为空 | 删除 TextAnnotation |
+| 删除书籍 | 级联删除所有 TextAnnotation 和 NoteEntry |
+| 清除所有数据 | 删除所有标注、索引和派生关系 |
 
 ---
 
-## 5. 视觉和交互
+## 6. 持久化与迁移
 
-### 5.1 Layer 渲染
-
-```text
-HighlightLayer
-  -> 背景色 decoration
-
-NoteLayer
-  -> underline decoration
-
-同一 TextAnnotation 两层
-  -> 背景 + underline 同时渲染
-  -> 点击任一层进入同一详情面板
-```
-
-### 5.2 Annotation Detail Sheet
-
-建议统一为：
-
-```text
-这段文字的标注
-
-高亮：黄色
-[调整颜色]
-
-笔记：
-<Markdown 预览>
-
-[编辑笔记] [删除高亮] [删除笔记]
-```
-
-只有高亮时：
-
-```text
-高亮：黄色
-[调整颜色] [删除高亮]
-```
-
-只有笔记时：
-
-```text
-笔记：
-<Markdown 预览>
-[编辑笔记] [删除笔记]
-```
-
-### 5.3 选区工具栏
-
-建议保持两个语义明确的操作：
-
-- `高亮`：创建或更新 HighlightLayer。
-- `笔记`：创建或编辑 NoteLayer。
-
-如果同一 Range 两种层都存在，按钮分别表示当前层的状态，不新增第三个“专属高亮笔记”概念。
-
----
-
-## 6. 持久化方案
-
-### 6.1 推荐结构
-
-新增 `textAnnotations` 聚合表：
+### 6.1 推荐表结构
 
 ```sql
 CREATE TABLE textAnnotations (
@@ -315,82 +331,83 @@ CREATE TABLE textAnnotations (
   endLocatorJSON BLOB NOT NULL,
   rangeKey TEXT NOT NULL,
   highlightColor TEXT,
-  noteBody TEXT,
   createdAt DATETIME NOT NULL,
   updatedAt DATETIME NOT NULL,
   legacyConflict INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE UNIQUE INDEX textAnnotationsRange
+ON textAnnotations(bookID, rangeKey);
+
+CREATE TABLE annotationNotes (
+  id TEXT PRIMARY KEY,
+  annotationID TEXT NOT NULL REFERENCES textAnnotations(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  createdAt DATETIME NOT NULL,
+  updatedAt DATETIME NOT NULL
+);
 ```
 
-索引：
+### 6.2 迁移策略
 
-- `UNIQUE(bookID, rangeKey)`
-- `INDEX(bookID, resourceHref, startProgression, endProgression)`
-- `INDEX(bookID, updatedAt)`
-
-说明：
-
-- `highlightColor` 为空表示没有高亮层。
-- `noteBody` 为空表示没有笔记层。
-- 两层都为空时删除行。
-- 不新增笔记历史表；若未来需要版本历史，另建派生表。
-
-### 6.2 兼容迁移
-
-1. 创建 `textAnnotations`。
-2. 对每个旧 Highlight 创建/复用 TextAnnotation。
+1. 创建 `textAnnotations` 和 `annotationNotes`。
+2. 对每个旧 Highlight：
+   - 创建 TextAnnotation；
+   - 保留颜色；
+   - 生成 RangeKey。
 3. 对每个旧 Note：
-   - 若有 `highlightID` 且 locator 与对应 Highlight 为同一 Range：合并为同一 TextAnnotation 的 NoteLayer。
-   - 若有 `highlightID` 但 locator 不同：创建独立 TextAnnotation，并记录 legacy relation。
-   - 若无 `highlightID`：创建 Note-only TextAnnotation。
-4. 旧 Highlight / Note 表保留至少一个迁移周期，作为只读回滚/审计来源。
-5. 新代码不再写入 `notes.highlightID`。
-6. 旧交叉高亮：
-   - 不静默删除；
-   - 标记 `legacyConflict`；
-   - 新规则生效后不再创建新的交叉高亮；
-   - 提供后续整理入口。
+   - 如果是依附 Note，优先尝试匹配 Highlight Range；
+   - 精确同 Range → 追加到该 TextAnnotation 的 NoteEntry；
+   - 不同 Range → 创建独立 TextAnnotation，并记录 legacy relation；
+   - 独立 Note → 创建 Note-only TextAnnotation。
+4. 旧高亮交叉：
+   - 按 `updatedAt`（旧数据可用 `createdAt`）保留较新的高亮；
+   - 删除较旧的高亮；
+   - 保留全部 NoteEntry；
+   - 生成迁移统计和审计文件。
+5. 旧表保留只读一个版本周期，作为回滚和审计来源。
+6. 新代码不再写入 `notes.highlightID`。
+7. Reader Help 保存 Note 时只追加 NoteEntry，不尝试挂到 Highlight。
 
 ### 6.3 数据控制
 
-- Export 需要输出统一 `TextAnnotation` 结构，同时保留兼容字段。
-- Delete book / Wipe all data 必须级联到聚合表和旧表。
-- Reflection 对旧 Highlight 的引用需要迁移映射到 TextAnnotation id 或保留 legacy highlight id 映射。
+- Export 输出 TextAnnotation、HighlightLayer 和 NoteEntry。
+- Delete Book 级联删除新表和旧表。
+- Wipe All Data 清除新表、旧表、缓存和索引。
+- Reflection 对旧 Highlight 的引用通过 legacy mapping 保持可解析。
 
 ---
 
-## 7. 范围判断与冲突
+## 7. 范围判断
 
-### 7.1 Range 相等
+### 7.1 Exact Range
 
 ```text
-canonical(start/end/resource) 完全相同 -> 同一对象
+canonical(resource, start, end) 完全相同 -> 同一个 TextAnnotation
 ```
 
-### 7.2 高亮交叉检测
+### 7.2 Highlight Intersection
 
-创建或修改高亮前：
+高亮创建前，必须在同一事务内检查：
 
-1. 查询同 resource 的所有高亮范围。
-2. 精确相同：复用。
-3. 部分交叉：拒绝。
-4. 完全不相交：允许。
+- 是否存在 exact Range；
+- 是否存在部分交叉；
+- 是否存在 legacy 不可判定范围。
 
-由于旧数据可能缺少 endLocator，legacy 高亮只能使用 conservative fallback：
+处理：
 
-- 同一 `BookLocator` identity；
-- 相同 resource + 相同 normalized text + progression 接近；
-- 不确定时不自动合并，标记为 legacy conflict。
+- exact → update color；
+- partial overlap → reject；
+- legacy uncertain → reject new crossing creation，提示用户先整理旧标注。
 
-### 7.3 Note 交叉
+### 7.3 Note Overlap
 
-待决：
+Note 允许交叉，因此：
 
-- 允许不同 Range 的 Note 部分交叉；
-- 允许 Note 与 Highlight 部分交叉；
-- 或对所有 annotation 统一禁止交叉。
-
-如果允许交叉，必须保留按 TextAnnotation 的 selector 或统一的详情入口，不能依赖 decoration group 顺序。
+- 不同 Range 不合并；
+- 点击出现重叠时使用 selector；
+- 同一个 Range 的多个 NoteEntry 聚合在同一个 Note Sheet 中；
+- Note 不会影响 Highlight 的创建合法性。
 
 ---
 
@@ -398,148 +415,110 @@ canonical(start/end/resource) 完全相同 -> 同一对象
 
 ### Domain
 
-- 相同 start/end -> 同一 TextAnnotation。
-- start 不同或 end 不同 -> 不同 TextAnnotation。
-- 同 Range 添加 Note -> 追加 NoteLayer，不创建第二个对象。
-- 同 Range 再次添加 Highlight -> 更新/复用，不创建第二个对象。
-- 删除一层保留另一层。
-- 两层都删除才删除对象。
+- 相同 start/end → 同一个 TextAnnotation。
+- start 或 end 不同 → 不同 TextAnnotation。
+- 同 Range 添加多个 NoteEntry → 数组增长，不创建新 TextAnnotation。
+- 同 Range 再次高亮 → 更新颜色，不创建第二个 HighlightLayer。
+- 删除 HighlightLayer → NoteEntry 保留。
+- 删除单条 NoteEntry → 其他 NoteEntry 保留。
+- 删除最后一条 NoteEntry → HighlightLayer 保留。
 
 ### Persistence
 
 - RangeKey 稳定，JSON key 顺序不影响 identity。
 - `UNIQUE(bookID, rangeKey)` 生效。
-- 旧 Highlight + 依附 Note 合并。
-- 独立 Note 正确迁移。
-- 旧交叉 Highlight 不丢失并标记。
-- Export / delete book / wipe all data 覆盖新表。
+- 旧 Highlight + 依附 Note 正确合并到同一 Range。
+- 不同 Range 的依附 Note 被拆成独立 TextAnnotation。
+- 旧交叉高亮保留较新者并记录迁移统计。
+- Export / Delete Book / Wipe All Data 覆盖新表。
 
 ### UI
 
-- Exact same Range 的 Highlight + Note 只出现一个详情入口。
-- Highlight 与 Note 不同 Range 部分重叠时才出现 selector。
-- 高亮交叉创建被拒绝。
-- 同一范围不会出现两个高亮 decoration。
-- Note underline 与 Highlight 点击不再依赖 group 创建顺序。
+- Highlight 菜单只显示颜色和删除。
+- Note Sheet 显示 NoteEntry 列表并允许追加。
+- 同一 Range 的 Highlight + Note 点击时显示选择器。
+- 不同 Range 的 Note 交叉时显示 selector。
+- 无冲突时不得出现 selector。
+- 高亮交叉创建显示温柔提示，不修改旧数据。
 
-### 兼容
+### Compatibility
 
 - Reader Help 保存 Note 不依赖 Highlight 是否已存在。
-- Reflection citation / Jump 到原文仍能定位。
-- 旧 Highlight 删除、Note 脱钩和 undo 行为迁移一致。
-- 旧数据升级后没有静默丢失。
+- Reflection Citation / Jump 仍能定位。
+- 旧数据升级后可读取、导出和删除。
+- 旧表回滚路径可验证。
 
 ---
 
 ## 9. 实施阶段
 
-### Phase 1：Range 与聚合 Domain
+### Phase 1：Domain
 
-- 新增 `TextRange`、`TextAnnotation`、`HighlightLayer`、`NoteLayer`。
-- 新增 RangeKey canonicalization。
-- 明确 equality、overlap 和 legacy 行为。
+- 新增 `TextRange`、`TextAnnotation`、`HighlightLayer`、`NoteEntry`。
+- 实现 RangeKey canonicalization。
+- 实现 highlight intersection / note overlap 判定。
+- 增加纯单元测试。
 
-### Phase 2：Persistence + Migration
+### Phase 2：Persistence
 
-- 新增 `textAnnotations`。
-- 迁移 Highlight 与 Note。
-- 保持旧表只读兼容。
-- 加入 DB 唯一约束和交叉测试。
+- 新增 `textAnnotations`、`annotationNotes`。
+- 实现事务化 upsert。
+- 实现数据迁移和旧表 legacy mapping。
+- 增加迁移、删除、导出测试。
 
-### Phase 3：Reader Repository / Model
+### Phase 3：Reader Model
 
-- `ReaderModel` 以 TextAnnotation 为中心。
-- 移除 `saveNote(for highlight:)` 的领域语义。
-- `Highlight` / `Note` UI 通过 layer API。
-- 保留旧 API shim 直到迁移完成。
+- ReaderModel 以 TextAnnotation 为中心。
+- Highlight 菜单只管理颜色/删除。
+- Note Sheet 改为 NoteEntry 列表和追加编辑。
+- 移除 `Note.highlightID` 的领域语义。
+- 保留兼容 API shim。
 
 ### Phase 4：Readium UI
 
 - HighlightLayer → highlight group。
 - NoteLayer → underline group。
-- 同一 TextAnnotation 的两层点击进入同一详情面板。
-- 冲突 selector 只处理 legacy 或不同 Range 的真实重叠。
+- 多层的重叠点击进入选择器。
+- 同一 Note Range 的多个 NoteEntry 只渲染一次 underline。
+- 旧数据 crossing conflict 只通过 selector 兼容。
 
-### Phase 5：迁移验收
+### Phase 5：真机验收
 
-- 真机验证：
-  - 同 Range 追加笔记
-  - 高亮禁止交叉
-  - 删除单层
-  - 旧数据迁移
-  - Reader Help 保存笔记
-  - Reflection / Citation / Export / Wipe
+- 同 Range 高亮与笔记。
+- 多个 NoteEntry 追加。
+- Note 交叉。
+- 高亮交叉拒绝。
+- 删除单层。
+- 旧数据迁移。
+- Reader Help 保存笔记。
+- Reflection / Citation / Export / Wipe。
 
 ---
 
 ## 10. 非目标
 
-- 不实现跨 resource 的连续标注。
-- 不实现任意多高亮层叠加。
-- 不实现笔记历史版本流。
+- 不实现 Note 父子嵌套。
+- 不实现任意多 HighlightLayer。
+- 不实现跨 resource 连续标注。
 - 不实现云端同步。
-- 不重写 Readium 本身。
-- 不把笔记变成高亮的隐藏字段。
+- 不重写 Readium。
+- 不把笔记继续作为 Highlight 的隐藏字段。
 
 ---
 
-## 11. 待用户决策问题
-
-### Q1. Note 是否允许交叉？
-
-- A：Note 也禁止交叉，和 Highlight 一样严格。
-- B：Note 可以部分交叉，但不同 Range 仍是不同对象，使用 selector 消歧。
-- C：Note 可以包含另一个 Note，形成父子层次。
-
-推荐：A 或 B；如果目标是彻底消除点击歧义，推荐 A。
-
-### Q2. 同一 Range 同时有 Highlight 和 Note，如何显示？
-
-- A：背景高亮 + 下划线同时显示，详情面板统一编辑。
-- B：添加 Note 后移除 Highlight，只保留下划线。
-- C：只允许二选一，存在其中一层时禁止添加另一层。
-
-推荐：A。它符合“Highlighter 纯粹、Note 归属 underline”，同时不丢失已有高亮。
-
-### Q3. 用户尝试创建交叉高亮时怎么处理？
-
-- A：直接拒绝，提示已有高亮。
-- B：弹出操作：打开已有高亮 / 修改范围 / 取消。
-- C：自动合并或扩展旧高亮。
-
-推荐：B。A 信息太少，C 会隐式修改用户数据。
-
-### Q4. 同一 Range 的 Note 是单份还是可以追加多条历史？
-
-- A：单份 NoteLayer，再次保存覆盖/更新正文。
-- B：一个数组，保留每次追加内容。
-- C：单份正文，但保留本地修订历史。
-
-推荐：A。当前产品需要稳定语义，不需要把简单笔记演化成时间线。
-
-### Q5. 历史交叉高亮如何处理？
-
-- A：保留全部数据，标记冲突，让用户在标注列表逐条整理。
-- B：按创建时间合并为较大范围。
-- C：按更新时间保留较新高亮，删除较旧高亮。
-
-推荐：A。它避免迁移阶段静默破坏用户数据。
-
----
-
-## 12. 最终验收定义
-
-完成后应满足：
+## 11. 最终验收定义
 
 ```text
-同一段文字 = 一个 TextAnnotation
-高亮 = 可选 HighlightLayer
-笔记 = 可选 NoteLayer
-相同 Range = 合并
-不同 Range = 不同对象
+相同 Range = 一个 TextAnnotation
+不同 Range = 不同 TextAnnotation
+一个 Range 最多一个 HighlightLayer
+一个 Range 可有多条 NoteEntry
 高亮禁止交叉
-笔记不再依附高亮
-点击任一层 = 同一标注详情
+笔记允许交叉
+高亮只管理颜色和删除
+笔记统一下划线归属
+重叠点击显示选择器
+无冲突点击直接进入对应层
 ```
 
-这样高亮的语义保持纯粹，笔记统一下划线归属，冲突选择器不再是主流程，只作为旧数据和真正跨 Range 冲突的兼容机制。
+Highlighter 保持纯粹；Note 不再依附 Highlight；Range 成为唯一且稳定的身份锚点。
