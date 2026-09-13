@@ -279,7 +279,6 @@ private struct ThoughtRecordDetailView: View {
                                 .padding(.top, 48)
                         ),
                         recordExtras: recordExtras,
-                        rootTitle: "我的原话",
                         rootTextOverride: entry.reflection.originalText,
                         showsInlineProvenance: true,
                         openCitation: { evidence in

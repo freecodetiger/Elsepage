@@ -2,6 +2,20 @@ import SwiftUI
 import AppInfrastructure
 import UIKit
 
+enum MessageAuthorStyle: Hashable {
+    case user
+    case assistant
+}
+
+/// Inline author metadata rendered as an avatar attachment followed by
+/// `name：`. Keeping it inside the attributed text lets later lines flow back
+/// beneath the avatar instead of reserving a permanent left column.
+struct MessageAuthorship: Hashable {
+    let name: String
+    let avatarSymbolName: String
+    let style: MessageAuthorStyle
+}
+
 /// Main-actor cache for the expensive part of a read-only text view's intrinsic
 /// size calculation. The key carries the complete attributed-text fingerprint,
 /// so markdown runs, fonts and links cannot share a height accidentally.
@@ -66,6 +80,9 @@ final class RichTextBuilder {
     private var parsedOrder: [String] = []
     private var styled: [String: NSAttributedString] = [:]
     private var styledOrder: [String] = []
+    private var avatars: [String: UIImage] = [:]
+    private var authored: [String: NSAttributedString] = [:]
+    private var authoredOrder: [String] = []
 
     init(capacity: Int) { self.capacity = max(1, capacity) }
 
@@ -118,6 +135,81 @@ final class RichTextBuilder {
         return result
     }
 
+    func authored(
+        _ body: NSAttributedString,
+        authorship: MessageAuthorship,
+        textStyle: UIFont.TextStyle,
+        isSecondary: Bool
+    ) -> NSAttributedString {
+        let bodyFontKey = body.length > 0
+            ? String(describing: body.attribute(.font, at: 0, effectiveRange: nil))
+            : "empty"
+        let key = "authored|\(authorship.name)|\(authorship.avatarSymbolName)|\(authorship.style)|\(textStyle.rawValue)|\(isSecondary)|\(bodyFontKey)|\(body.string)"
+        if let cached = authored[key] {
+            touch(key, order: &authoredOrder)
+            return cached
+        }
+
+        let result = NSMutableAttributedString()
+        let attachment = NSTextAttachment()
+        attachment.image = avatarImage(for: authorship)
+        attachment.bounds = CGRect(x: 0, y: -5, width: 22, height: 22)
+        result.append(NSAttributedString(attachment: attachment))
+
+        let base = UIFont.preferredFont(forTextStyle: textStyle)
+        var nameFont = base
+        if let descriptor = nameFont.fontDescriptor.withSymbolicTraits(.traitBold) {
+            nameFont = UIFont(descriptor: descriptor, size: 0)
+        }
+        let color: UIColor = isSecondary ? .secondaryLabel : .label
+        result.append(NSAttributedString(
+            string: "  \(authorship.name)：",
+            attributes: [.font: nameFont, .foregroundColor: color]
+        ))
+        result.append(body)
+
+        authored[key] = result
+        touch(key, order: &authoredOrder)
+        trim(&authored, order: &authoredOrder)
+        return result
+    }
+
+    private func avatarImage(for authorship: MessageAuthorship) -> UIImage {
+        let key = "\(authorship.avatarSymbolName)|\(authorship.style)"
+        if let cached = avatars[key] { return cached }
+
+        let size = CGSize(width: 22, height: 22)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { context in
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5)
+            switch authorship.style {
+            case .user:
+                UIColor.label.setFill()
+            case .assistant:
+                UIColor.systemBackground.setFill()
+            }
+            UIBezierPath(ovalIn: rect).fill()
+            if authorship.style == .assistant {
+                UIColor.separator.setStroke()
+                let border = UIBezierPath(ovalIn: rect)
+                border.lineWidth = 1
+                border.stroke()
+            }
+
+            let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+            let symbolColor: UIColor = authorship.style == .user ? .systemBackground : .label
+            let symbol = UIImage(systemName: authorship.avatarSymbolName, withConfiguration: symbolConfiguration)?
+                .withTintColor(symbolColor, renderingMode: .alwaysOriginal)
+            let symbolSize = symbol?.size ?? .zero
+            symbol?.draw(at: CGPoint(
+                x: (size.width - symbolSize.width) / 2,
+                y: (size.height - symbolSize.height) / 2
+            ))
+        }
+        avatars[key] = image
+        return image
+    }
+
     func reset() {
         parsed.removeAll()
         parsedOrder.removeAll()
@@ -150,6 +242,7 @@ struct MessageText: View {
     let content: Content
     var textStyle: UIFont.TextStyle = .body
     var isSecondary = false
+    var authorship: MessageAuthorship?
     var linkHandler: ((URL) -> Bool)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -163,7 +256,15 @@ struct MessageText: View {
                 return RichTextBuilder.shared.markdown(source, textStyle: textStyle, isSecondary: isSecondary, dynamicTypeKey: dynamicTypeKey)
             }
         }
-        return SelectableTextView(attributedText: attributed, linkHandler: linkHandler)
+        let displayed = authorship.map {
+            RichTextBuilder.shared.authored(
+                attributed,
+                authorship: $0,
+                textStyle: textStyle,
+                isSecondary: isSecondary
+            )
+        } ?? attributed
+        return SelectableTextView(attributedText: displayed, linkHandler: linkHandler)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -242,11 +343,17 @@ struct SelectableTextBody: View {
     let content: String
     var textStyle: UIFont.TextStyle = .body
     var isSecondary = false
+    var authorship: MessageAuthorship?
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        MessageText(content: .plain(content), textStyle: textStyle, isSecondary: isSecondary)
+        MessageText(
+            content: .plain(content),
+            textStyle: textStyle,
+            isSecondary: isSecondary,
+            authorship: authorship
+        )
     }
 }
 
@@ -683,7 +790,12 @@ private func selectableFont(for intent: InlinePresentationIntent?, base: UIFont)
 extension View {
     /// 挂一条消息的「复制整条(带出处)」长按菜单。出处 = 说话者 + 时间,拼在正文之后。
     /// 只应挂在不与可选中正文重叠的头部/元信息区域,避免长按手势抢掉文本选择。
-    func copyMessageContextMenu(content: String, authorLabel: String, date: Date?) -> some View {
+    func copyMessageContextMenu(
+        content: String,
+        authorLabel: String,
+        date: Date?,
+        onDelete: (() -> Void)? = nil
+    ) -> some View {
         contextMenu {
             Button {
                 var text = content
@@ -697,6 +809,10 @@ extension View {
                 UIPasteboard.general.string = text + provenance
             } label: {
                 Label("复制整条", systemImage: "doc.on.doc")
+            }
+            if let onDelete {
+                Divider()
+                Button("删除这条记录", role: .destructive, action: onDelete)
             }
         }
     }

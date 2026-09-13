@@ -27,6 +27,7 @@
   - evidence is a compact footnote attached to its AI response, not a global section
   - compact width uses NavigationStack; regular width is specified for split view
   - record detail hides the system navigation bar and uses only a floating glass back button
+  - user and AI messages use inline avatar + name + colon + body, with no separate author column
 - Added Chinese date formatting through `ElsepageDateFormat`.
 - Set project development language to `zh-Hans`.
 - Kept glass for navigation and overlays; content cards use neutral surfaces.

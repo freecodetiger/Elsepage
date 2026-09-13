@@ -27,12 +27,14 @@ struct AgentMarkdownText: View {
     /// UITextView 需要显式字体/颜色——外层 `.font`/`.foregroundStyle` 不会透传进来。
     var textStyle: UIFont.TextStyle = .body
     var isSecondary = false
+    var authorship: MessageAuthorship?
     var citationStyle: AgentCitationStyle = .label
     var body: some View {
         MessageText(
             content: .markdown(linkedContent),
             textStyle: textStyle,
             isSecondary: isSecondary,
+            authorship: authorship,
             linkHandler: handleURL
         )
     }

@@ -1258,7 +1258,6 @@ struct ReflectionConversationView: View {
     /// the composer. The Thoughts record world uses this for “这次留下” and
     /// evidence without duplicating the conversation state machine.
     var recordExtras: AnyView? = nil
-    var rootTitle: String = "你的想法"
     var rootTextOverride: String? = nil
     var showsInlineProvenance: Bool = true
     var openCitation: ((AgentResponseEvidence) -> Void)?
@@ -1266,6 +1265,26 @@ struct ReflectionConversationView: View {
     @State private var confirmsDeletion = false
     @State private var isVoiceInputActive = false
     @State private var isComposerFocused = false
+    @AppStorage("profile.userDisplayName") private var userDisplayName = "我"
+    @AppStorage("profile.assistantDisplayName") private var assistantDisplayName = "页外"
+    @AppStorage("profile.userAvatarSymbol") private var userAvatarSymbol = "person.crop.circle.fill"
+    @AppStorage("profile.assistantAvatarSymbol") private var assistantAvatarSymbol = "cpu"
+
+    private var userAuthorship: MessageAuthorship {
+        MessageAuthorship(
+            name: userDisplayName,
+            avatarSymbolName: userAvatarSymbol,
+            style: .user
+        )
+    }
+
+    private var assistantAuthorship: MessageAuthorship {
+        MessageAuthorship(
+            name: assistantDisplayName,
+            avatarSymbolName: assistantAvatarSymbol,
+            style: .assistant
+        )
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -1278,7 +1297,6 @@ struct ReflectionConversationView: View {
                             .foregroundStyle(.secondary)
                     }
                     userTurn(
-                        title: rootTitle,
                         text: rootTextOverride ?? model.reflection.displayText,
                         canDelete: model.canDeleteRoot
                     )
@@ -1292,27 +1310,31 @@ struct ReflectionConversationView: View {
             ForEach(model.messages) { message in
                 Divider()
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    HStack {
-                        Text(message.author == .user ? "你继续说" : "AI 回应")
-                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        Spacer()
-                        if message.author == .user, message.id == model.latestUserMessageID {
-                            deleteButton
-                        }
-                    }
-                    .copyMessageContextMenu(
-                        content: message.content,
-                        authorLabel: message.author == .user ? "我" : "AI",
-                        date: message.createdAt
-                    )
                     if message.author == .agent {
                         AgentMarkdownText(
                             content: message.content,
                             provenance: model.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
-                            openCitation: openCitation
+                            openCitation: openCitation,
+                            authorship: assistantAuthorship
+                        )
+                        .copyMessageContextMenu(
+                            content: message.content,
+                            authorLabel: assistantDisplayName,
+                            date: message.createdAt
                         )
                     } else {
-                        SelectableTextBody(content: message.content)
+                        SelectableTextBody(
+                            content: message.content,
+                            authorship: userAuthorship
+                        )
+                        .copyMessageContextMenu(
+                            content: message.content,
+                            authorLabel: userDisplayName,
+                            date: message.createdAt,
+                            onDelete: message.id == model.latestUserMessageID
+                                ? { confirmsDeletion = true }
+                                : nil
+                        )
                     }
                     if message.author == .user, let audioFileName = message.audioFileName {
                         ReflectionAudioAttachment(
@@ -1320,7 +1342,7 @@ struct ReflectionConversationView: View {
                             onDelete: { Task { await model.deleteMessageAudio(message.id) } }
                         )
                     }
-                    if showsInlineProvenance {
+                    if message.author == .agent, showsInlineProvenance {
                         provenance(for: message)
                     }
                 }
@@ -1329,27 +1351,23 @@ struct ReflectionConversationView: View {
             if let pending = model.pendingUserMessage {
                 Divider()
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    HStack {
-                        Text("你继续说")
-                            .font(.caption.weight(.semibold))
+                    SelectableTextBody(
+                        content: pending.content,
+                        authorship: userAuthorship
+                    )
+                    switch pending.deliveryState {
+                    case .sending:
+                        Label("已发送", systemImage: "checkmark.circle")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        switch pending.deliveryState {
-                        case .sending:
-                            Label("已发送", systemImage: "checkmark.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        case .failed:
-                            Button("重新发送") {
-                                Task { await model.retryPendingSend() }
-                            }
-                            .font(.caption.weight(.semibold))
-                            // A11Y-03: quiet text button, full-size hit target.
-                            .frame(minHeight: 44, alignment: .leading)
-                            .contentShape(Rectangle())
+                    case .failed:
+                        Button("重新发送") {
+                            Task { await model.retryPendingSend() }
                         }
+                        .font(.caption.weight(.semibold))
+                        .frame(minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    SelectableTextBody(content: pending.content)
                 }
                 .id(pending.id)
             }
@@ -1440,29 +1458,17 @@ struct ReflectionConversationView: View {
         )) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
     }
 
-    private func userTurn(title: String, text: String, canDelete: Bool) -> some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(Color.elsepageInteractive)
-                Spacer()
-                if canDelete { deleteButton }
-            }
-            .copyMessageContextMenu(
-                content: text,
-                authorLabel: "我的阅读记录",
-                date: model.reflection.createdAt
-            )
-            SelectableTextBody(content: text)
-        }
-    }
-
-    private var deleteButton: some View {
-        Button(role: .destructive) { confirmsDeletion = true } label: {
-            Image(systemName: "trash")
-        }
-        .elsepageTapTarget()
-        .disabled(model.isResponding || isVoiceInputActive)
-        .accessibilityLabel("删除最新一条阅读记录")
+    private func userTurn(text: String, canDelete: Bool) -> some View {
+        SelectableTextBody(
+            content: text,
+            authorship: userAuthorship
+        )
+        .copyMessageContextMenu(
+            content: text,
+            authorLabel: userDisplayName,
+            date: model.reflection.createdAt,
+            onDelete: canDelete ? { confirmsDeletion = true } : nil
+        )
     }
 
     @ViewBuilder private func provenance(for message: ReflectionMessage) -> some View {
