@@ -338,7 +338,7 @@
     .app-nav h2 {
       margin: 0;
       font-family: "Songti SC", "STSong", serif;
-      font-size: 21px;
+      font-size: 19px;
       font-weight: 600;
       letter-spacing: -.02em;
       text-align: center;
@@ -380,38 +380,6 @@
 
     .screen-content::-webkit-scrollbar { display: none; }
 
-    .segmented {
-      position: relative;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px;
-      padding: 4px;
-      margin: 4px 0 22px;
-      background: color-mix(in srgb, var(--phone-surface-2) 86%, var(--phone-line));
-      border-radius: 13px;
-      isolation: isolate;
-    }
-
-    .segmented button {
-      position: relative;
-      z-index: 1;
-      height: 34px;
-      color: var(--phone-ink-2);
-      background: transparent;
-      border: 0;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: color .2s ease;
-    }
-
-    .segmented button.active {
-      color: var(--phone-ink);
-      background: var(--phone-surface);
-      box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.025);
-    }
-
     .month-heading {
       display: flex;
       align-items: baseline;
@@ -439,12 +407,12 @@
       position: relative;
       width: 100%;
       display: block;
-      padding: 18px 42px 17px 18px;
+      padding: 16px 38px 15px 16px;
       text-align: left;
       color: var(--phone-ink);
       background: var(--phone-surface);
       border: 1px solid var(--phone-line);
-      border-radius: var(--radius-card);
+      border-radius: 20px;
       box-shadow: 0 1px 0 rgba(0,0,0,.025);
       cursor: pointer;
       transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
@@ -456,29 +424,13 @@
       box-shadow: 0 8px 22px rgba(0,0,0,.055);
     }
 
-    .record-card.selected {
-      border-color: var(--phone-ink);
-      box-shadow: 0 6px 20px rgba(0,0,0,.07);
-    }
-
-    .record-card.selected::before {
-      content: "";
-      position: absolute;
-      top: 18px;
-      bottom: 18px;
-      left: 0;
-      width: 3px;
-      border-radius: 0 4px 4px 0;
-      background: var(--phone-ink);
-    }
-
     .card-context {
       display: flex;
       align-items: baseline;
       gap: 7px;
       margin-bottom: 10px;
       color: var(--phone-ink-3);
-      font-size: 12px;
+      font-size: 11.5px;
       line-height: 1.3;
     }
 
@@ -493,9 +445,9 @@
       overflow: hidden;
       color: var(--phone-ink);
       font-family: "Songti SC", "STSong", serif;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 600;
-      line-height: 1.48;
+      line-height: 1.52;
       letter-spacing: -.015em;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
@@ -507,7 +459,7 @@
       gap: 6px;
       margin-top: 13px;
       color: var(--phone-ink-2);
-      font-size: 12px;
+      font-size: 11.5px;
       line-height: 1.4;
     }
 
@@ -522,26 +474,6 @@
       font-size: 23px;
       font-weight: 300;
       transform: translateY(-52%);
-    }
-
-    .archive-card .card-headline {
-      font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
-      font-size: 17px;
-      font-weight: 650;
-    }
-
-    .archive-split {
-      display: grid;
-      gap: 5px;
-      margin-top: 12px;
-      color: var(--phone-ink-2);
-      font-size: 12px;
-      line-height: 1.45;
-    }
-
-    .archive-split b {
-      color: var(--phone-ink);
-      font-weight: 650;
     }
 
     .tabbar {
@@ -567,7 +499,7 @@
       color: var(--phone-ink-3);
       background: transparent;
       border: 0;
-      font-size: 10px;
+      font-size: 9.5px;
       cursor: pointer;
     }
 
@@ -595,14 +527,36 @@
       font-weight: 600;
     }
 
-    .detail-title {
-      margin: 0 0 30px;
+    .summary-block {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      margin: 0 0 26px;
+    }
+
+    .summary-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      color: var(--phone-surface);
+      background: var(--phone-ink);
+      border-radius: 50%;
+      font-family: "Songti SC", "STSong", serif;
+      font-size: 15px;
+      font-weight: 600;
+      transform: translateY(2px);
+    }
+
+    .summary-copy {
+      margin: 0;
       color: var(--phone-ink);
       font-family: "Songti SC", "STSong", serif;
-      font-size: 27px;
+      font-size: 19px;
       font-weight: 600;
-      line-height: 1.38;
-      letter-spacing: -.035em;
+      line-height: 1.48;
+      letter-spacing: -.025em;
     }
 
     .detail-section {
@@ -625,8 +579,8 @@
     .detail-copy {
       margin: 0;
       color: var(--phone-ink);
-      font-size: 16px;
-      line-height: 1.82;
+      font-size: 15px;
+      line-height: 1.78;
     }
 
     .response-panel {
@@ -808,14 +762,14 @@
         <div class="eyebrow">页外 / 想法页</div>
         <h1>让记录自己说话，<br>而不是让界面发言。</h1>
         <p class="lede">
-          所有阅读记录默认都有 AI 回应。回应不再是一个状态标签，而是记录展开后的正文。
-          折叠态只负责扫读，展开态才负责阅读、追问和回到依据。
+          所有阅读记录默认都有 AI 回应。概要由第一次记录和第一次 AI 回应自动生成，
+          生成后固定；折叠态只负责扫读，展开态才负责阅读、追问和回到依据。
         </p>
       </div>
       <div class="stage-controls">
         <div class="stage-note">
           点击左侧卡片，切换右侧展开内容。<br>
-          日期固定为中文格式。
+          概要自动生成并固定。
         </div>
         <button class="theme-toggle" type="button" id="themeToggle">预览暗色</button>
       </div>
@@ -825,7 +779,7 @@
       <article class="device-block">
         <div class="device-caption">
           <strong>扫读态</strong>
-          <span>记录 / 档案</span>
+          <span>全部记录</span>
         </div>
 
         <div class="phone-shell">
@@ -847,11 +801,6 @@
             </header>
 
             <div class="screen-content">
-              <div class="segmented" role="tablist" aria-label="内容类型">
-                <button class="active" type="button" role="tab" aria-selected="true" data-mode="records">记录</button>
-                <button type="button" role="tab" aria-selected="false" data-mode="archive">档案</button>
-              </div>
-
               <div class="month-heading">
                 <strong>2026年9月</strong>
                 <span id="listCount">3 条记录</span>
@@ -915,7 +864,7 @@
     <footer class="prototype-footer">
       <p>
         说明：这是一个拟真交互原型。搜索通过下拉触发，分组和设置收进工具栏，
-        卡片是全屏唯一的主点击目标。默认不显示回应状态，因为它已经是每个阅读记录的既定结果。
+        卡片是全屏唯一的主点击目标。默认不显示回应状态，因为它已经是每个阅读记录的既定结果；档案入口已移除。
       </p>
       <p>页外 · 减法原型 / 2026.09.14</p>
     </footer>
@@ -927,7 +876,7 @@
         id: "r-01",
         book: "可能性的艺术",
         date: "9月14日",
-        headline: "自由让人不安的地方，可能不是选择太多，而是结果必须由自己承担。",
+        summary: "自由让人不安，是因为结果必须由自己承担。",
         meta: "与 8 月 27 日的一条记录有关",
         original: "最近一直在想，自由当然意味着选择变多，但真正让人不安的可能不是选择本身，而是选择之后必须承担的结果。选择越多，责任越无法转移。",
         response: "你把自由的重心从“能不能选”移到了“愿不愿意承担”。这会引出一个新的问题：如果一个人没有能力承担结果，他还拥有完整的选择吗？",
@@ -940,7 +889,7 @@
         id: "r-02",
         book: "置身事内",
         date: "9月13日",
-        headline: "地方政府不是市场之外的力量，它本身就在塑造市场。",
+        summary: "地方政府本身就在塑造市场。",
         meta: "2 条高亮",
         original: "过去我总把政府和市场理解成两股相对的力量，但这本书让我意识到，地方政府本身就是市场运行的一部分，它通过土地、财政和产业政策参与塑造了市场。",
         response: "这里值得继续追的是“塑造”与“干预”的区别。塑造意味着市场从一开始就不是自然生成的，而干预通常预设了一个先于政府存在的市场。",
@@ -953,7 +902,7 @@
         id: "r-03",
         book: "局外人",
         date: "9月12日",
-        headline: "理解一个人，并不等于站在他这一边。",
+        summary: "理解一个人，并不等于赞同他。",
         meta: "读完这一节时留下",
         original: "默尔索的冷漠让我想到，理解一个人并不等于替他辩护。理解只是承认他的行为有可以被叙述的理由，这和赞同不是一回事。",
         response: "你在“理解”和“赞同”之间留出了一段距离。也许可以再问：如果理解不意味着赞同，它是否仍然会改变我们对一个人的责任判断？",
@@ -964,46 +913,13 @@
       }
     ];
 
-    const archive = [
-      {
-        id: "a-01",
-        book: "可能性的艺术",
-        date: "9月14日",
-        headline: "自由意味着承担选择。",
-        thought: "自由不是选择数量的增加，而是承担结果的能力。",
-        question: "如果一个人没有能力承担结果，他还拥有完整的选择吗？",
-        original: "真正让人不安的可能不是选择本身，而是结果必须由自己承担。",
-        response: "这条看法已经从一次阅读记录，慢慢变成了你对“自由”的稳定理解。",
-        evidence: [
-          ["来自阅读", "《可能性的艺术》 · 2 条记录"],
-          ["形成时间", "2026年8月–9月"]
-        ]
-      },
-      {
-        id: "a-02",
-        book: "置身事内",
-        date: "9月13日",
-        headline: "市场并不是政府之外的天然秩序。",
-        thought: "地方政府既是规则的执行者，也是市场机会的创造者。",
-        question: "“塑造市场”和“干预市场”到底有什么区别？",
-        original: "过去我把政府和市场理解成两股相对的力量。",
-        response: "这条看法仍在形成，下一次遇到相关材料时值得继续修正。",
-        evidence: [
-          ["来自阅读", "《置身事内》 · 2 条高亮"],
-          ["当前状态", "演化中"]
-        ]
-      }
-    ];
-
     const state = {
-      mode: "records",
       selectedId: records[0].id
     };
 
     const list = document.getElementById("recordList");
     const listCount = document.getElementById("listCount");
     const detail = document.getElementById("detailContent");
-    const tabs = document.querySelectorAll(".segmented button");
 
     function esc(value) {
       return value.replace(/[&<>"']/g, character => ({
@@ -1015,78 +931,39 @@
       })[character]);
     }
 
-    function activeItems() {
-      return state.mode === "records" ? records : archive;
-    }
-
     function activeItem() {
-      const items = activeItems();
-      return items.find(item => item.id === state.selectedId) || items[0];
+      return records.find(item => item.id === state.selectedId) || records[0];
     }
 
     function renderList() {
-      const items = activeItems();
-      listCount.textContent = state.mode === "records"
-        ? `${items.length} 条记录`
-        : `${items.length} 条档案`;
+      listCount.textContent = `${records.length} 条记录`;
 
-      list.innerHTML = items.map(item => {
-        const selected = item.id === state.selectedId ? " selected" : "";
-        if (state.mode === "archive") {
-          return `
-            <button class="record-card archive-card${selected}" type="button" data-id="${item.id}" aria-pressed="${item.id === state.selectedId}">
-              <div class="card-context"><span class="book">《${esc(item.book)}》</span><span>·</span><span>${esc(item.date)}</span></div>
-              <p class="card-headline">${esc(item.headline)}</p>
-              <div class="archive-split">
-                <span><b>我想</b> ${esc(item.thought)}</span>
-                <span><b>还在想</b> ${esc(item.question)}</span>
-              </div>
-              <span class="card-chevron" aria-hidden="true">›</span>
-            </button>
-          `;
-        }
-
-        return `
-          <button class="record-card${selected}" type="button" data-id="${item.id}" aria-pressed="${item.id === state.selectedId}">
-            <div class="card-context"><span class="book">《${esc(item.book)}》</span><span>·</span><span>${esc(item.date)}</span></div>
-            <p class="card-headline">${esc(item.headline)}</p>
-            <div class="card-meta">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>
-              <span>${esc(item.meta)}</span>
-            </div>
-            <span class="card-chevron" aria-hidden="true">›</span>
-          </button>
-        `;
-      }).join("");
+      list.innerHTML = records.map(item => `
+        <button class="record-card" type="button" data-id="${item.id}" aria-pressed="${item.id === state.selectedId}">
+          <div class="card-context"><span class="book">《${esc(item.book)}》</span><span>·</span><span>${esc(item.date)}</span></div>
+          <p class="card-headline">${esc(item.summary)}</p>
+          <div class="card-meta">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>
+            <span>${esc(item.meta)}</span>
+          </div>
+          <span class="card-chevron" aria-hidden="true">›</span>
+        </button>
+      `).join("");
     }
 
     function renderDetail() {
       const item = activeItem();
-      const archiveMode = state.mode === "archive";
-      const title = archiveMode ? "阅读档案" : "阅读记录";
-
-      const primarySection = archiveMode
-        ? `
-          <section class="detail-section">
-            <p class="section-label">我想</p>
-            <p class="detail-copy">${esc(item.thought)}</p>
-          </section>
-          <section class="detail-section">
-            <p class="section-label">还在想</p>
-            <p class="detail-copy">${esc(item.question)}</p>
-          </section>
-        `
-        : `
-          <section class="detail-section">
-            <p class="section-label">我的原话</p>
-            <p class="detail-copy">${esc(item.original)}</p>
-          </section>
-        `;
 
       detail.innerHTML = `
         <div class="detail-context"><span class="book">《${esc(item.book)}》</span> · ${esc(item.date)}</div>
-        <h3 class="detail-title">${esc(item.headline)}</h3>
-        ${primarySection}
+        <div class="summary-block">
+          <div class="summary-mark" aria-hidden="true">概</div>
+          <p class="summary-copy">${esc(item.summary)}</p>
+        </div>
+        <section class="detail-section">
+          <p class="section-label">我的原话</p>
+          <p class="detail-copy">${esc(item.original)}</p>
+        </section>
         <section class="detail-section">
           <div class="response-panel">
             <p class="section-label">AI 回应</p>
@@ -1094,11 +971,11 @@
           </div>
         </section>
         <button class="continue-row" type="button">
-          <span>${archiveMode ? "继续想想" : "继续对话"}</span>
+          <span>继续对话</span>
           <span aria-hidden="true">›</span>
         </button>
         <details class="evidence">
-          <summary>${archiveMode ? "更多阅读脉络" : "更多依据"}</summary>
+          <summary>更多依据</summary>
           <div class="evidence-body">
             ${item.evidence.map(([label, copy]) => `
               <div class="evidence-item">
@@ -1109,8 +986,6 @@
           </div>
         </details>
       `;
-
-      document.querySelector(".device-block:nth-child(2) .app-nav h2").textContent = title;
     }
 
     list.addEventListener("click", event => {
@@ -1119,20 +994,6 @@
       state.selectedId = card.dataset.id;
       renderList();
       renderDetail();
-    });
-
-    tabs.forEach(tab => {
-      tab.addEventListener("click", () => {
-        state.mode = tab.dataset.mode;
-        state.selectedId = activeItems()[0].id;
-        tabs.forEach(item => {
-          const active = item === tab;
-          item.classList.toggle("active", active);
-          item.setAttribute("aria-selected", String(active));
-        });
-        renderList();
-        renderDetail();
-      });
     });
 
     document.getElementById("themeToggle").addEventListener("click", event => {
@@ -1147,15 +1008,7 @@
       document.body.classList.add("dark-preview");
       document.getElementById("themeToggle").textContent = "预览亮色";
     }
-    if (params.get("mode") === "archive") {
-      state.mode = "archive";
-    }
-    state.selectedId = activeItems()[0].id;
-    tabs.forEach(tab => {
-      const active = tab.dataset.mode === state.mode;
-      tab.classList.toggle("active", active);
-      tab.setAttribute("aria-selected", String(active));
-    });
+    state.selectedId = records[0].id;
 
     renderList();
     renderDetail();
