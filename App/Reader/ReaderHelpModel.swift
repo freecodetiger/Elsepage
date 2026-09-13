@@ -44,8 +44,10 @@ final class ReaderHelpModel {
     private(set) var state: State = .idle
     private(set) var contextSummary: ReaderHelpContextSummary?
     private(set) var provenance: AgentResponseProvenance?
-    private(set) var isSaved = false
+    private(set) var latestResponseID: UUID?
     var saveError: String?
+
+    private var savedResponseID: UUID?
 
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private var flushTask: Task<Void, Never>?
@@ -79,6 +81,10 @@ final class ReaderHelpModel {
 
     var canRetry: Bool {
         (state == .cancelled || isFailure) && lastQuestion != nil
+    }
+
+    var isSaved: Bool {
+        latestResponseID != nil && savedResponseID == latestResponseID
     }
 
     var canSave: Bool {
@@ -135,10 +141,10 @@ final class ReaderHelpModel {
     }
 
     func saveLatestAnswer() async {
-        guard canSave, let body = noteBody else { return }
+        guard canSave, let responseID = latestResponseID, let body = noteBody else { return }
         do {
             try await persistNote(body)
-            isSaved = true
+            savedResponseID = responseID
             saveError = nil
         } catch {
             saveError = error.localizedDescription
@@ -178,6 +184,8 @@ final class ReaderHelpModel {
         streamingContent = ""
         contextSummary = nil
         provenance = nil
+        latestResponseID = nil
+        saveError = nil
         state = .preparing
         runTask?.cancel()
 
@@ -230,6 +238,7 @@ final class ReaderHelpModel {
             activeQuestion = nil
             streamingContent = ""
             provenance = response.provenance
+            latestResponseID = response.id
             state = .completed
             Perf.shared.event("readerHelp.complete")
             runTask = nil

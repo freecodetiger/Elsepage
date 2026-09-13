@@ -100,9 +100,10 @@ public struct ReaderHelpService: Sendable {
         if let contextBuilder,
            boundary?.progression != nil,
            indexAvailable {
+            let retrievalQuery = "\(validated.selectedText)\n\(validated.question)"
             bookContext = try? await contextBuilder.build(
                 bookID: request.bookID,
-                reflection: validated.question,
+                reflection: retrievalQuery,
                 currentLocator: request.anchor,
                 boundary: boundary,
                 evidenceLimit: 2,
