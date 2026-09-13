@@ -95,10 +95,11 @@ public struct ReaderHelpService: Sendable {
             )
         }
 
+        let indexAvailable = await contextBuilder?.isAvailable(for: request.bookID) ?? false
         let bookContext: ReaderAgentBookContext?
         if let contextBuilder,
            boundary?.progression != nil,
-           await contextBuilder.isAvailable(for: request.bookID) {
+           indexAvailable {
             bookContext = try? await contextBuilder.build(
                 bookID: request.bookID,
                 reflection: validated.question,
@@ -140,7 +141,7 @@ public struct ReaderHelpService: Sendable {
         }
 
         let failClosedReason: ReaderHelpFailClosedReason?
-        if contextBuilder == nil {
+        if contextBuilder == nil || !indexAvailable {
             failClosedReason = .indexUnavailable
         } else if boundary == nil {
             failClosedReason = .unresolvedReadingBoundary
