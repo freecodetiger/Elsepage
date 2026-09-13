@@ -134,7 +134,8 @@ Reader Help 是阅读器内的轻量 Agent 能力：用户读到一句令自己�
 
 - 回答以流式文本呈现。
 - 显示状态包括准备中、生成中、完成、失败、已取消。
-- 引用若存在，以轻量来源标记展示；点击可回到对应原文。
+- 引用若存在，以“原文 / 书中 / 过去”这类轻量来源标签展示，不直接暴露内部 `E1` marker。
+- 点击来源标签会跳回对应原文，同时将 help sheet 收起到 compact detent；不关闭 sheet、不丢弃当前回答。
 - 完成后提供“继续追问”“复制”“存为笔记”。
 - 不允许在面板内编辑 Agent 的回答，也不把回答伪装成用户原始表达。
 
@@ -150,7 +151,7 @@ Reader Help 是阅读器内的轻量 Agent 能力：用户读到一句令自己�
 
 - Sheet 禁止交互式下滑关闭；下滑最多改变 detent，不能让临时问答离开用户视野。
 - 右上角 X 是唯一的“取消并完全丢弃”入口；触发后清空当前 help thread。
-- 从 Citation 跳回原文等程序化 dismiss 不丢弃当前 thread。
+- 从 Citation 跳回原文不 dismiss sheet；面板收起到 compact detent，thread 保持可展开。
 - 关闭面板会取消正在进行的请求。
 - 同一 ReaderScreen 生命周期内，程序化关闭后再次打开可恢复最近一次 help thread。
 - 选择另一句话时创建新的 help session。
@@ -931,3 +932,18 @@ swift test
 - 现实背景问题允许用通识回答，同时明确它不是书中原文。
 - 保留 anti-spoiler 与书内原文引用约束。
 - WebSearch 仍为后续能力，不属于本次修正。
+
+
+---
+
+## 21. Citation 返回修正（2026-09-13）
+
+- 内部 evidence marker 仍使用 `E1/E2`，只作为协议标识，不直接展示给用户。
+- 可见标签映射：
+  - `nearbyPassage` → `原文`
+  - `bookPassage` → `书中`
+  - `pastReflection` → `过去`
+- 点击标签后：
+  1. 跳转到对应原文；
+  2. sheet 收起到 184pt compact detent；
+  3. 当前问答、追问历史和流式状态保持不丢。
