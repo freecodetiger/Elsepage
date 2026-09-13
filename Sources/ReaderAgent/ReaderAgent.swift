@@ -361,6 +361,19 @@ public struct ReaderAgent: Sendable {
                     pipelineMetrics.semanticCacheMisses = semanticRanking?.cacheHitMiss.misses
                     pipelineMetrics.semanticUnavailable = semanticRanking == nil
                     pipelineMetrics.brainCandidateCount = assembly.brainCandidates.isEmpty ? nil : assembly.brainCandidates.count
+                    pipelineMetrics.spoilerPolicy = "completeActiveRetrievalChunk"
+                    pipelineMetrics.cursorResourceOrdinal = readingBoundary?.resourceOrdinal
+                    pipelineMetrics.cursorProgression = readingBoundary?.progression
+                    pipelineMetrics.activeChunkID = readingBoundary?.activeChunkID?.rawValue
+                    pipelineMetrics.activeEndProgression = readingBoundary?.activeEndProgression
+                    pipelineMetrics.nearbyUsedActiveChunk = executionPlan.nearbyIncluded
+                        && readingBoundary?.activeChunkID != nil
+                        && nearbyCandidate != nil
+                    if currentLocator != nil, readingBoundary == nil {
+                        pipelineMetrics.spoilerFailClosedReason = "unresolvedReadingBoundary"
+                    } else if executionPlan.book != nil, readingBoundary?.progression == nil {
+                        pipelineMetrics.spoilerFailClosedReason = "missingProgression"
+                    }
                     let citationBoundary = readingBoundary
                     let retrievalDuration = retrievalStart.duration(to: clock.now)
                     var completedMessage: ReflectionMessage?

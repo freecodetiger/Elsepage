@@ -203,6 +203,16 @@ public struct ContextPipelineMetrics: Hashable, Codable, Sendable {
     public var semanticUnavailable: Bool?
     /// Brain items delivered to the prompt (phase 16 bridge); nil on older rows.
     public var brainCandidateCount: Int?
+    /// Anti-spoiler policy actually used for this request.
+    public var spoilerPolicy: String?
+    public var cursorResourceOrdinal: Int?
+    public var cursorProgression: Double?
+    public var activeChunkID: String?
+    public var activeEndProgression: Double?
+    /// True when nearby context used the complete active retrieval child.
+    public var nearbyUsedActiveChunk: Bool?
+    /// Why broad book retrieval was refused (e.g. missing progression).
+    public var spoilerFailClosedReason: String?
 
     public init() {}
 }

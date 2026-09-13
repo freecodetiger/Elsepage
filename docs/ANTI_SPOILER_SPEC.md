@@ -514,6 +514,7 @@ Spec 落地后必须同时满足：
 - `ReaderAgentContextBuilder.nearbyText` 使用完整 active child，不再使用 `locator.textAfter`。
 - `ReaderAgentPolicy` 的 session highlight/range 不再使用 `textAfter`。
 - `AgentCitationValidator` 在有本地 index 但没有 resolved boundary 时拒绝 book citation。
+- 诊断 trace 记录 policy、cursor、active chunk、nearby 来源和 fail-closed 原因。
 - 新增 active child、精确边界、缺失 progression、nearby 和 expander fail-closed 测试。
 
 验证：
