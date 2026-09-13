@@ -97,6 +97,13 @@ struct ReaderAnnotationOverlays: View {
                             onCopy: { model.copySelection() }
                         )
                     }
+                case .conflict(let conflict):
+                    AnchoredMenu(anchor: conflict.anchor, container: safeBounds) {
+                        AnnotationConflictMenu(
+                            onNote: { model.chooseNoteFromConflict(conflict) },
+                            onHighlight: { model.chooseHighlightFromConflict(conflict) }
+                        )
+                    }
                 case .highlight(let id, let anchor):
                     AnchoredMenu(anchor: anchor, container: safeBounds) {
                         HighlightMenu(
@@ -260,6 +267,42 @@ private struct SelectionCatcherShape: Shape {
             path.addRect(hole)
         }
         return path
+    }
+}
+
+// MARK: - Annotation conflict
+
+/// Shown only when a standalone Note and a Highlight overlap at the tapped
+/// location. Choosing an option resolves the ambiguity explicitly.
+struct AnnotationConflictMenu: View {
+    let onNote: () -> Void
+    let onHighlight: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            toolButton("笔记", systemImage: "note.text", action: onNote)
+            Divider().frame(height: 24)
+            toolButton("高亮", systemImage: "highlighter", action: onHighlight)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.primary.opacity(0.08)))
+        .shadow(color: .black.opacity(0.14), radius: 16, y: 7)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("重叠标注选择")
+    }
+
+    private func toolButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 10)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("打开\(title)")
     }
 }
 

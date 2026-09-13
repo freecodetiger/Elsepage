@@ -102,11 +102,11 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
                         let point = event.point.map { AnnotationLog.rect(CGRect(origin: $0, size: .zero)) } ?? "nil"
                         AnnotationLog.event("decoration.activated id=\(AnnotationLog.id(id)) rect=\(AnnotationLog.rect(event.rect)) point=\(point)")
-                        self?.model.showHighlightMenu(for: id, anchor: event.rect)
+                        self?.model.handleHighlightActivation(for: id, anchor: event.rect)
                     }
                     navigator.observeDecorationInteractions(inGroup: "notes") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.model.openNoteEditor(.note(id))
+                        self?.model.handleNoteActivation(for: id, anchor: event.rect)
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     // Highlights own the primary hit target when ranges overlap;

@@ -25,9 +25,16 @@ struct ReaderHelpPresentation: Identifiable {
 
 /// The single in-place annotation surface. Either the toolbar for a fresh
 /// selection or the menu of an existing highlight — never both at once.
+struct ReaderAnnotationConflict: Equatable {
+    let noteID: UUID
+    let highlightID: UUID
+    let anchor: CGRect?
+}
+
 enum ReaderAnnotationMenu: Equatable {
     case selection(ReaderSelectionContext)
     case highlight(id: UUID, anchor: CGRect?)
+    case conflict(ReaderAnnotationConflict)
 }
 
 enum ReaderNoteEditorTarget: Hashable {
@@ -371,16 +378,55 @@ final class ReaderModel {
     /// Dismisses a visible highlight menu on a content tap; the result tells
     /// the caller whether the same tap may still toggle the reader chrome.
     func closeHighlightMenu() -> HighlightMenuClose {
-        guard case .highlight(let current, _) = annotationMenu else { return .absent }
+        let identifier: String
+        switch annotationMenu {
+        case .highlight(let current, _):
+            identifier = AnnotationLog.id(current)
+        case .conflict(let conflict):
+            identifier = "conflict:\(AnnotationLog.id(conflict.noteID)):\(AnnotationLog.id(conflict.highlightID))"
+        default:
+            return .absent
+        }
+
         let sinceOpen = CFAbsoluteTimeGetCurrent() - highlightMenuOpenedAt
         let since = String(format: "%.3f", sinceOpen)
         guard sinceOpen > Self.highlightMenuGraceInterval else {
-            AnnotationLog.event("menu.tapClose id=\(AnnotationLog.id(current)) sinceOpen=\(since) → deferred (grace)")
+            AnnotationLog.event("menu.tapClose id=\(identifier) sinceOpen=\(since) → deferred (grace)")
             return .deferred
         }
         annotationMenu = nil
-        AnnotationLog.event("menu.tapClose id=\(AnnotationLog.id(current)) sinceOpen=\(since) → closed")
+        AnnotationLog.event("menu.tapClose id=\(identifier) sinceOpen=\(since) → closed")
         return .closed
+    }
+
+    func handleHighlightActivation(for id: UUID, anchor: CGRect?) {
+        guard highlights.contains(where: { $0.id == id }) else { return }
+        if let note = conflictingStandaloneNote(forHighlightID: id) {
+            showAnnotationConflict(noteID: note.id, highlightID: id, anchor: anchor)
+        } else {
+            showHighlightMenu(for: id, anchor: anchor)
+        }
+    }
+
+    func handleNoteActivation(for id: UUID, anchor: CGRect?) {
+        guard let note = notes.first(where: { $0.id == id }) else { return }
+        if let highlightID = note.highlightID {
+            showHighlightMenu(for: highlightID, anchor: anchor)
+        } else if let highlight = overlappingHighlight(for: note) {
+            showAnnotationConflict(noteID: note.id, highlightID: highlight.id, anchor: anchor)
+        } else {
+            openNoteEditor(.note(id))
+        }
+    }
+
+    func chooseNoteFromConflict(_ conflict: ReaderAnnotationConflict) {
+        annotationMenu = nil
+        openNoteEditor(.note(conflict.noteID))
+    }
+
+    func chooseHighlightFromConflict(_ conflict: ReaderAnnotationConflict) {
+        annotationMenu = nil
+        showHighlightMenu(for: conflict.highlightID, anchor: conflict.anchor)
     }
 
     func hasNote(forHighlightID id: UUID) -> Bool {
@@ -400,10 +446,33 @@ final class ReaderModel {
         if let attached = notes.first(where: { $0.highlightID == id }) {
             return attached
         }
+        return conflictingStandaloneNote(forHighlightID: id)
+    }
+
+    private func conflictingStandaloneNote(forHighlightID id: UUID) -> Note? {
         guard let highlight = highlights.first(where: { $0.id == id }) else { return nil }
         return notes
             .filter { $0.highlightID == nil && $0.locator.appearsToOverlapText(with: highlight.locator) }
             .max { $0.updatedAt < $1.updatedAt }
+    }
+
+    private func overlappingHighlight(for note: Note) -> Highlight? {
+        let matches = highlights.filter { $0.locator.appearsToOverlapText(with: note.locator) }
+        if let exact = matches.first(where: { $0.locator.identifiesSameAnchor(as: note.locator) }) {
+            return exact
+        }
+        return matches.min { lhs, rhs in
+            let lhsDistance = abs((lhs.locator.progression ?? 0) - (note.locator.progression ?? 0))
+            let rhsDistance = abs((rhs.locator.progression ?? 0) - (note.locator.progression ?? 0))
+            return lhsDistance < rhsDistance
+        }
+    }
+
+    private func showAnnotationConflict(noteID: UUID, highlightID: UUID, anchor: CGRect?) {
+        annotationMenu = .conflict(.init(noteID: noteID, highlightID: highlightID, anchor: anchor))
+        highlightMenuOpenedAt = CFAbsoluteTimeGetCurrent()
+        showsControls = false
+        AnnotationLog.event("conflict.open note=\(AnnotationLog.id(noteID)) highlight=\(AnnotationLog.id(highlightID)) anchor=\(AnnotationLog.rect(anchor))")
     }
 
     /// Immediate programmatic dismissal (menu buttons, deletion) — no grace.
