@@ -98,19 +98,21 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     host.navigator = navigator
                     self.navigator = navigator
                     model.onSelectionFinished = { [weak navigator] in navigator?.clearSelection() }
+                    navigator.observeDecorationInteractions(inGroup: "notes") { [weak self] event in
+                        guard let id = UUID(uuidString: event.decoration.id) else { return }
+                        self?.model.openNoteEditor(.note(id))
+                    }
                     navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
                         guard let id = UUID(uuidString: event.decoration.id) else { return }
                         let point = event.point.map { AnnotationLog.rect(CGRect(origin: $0, size: .zero)) } ?? "nil"
                         AnnotationLog.event("decoration.activated id=\(AnnotationLog.id(id)) rect=\(AnnotationLog.rect(event.rect)) point=\(point)")
                         self?.model.showHighlightMenu(for: id, anchor: event.rect)
                     }
-                    navigator.observeDecorationInteractions(inGroup: "notes") { [weak self] event in
-                        guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.model.openNoteEditor(.note(id))
-                    }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
-                    applyHighlights(model.highlights)
+                    // Readium checks decoration groups in creation order. Register notes
+                    // first so a note underline wins an overlap with a highlight.
                     applyNotes(model.notes)
+                    applyHighlights(model.highlights)
                     navigatorReadyAt = CFAbsoluteTimeGetCurrent()
                 } catch is CancellationError {
                     self?.abortParseIfNeeded()
@@ -208,8 +210,9 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             if preferences != lastPreferences || colorScheme != lastColorScheme {
                 apply(preferences: preferences, colorScheme: colorScheme)
             }
-            applyHighlights(highlights)
+            // Preserve notes-before-highlights group priority for overlapping hits.
             applyNotes(notes)
+            applyHighlights(highlights)
             guard let jumpTarget, jumpTarget != lastJumpTarget else { return }
             lastJumpTarget = jumpTarget
             Task {

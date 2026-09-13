@@ -403,11 +403,19 @@ struct TransientNoticePill: View {
 /// always reflects what is in the editor, so user words are never lost
 /// (PRD P2). An emptied note is removed, with undo offered by the reader.
 struct NoteEditorSheet: View {
+    private enum Mode: String, CaseIterable, Identifiable {
+        case preview = "预览"
+        case edit = "编辑"
+
+        var id: Self { self }
+    }
+
     @Environment(\.dismiss) private var dismiss
     let model: ReaderModel
     let target: ReaderNoteEditorTarget
 
     @FocusState private var editorFocused: Bool
+    @State private var mode: Mode = .preview
     @State private var text = ""
     @State private var loadedTarget: ReaderNoteEditorTarget?
     @State private var saveTask: Task<Void, Never>?
@@ -435,6 +443,16 @@ struct NoteEditorSheet: View {
                 Text("笔记")
                     .font(.system(.headline, design: .serif))
                 Spacer()
+                Picker("显示模式", selection: $mode) {
+                    ForEach(Mode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 128)
+                .accessibilityLabel("笔记显示模式")
+
                 Button("完成") { dismiss() }
                     .font(.subheadline.weight(.semibold))
                     .frame(minHeight: 44)
@@ -451,12 +469,26 @@ struct NoteEditorSheet: View {
                 .frame(maxHeight: 92)
             }
 
-            TextEditor(text: $text)
-                .focused($editorFocused)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityLabel("笔记内容")
+            if mode == .preview {
+                ScrollView {
+                    if trimmedText.isEmpty {
+                        ContentUnavailableView("还没有笔记", systemImage: "note.text")
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        AgentMarkdownText(content: previewText, textStyle: .body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .accessibilityLabel("笔记预览")
+            } else {
+                TextEditor(text: $text)
+                    .focused($editorFocused)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityLabel("笔记内容")
+            }
         }
         .padding(ElsepageTheme.Spacing.medium)
         .presentationDetents([.height(340), .large])
@@ -465,7 +497,11 @@ struct NoteEditorSheet: View {
             guard loadedTarget != target else { return }
             loadedTarget = target
             text = note?.body ?? ""
-            editorFocused = true
+            mode = .preview
+            editorFocused = false
+        }
+        .onChange(of: mode) { _, mode in
+            editorFocused = mode == .edit
         }
         .onChange(of: text) { _, _ in
             scheduleSave()
@@ -477,6 +513,16 @@ struct NoteEditorSheet: View {
 
     private var trimmedText: String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewText: String {
+        trimmedText
+            .replacingOccurrences(
+                of: #"\[E[0-9]+\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: "  ", with: " ")
     }
 
     private func scheduleSave() {

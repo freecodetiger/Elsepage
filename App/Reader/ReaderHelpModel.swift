@@ -207,7 +207,7 @@ final class ReaderHelpModel {
             case .user:
                 return content == Self.defaultQuestion ? nil : "问：\(content)"
             case .agent:
-                return "Agent：\(content)"
+                return "Agent：\(Self.removingCitationMarkers(from: content))"
             }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n\n")
@@ -319,6 +319,17 @@ final class ReaderHelpModel {
         if streamingContent != next {
             streamingContent = next
         }
+    }
+
+    private static func removingCitationMarkers(from content: String) -> String {
+        content
+            .replacingOccurrences(
+                of: #"\[E[0-9]+\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func visibleContent(_ content: String) -> String {
