@@ -148,8 +148,11 @@ Reader Help 是阅读器内的轻量 Agent 能力：用户读到一句令自己�
 
 ### 4.5 关闭与生命周期
 
+- Sheet 禁止交互式下滑关闭；下滑最多改变 detent，不能让临时问答离开用户视野。
+- 右上角 X 是唯一的“取消并完全丢弃”入口；触发后清空当前 help thread。
+- 从 Citation 跳回原文等程序化 dismiss 不丢弃当前 thread。
 - 关闭面板会取消正在进行的请求。
-- 同一 ReaderScreen 生命周期内，关闭后再次打开可恢复最近一次 help thread。
+- 同一 ReaderScreen 生命周期内，程序化关闭后再次打开可恢复最近一次 help thread。
 - 选择另一句话时创建新的 help session。
 - 退出阅读器、App 被系统终止或清理内存后，未保存内容丢失。
 - 不提供“历史问答”列表。
@@ -533,8 +536,12 @@ Reader Help 不复用 `ReaderAgentSystemPrompt.v3`。新增独立 system prompt�
 - 除非用户明确要求，不引入外部作者、理论或长篇背景。
 - 不主动提出反思问题；目标是解除疑惑并回到阅读。
 - 不泛泛赞美用户，也不评价用户的阅读能力。
-- 引用原文时必须来自提供的 evidence。
+- 引用书中原文时必须来自提供的 evidence。
 - 无法确认原文时不使用引号伪造引用。
+- 用户明确询问现实事实、历史时间、人物、制度或通用概念时，可以直接使用通识背景回答，不要求本地 RAG 存在。
+- 不允许把“原文没有提及”当作拒绝回答用户实际问题的完整答案。
+- 回答现实背景时必须标注这是外部背景或一般理解，不能说成书中原文。
+- 只有具体依赖本地证据时才添加 `[E1]`；通识背景没有本地证据时不要强行引用。
 
 建议行为：
 
@@ -854,6 +861,8 @@ Reader Help 应作为一个明确的轻量产品用例落地，而不是把现�
 
 ### Agent / Retrieval
 
+- `ReaderHelpSystemPrompt.v2` 区分书内事实与外部背景：书内事实必须有原文证据；现实背景和通识解释允许直接回答。
+- `ReaderHelpPolicy` 默认版本更新为 `reader-help-v2`，context recipe 更新为 `reader-help-book-read-so-far-v2`。
 - `Sources/ReaderAgent/ReaderHelp.swift`
   - `ReaderHelpRequest`
   - `ReaderHelpTurn`
@@ -872,7 +881,7 @@ Reader Help 应作为一个明确的轻量产品用例落地，而不是把现�
 ### Reader UI
 
 - `App/Reader/ReaderHelpModel.swift`：内存态 thread、流式缓冲、重试、复制、保存状态
-- `App/Reader/ReaderHelpSheet.swift`：轻量面板、选段、追问、回答、引用与保存入口
+- `App/Reader/ReaderHelpSheet.swift`：轻量面板、选段、追问、回答、引用与保存入口；禁止下滑关闭，X 为唯一 discard 入口
 - `App/Reader/ReaderModel.swift`：选区“问”入口、help thread 生命周期、显式保存 Note
 - `App/Reader/AnnotationUI.swift`：选句工具栏新增“问”
 - `App/AppModel.swift` 与 `App/Library/LibraryModel.swift`：注入共享的 Reader Help service
@@ -904,3 +913,21 @@ swift test
 - `xcodegen generate` 已更新 App 工程引用。
 - 未由 Agent 运行 `xcodebuild`。
 - 真机验收按 `docs/testing/reader-help/2026-09-13-delivery-checklist.md` 执行。
+
+
+---
+
+## 20. 后续修正（2026-09-13）
+
+### 关闭语义
+
+- 禁止 sheet 交互式下滑关闭。
+- 右上角 X 变为 `discard()`：取消请求并清空临时 thread。
+- Citation 跳转等程序化关闭不丢弃 thread。
+
+### 回答边界
+
+- 修正“本地 RAG 没有证据就拒答”的过度约束。
+- 现实背景问题允许用通识回答，同时明确它不是书中原文。
+- 保留 anti-spoiler 与书内原文引用约束。
+- WebSearch 仍为后续能力，不属于本次修正。

@@ -92,3 +92,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Anti-Spoiler CARC 实现完成（`.planning/quick/260913-anti-spoiler-carc/SUMMARY.md`）；373 tests 全绿，Spec 见 `docs/ANTI_SPOILER_SPEC.md`。
 - 2026-09-13：Reader Help 临时选句答疑 Spec 完成（`.planning/quick/260913-reader-help-spec/SUMMARY.md`）；文档见 `docs/READER_HELP_SPEC.md`。
 - 2026-09-13：Reader Help 临时选句答疑代码完成（`.planning/quick/260913-reader-help-delivery/SUMMARY.md`）；382 tests 全绿，真机验收见 `docs/testing/reader-help/2026-09-13-delivery-checklist.md`。
+- 2026-09-13：Reader Help 关闭语义与回答边界修正完成（`.planning/quick/260913-reader-help-dismissal-and-grounding/SUMMARY.md`）；下滑不丢失、X 完全丢弃、Prompt v2 允许现实背景回答，未引入 WebSearch。
