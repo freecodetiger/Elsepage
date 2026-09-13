@@ -99,3 +99,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Reader Help 保存笔记反馈完成（`.planning/quick/260913-reader-help-note-feedback/SUMMARY.md`、`.planning/quick/260913-reader-help-note-decoration/SUMMARY.md`）；保存后正文显示 note underline，并可点击打开。
 - 2026-09-13：Note 重叠命中与预览/编辑双态完成（`.planning/quick/260913-note-overlap-and-preview/SUMMARY.md`）；重叠时提供“笔记 / 高亮”选择器，Note editor 默认 Markdown 预览。
 - 2026-09-13：Note / Highlight 冲突选择器完成（`.planning/quick/260913-annotation-conflict-picker/SUMMARY.md`）；仅真实重叠时二次选择笔记或高亮。
+- 2026-09-13：Annotation Model Refactor Spec 完成（`.planning/quick/260913-annotation-model-spec/SUMMARY.md`）；Range 成为唯一身份，Highlight/Note 作为独立层，待用户确认迁移和交叉规则。
