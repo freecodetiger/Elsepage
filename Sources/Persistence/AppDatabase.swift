@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import LibraryCore
 import ReaderCore
 
 public final class AppDatabase: @unchecked Sendable {
@@ -586,6 +587,12 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "audioFileName", .text)
             }
         }
+        // Annotation identity moves from Highlight/Note parent-child rows to
+        // one TextAnnotation per exact AnnotationRange, with independent highlight
+        // and note layers. Legacy tables stay intact as rollback/audit data.
+        migrator.registerMigration("v28_text_annotations") { db in
+            try Self.migrateTextAnnotations(db)
+        }
         return migrator
     }
 
@@ -594,6 +601,214 @@ public final class AppDatabase: @unchecked Sendable {
     /// active→active, superseded→superseded; confidence ≥0.8→high, ≥0.5→medium,
     /// else low; origin agentInferred (every legacy memory came from the journal
     /// agent pipeline). Internal so tests can re-run it against seeded rows.
+    static func migrateTextAnnotations(_ db: Database) throws {
+        try db.create(table: "textAnnotations", ifNotExists: true) { t in
+            t.column("id", .text).primaryKey()
+            t.column("bookID", .text).notNull().indexed().references("books", onDelete: .cascade)
+            t.column("resourceHref", .text).notNull()
+            t.column("startLocatorJSON", .blob).notNull()
+            t.column("startHref", .text).notNull()
+            t.column("startProgression", .double)
+            t.column("startTotalProgression", .double)
+            t.column("startTextBefore", .text)
+            t.column("startTextHighlight", .text)
+            t.column("startTextAfter", .text)
+            t.column("endLocatorJSON", .blob).notNull()
+            t.column("endHref", .text).notNull()
+            t.column("endProgression", .double)
+            t.column("endTotalProgression", .double)
+            t.column("endTextBefore", .text)
+            t.column("endTextHighlight", .text)
+            t.column("endTextAfter", .text)
+            t.column("rangeKey", .text).notNull()
+            t.column("highlightColor", .text)
+            t.column("createdAt", .datetime).notNull()
+            t.column("updatedAt", .datetime).notNull()
+            t.column("legacyConflict", .boolean).notNull().defaults(to: false)
+            t.uniqueKey(["bookID", "rangeKey"])
+        }
+        try db.create(table: "annotationNotes", ifNotExists: true) { t in
+            t.column("id", .text).primaryKey()
+            t.column("annotationID", .text).notNull().indexed().references("textAnnotations", onDelete: .cascade)
+            t.column("body", .text).notNull()
+            t.column("createdAt", .datetime).notNull()
+            t.column("updatedAt", .datetime).notNull()
+        }
+
+        let highlights = try readLegacyHighlights(db)
+        var retained: [LegacyAnnotationHighlight] = []
+        var discardedHighlightIDs: [UUID] = []
+        for highlight in highlights.sorted(by: { $0.createdAt > $1.createdAt }) {
+            if retained.contains(where: { $0.range.isExactSameRange(as: highlight.range) }) {
+                continue
+            }
+            if retained.contains(where: { $0.range.appearsToOverlapText(with: highlight.range) }) {
+                // Q5-C: preserve the newer crossing highlight. The older
+                // highlight is removed after its notes are safely migrated.
+                discardedHighlightIDs.append(highlight.id)
+                continue
+            }
+            retained.append(highlight)
+        }
+
+        var rangeToAnnotation: [String: UUID] = [:]
+        var legacyHighlightToAnnotation: [UUID: (UUID, String)] = [:]
+        for highlight in retained {
+            try insertAnnotation(
+                db,
+                id: highlight.id,
+                range: highlight.range,
+                color: highlight.color,
+                createdAt: highlight.createdAt,
+                updatedAt: highlight.createdAt
+            )
+            rangeToAnnotation[highlight.range.rangeKey] = highlight.id
+            legacyHighlightToAnnotation[highlight.id] = (highlight.id, highlight.range.rangeKey)
+        }
+
+        for note in try readLegacyNotes(db).sorted(by: { $0.createdAt < $1.createdAt }) {
+            var annotationID: UUID?
+            if let highlightID = note.highlightID,
+               let mapping = legacyHighlightToAnnotation[highlightID],
+               mapping.1 == note.range.rangeKey {
+                annotationID = mapping.0
+            }
+            if annotationID == nil {
+                annotationID = rangeToAnnotation[note.range.rangeKey]
+            }
+            let id: UUID
+            if let annotationID {
+                id = annotationID
+            } else {
+                id = UUID()
+                try insertAnnotation(
+                    db,
+                    id: id,
+                    range: note.range,
+                    color: nil,
+                    createdAt: note.createdAt,
+                    updatedAt: note.updatedAt
+                )
+                rangeToAnnotation[note.range.rangeKey] = id
+            }
+            try db.execute(
+                sql: "INSERT OR IGNORE INTO annotationNotes(id,annotationID,body,createdAt,updatedAt) VALUES(?,?,?,?,?)",
+                arguments: [note.id.uuidString.lowercased(), id.uuidString.lowercased(), note.body, note.createdAt, note.updatedAt]
+            )
+            try db.execute(
+                sql: "UPDATE textAnnotations SET updatedAt=MAX(updatedAt,?) WHERE id=?",
+                arguments: [note.updatedAt, id.uuidString.lowercased()]
+            )
+        }
+
+        for id in discardedHighlightIDs {
+            try db.execute(sql: "DELETE FROM highlights WHERE id=?", arguments: [id.uuidString.lowercased()])
+        }
+    }
+
+    private struct LegacyAnnotationHighlight {
+        let id: UUID
+        let range: AnnotationRange
+        let color: HighlightColor
+        let createdAt: Date
+    }
+
+    private struct LegacyAnnotationNote {
+        let id: UUID
+        let range: AnnotationRange
+        let body: String
+        let highlightID: UUID?
+        let createdAt: Date
+        let updatedAt: Date
+    }
+
+    private static func readLegacyHighlights(_ db: Database) throws -> [LegacyAnnotationHighlight] {
+        try Row.fetchAll(db, sql: "SELECT * FROM highlights").compactMap { row -> LegacyAnnotationHighlight? in
+            let rawID: String = row["id"]
+            let rawColor: String = row["color"]
+            guard let id = UUID(uuidString: rawID),
+                  let color = HighlightColor(rawValue: rawColor) else { return nil }
+            let locator = try legacyLocator(row)
+            let range = AnnotationRange(
+                bookID: try legacyBookID(row),
+                resourceHref: locator.href,
+                startLocator: locator,
+                endLocator: locator
+            )
+            return LegacyAnnotationHighlight(id: id, range: range, color: color, createdAt: row["createdAt"])
+        }
+    }
+
+    private static func readLegacyNotes(_ db: Database) throws -> [LegacyAnnotationNote] {
+        try Row.fetchAll(db, sql: "SELECT * FROM notes").compactMap { row -> LegacyAnnotationNote? in
+            let rawID: String = row["id"]
+            guard let id = UUID(uuidString: rawID) else { return nil }
+            let locator = try legacyLocator(row)
+            let range = AnnotationRange(
+                bookID: try legacyBookID(row),
+                resourceHref: locator.href,
+                startLocator: locator,
+                endLocator: locator
+            )
+            return LegacyAnnotationNote(
+                id: id,
+                range: range,
+                body: row["body"],
+                highlightID: (row["highlightID"] as String?).flatMap(UUID.init(uuidString:)),
+                createdAt: row["createdAt"],
+                updatedAt: row["updatedAt"]
+            )
+        }
+    }
+
+    private static func legacyLocator(_ row: Row) throws -> BookLocator {
+        let progression: Double? = row["progression"]
+        let totalProgression: Double? = row["totalProgression"]
+        let textBefore: String? = row["textBefore"]
+        let textHighlight: String? = row["textHighlight"]
+        let textAfter: String? = row["textAfter"]
+        return try BookLocator(
+            json: row["locatorJSON"],
+            href: row["href"],
+            progression: progression,
+            totalProgression: totalProgression,
+            textBefore: textBefore,
+            textHighlight: textHighlight,
+            textAfter: textAfter
+        )
+    }
+
+    private static func legacyBookID(_ row: Row) throws -> BookID {
+        let raw: String = row["bookID"]
+        guard let uuid = UUID(uuidString: raw) else {
+            throw PersistenceError.corruptRecord(table: "textAnnotations", recordID: raw, field: "bookID")
+        }
+        return BookID(rawValue: uuid)
+    }
+
+    private static func insertAnnotation(
+        _ db: Database,
+        id: UUID,
+        range: AnnotationRange,
+        color: HighlightColor?,
+        createdAt: Date,
+        updatedAt: Date
+    ) throws {
+        try db.execute(sql: """
+            INSERT OR IGNORE INTO textAnnotations
+            (id,bookID,resourceHref,
+             startLocatorJSON,startHref,startProgression,startTotalProgression,startTextBefore,startTextHighlight,startTextAfter,
+             endLocatorJSON,endHref,endProgression,endTotalProgression,endTextBefore,endTextHighlight,endTextAfter,
+             rangeKey,highlightColor,createdAt,updatedAt,legacyConflict)
+            VALUES(?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,0)
+            """, arguments: [
+                id.uuidString.lowercased(), range.bookID.description, range.resourceHref,
+                range.startLocator.json, range.startLocator.href, range.startLocator.progression, range.startLocator.totalProgression, range.startLocator.textBefore, range.startLocator.textHighlight, range.startLocator.textAfter,
+                range.endLocator.json, range.endLocator.href, range.endLocator.progression, range.endLocator.totalProgression, range.endLocator.textBefore, range.endLocator.textHighlight, range.endLocator.textAfter,
+                range.rangeKey, color?.rawValue, createdAt, updatedAt,
+            ])
+    }
+
     public static func backfillBrainItems(_ db: Database) throws {
         try db.execute(sql: """
             INSERT OR IGNORE INTO brainItems
@@ -635,6 +850,8 @@ public final class AppDatabase: @unchecked Sendable {
         "readingSessions",
         "readingPositions",
         "readerPreferences",
+        "annotationNotes",
+        "textAnnotations",
         "notes",
         "highlights",
         "bookChunkEmbeddings",

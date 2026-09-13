@@ -65,7 +65,8 @@ import Testing
         "v19_journal_user_edited_thoughts", "v20_drop_streaming_flag", "v21_brain", "v22_brain_evidence_relations",
         "v23_brain_item_embeddings", "v24_brain_item_revisions", "v25_brain_projection_traces",
         "v26_retire_legacy_memories",
-        "v27_reflection_message_audio"
+        "v27_reflection_message_audio",
+        "v28_text_annotations"
     ])
 }
 
@@ -384,7 +385,7 @@ import Testing
         )
     }
 
-    // Upgrade to head (v27_reflection_message_audio).
+    // Upgrade to head (v28_text_annotations).
     try AppDatabase.migrator.migrate(queue)
     let database = try AppDatabase(writer: queue)
 
@@ -460,6 +461,6 @@ import Testing
     try await GRDBReflectionRepository(database: database).delete(id: reflection)
     let remaining = try await brain.items(kind: .memory)
     #expect(remaining.map { $0.id.rawValue } == ["v26-m1", "v26-m2"].sorted())
-    // v26 remains in migration history; v27 only adds message audio.
+    // v26/v27 remain in migration history; v28 adds the unified annotation model.
     #expect(!AppDatabase.userDataTableOrder.contains("memories"))
 }

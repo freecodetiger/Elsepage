@@ -22,7 +22,7 @@ private func makeBook(fingerprint: String = "abc") -> Book {
 @Test func migrationCreatesReaderFoundationSchemaAndEnablesForeignKeys() throws {
     let database = try AppDatabase.inMemory()
     let tables = try database.writer.read { db in try Set(String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")) }
-    #expect(tables.isSuperset(of: ["books", "readingPositions", "highlights", "notes", "grdb_migrations"]))
+    #expect(tables.isSuperset(of: ["books", "readingPositions", "highlights", "notes", "textAnnotations", "annotationNotes", "grdb_migrations"]))
     let foreignKeys = try database.writer.read { db in try Int.fetchOne(db, sql: "PRAGMA foreign_keys") }
     #expect(foreignKeys == 1)
 }
@@ -39,7 +39,7 @@ private func makeBook(fingerprint: String = "abc") -> Book {
         try AppDatabase.migrator.completedMigrations(db)
     }
 
-    #expect(completed.last == "v27_reflection_message_audio")
+    #expect(completed.last == "v28_text_annotations")
     #expect(try await database.writer.read { db in
         try Bool.fetchOne(db, sql: "SELECT 1") == true
     })

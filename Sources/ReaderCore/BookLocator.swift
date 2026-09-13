@@ -68,6 +68,15 @@ public struct BookLocator: Hashable, Codable, Sendable {
             .filter { !$0.isWhitespace }
     }
 
+    /// Stable key for range identity and persistence lookups. JSON key order is
+    /// canonicalized before encoding.
+    public var canonicalKey: String {
+        guard let data = try? Self.canonicalJSON(json) else {
+            return json.base64EncodedString()
+        }
+        return data.base64EncodedString()
+    }
+
     private static func canonicalJSON(_ data: Data) throws -> Data {
         let object = try JSONSerialization.jsonObject(with: data)
         return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
