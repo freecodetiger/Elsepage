@@ -94,7 +94,6 @@ struct ReaderAnnotationOverlays: View {
                             onSelectColor: { model.createHighlightFromSelection(with: $0) },
                             onNote: { model.beginNoteFromSelection() },
                             onAsk: { model.askAgentFromSelection() },
-                            onReflect: { model.reflectOnSelection() },
                             onCopy: { model.copySelection() }
                         )
                     }
@@ -173,7 +172,6 @@ struct SelectionToolbar: View {
     let onSelectColor: (HighlightColor) -> Void
     let onNote: () -> Void
     let onAsk: () -> Void
-    let onReflect: () -> Void
     let onCopy: () -> Void
 
     var body: some View {
@@ -202,7 +200,6 @@ struct SelectionToolbar: View {
             HStack(spacing: 2) {
                 toolButton("笔记", action: onNote)
                 toolButton("问", action: onAsk)
-                toolButton("聊聊", action: onReflect)
                 toolButton("复制", action: onCopy)
             }
         }
