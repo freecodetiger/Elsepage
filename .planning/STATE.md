@@ -90,3 +90,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：客户端交互性能闭环真机验收通过（`.planning/quick/260913-interaction-perf-acceptance/SUMMARY.md`）；A/C/D/E-P2 通过，B 因当前 Provider 非流式延至 v2 SSE；证据见 `docs/testing/interaction-perf/2026-09-13-interaction-acceptance.json`。
 - 2026-09-13：Voice Reflection 交付水准代码完成（`.planning/quick/260913-voice-delivery/SUMMARY.md`）；365 tests 全绿，真机权限/录音/播放/删除/强杀验收待用户，清单见 `docs/testing/voice/2026-09-13-delivery-checklist.md`。
 - 2026-09-13：Anti-Spoiler CARC 实现完成（`.planning/quick/260913-anti-spoiler-carc/SUMMARY.md`）；373 tests 全绿，Spec 见 `docs/ANTI_SPOILER_SPEC.md`。
+- 2026-09-13：Reader Help 临时选句答疑 Spec 完成（`.planning/quick/260913-reader-help-spec/SUMMARY.md`）；文档见 `docs/READER_HELP_SPEC.md`，实现与真机验收待后续。
