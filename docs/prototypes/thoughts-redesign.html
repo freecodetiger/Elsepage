@@ -124,12 +124,6 @@
       white-space: nowrap;
     }
 
-    .stage-note {
-      max-width: 250px;
-      line-height: 1.65;
-      text-align: right;
-    }
-
     .theme-toggle {
       min-height: 44px;
       padding: 0 16px;
@@ -601,12 +595,53 @@
       border-top: 1px solid var(--phone-line);
     }
 
-    .section-label {
-      margin: 0 0 10px;
-      color: var(--phone-ink-3);
+    .message-heading {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 11px;
+    }
+
+    .identity-name {
+      color: var(--phone-ink);
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1;
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 50%;
       font-size: 11px;
       font-weight: 700;
-      letter-spacing: .12em;
+      line-height: 1;
+    }
+
+    .user-avatar {
+      color: var(--phone-surface);
+      background: var(--phone-ink);
+    }
+
+    .user-avatar svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.8;
+    }
+
+    .ai-avatar {
+      color: var(--phone-ink);
+      background: var(--phone-surface);
+      border: 1px solid var(--phone-line-strong);
+    }
+
+    .ai-avatar svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.7;
     }
 
     .detail-copy {
@@ -624,7 +659,6 @@
       box-shadow: 0 1px 0 rgba(0,0,0,.025);
     }
 
-    .response-panel .section-label { margin-bottom: 9px; }
     .response-panel .detail-copy { color: var(--phone-ink-2); }
 
     .inline-evidence {
@@ -742,8 +776,6 @@
         align-items: flex-start;
       }
 
-      .stage-note { text-align: left; }
-
       .devices {
         grid-template-columns: 1fr;
         gap: 56px;
@@ -756,7 +788,6 @@
       h1 { font-size: 38px; }
       .lede { font-size: 14px; }
       .stage-controls { flex-direction: column; gap: 14px; }
-      .stage-note { max-width: none; }
       .phone-shell {
         width: 100%;
         height: min(844px, calc(100vh - 48px));
@@ -791,10 +822,6 @@
         </p>
       </div>
       <div class="stage-controls">
-        <div class="stage-note">
-          点击左侧卡片会更新记录世界；窄屏会自动滚到详情。<br>
-          概要自动生成并固定。
-        </div>
         <button class="theme-toggle" type="button" id="themeToggle">预览暗色</button>
       </div>
     </header>
@@ -881,11 +908,7 @@
     </section>
 
     <footer class="prototype-footer">
-      <p>
-        说明：这是一个拟真交互原型。搜索通过下拉触发，分组和设置收进工具栏，
-        卡片进入独立记录世界；用户内容像原文，AI 内容像旁注，依据附着在具体回应下。
-      </p>
-      <p>页外 · 减法原型 / 2026.09.14</p>
+      <p>页外 · 想法页原型 / 2026.09.14</p>
     </footer>
   </main>
 
@@ -933,6 +956,12 @@
         ]
       }
     ];
+
+    // Prototype stand-ins for the future profile settings.
+    const identities = {
+      user: "我",
+      assistant: "页外"
+    };
 
     const state = {
       selectedId: records[0].id
@@ -1001,6 +1030,33 @@
       `;
     }
 
+    function identityRow(kind) {
+      if (kind === "user") {
+        return `
+          <div class="message-heading">
+            <span class="avatar user-avatar" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle cx="12" cy="8" r="3.5"></circle>
+                <path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path>
+              </svg>
+            </span>
+            <span class="identity-name">${esc(identities.user)}</span>
+          </div>
+        `;
+      }
+      return `
+        <div class="message-heading">
+          <span class="avatar ai-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="5" y="8" width="14" height="10" rx="3"></rect>
+              <path d="M9 13h.01M15 13h.01M12 4v4M8 18v2M16 18v2"></path>
+            </svg>
+          </span>
+          <span class="identity-name">${esc(identities.assistant)}</span>
+        </div>
+      `;
+    }
+
     function renderDetail() {
       const item = activeItem();
       const hasFollowUp = Boolean(item.followUp && item.followUpResponse);
@@ -1012,24 +1068,24 @@
           <p class="summary-copy">${esc(item.summary)}</p>
         </div>
         <section class="detail-section">
-          <p class="section-label">我的原话</p>
+          ${identityRow("user")}
           <p class="detail-copy">${esc(item.original)}</p>
         </section>
         <section class="detail-section">
+          ${identityRow("ai")}
           <div class="response-panel">
-            <p class="section-label">AI 回应</p>
             <p class="detail-copy">${esc(item.response)}</p>
             ${evidenceDetails(item)}
           </div>
         </section>
         ${hasFollowUp ? `
           <section class="detail-section">
-            <p class="section-label">你继续说</p>
+            ${identityRow("user")}
             <p class="detail-copy">${esc(item.followUp)}</p>
           </section>
           <section class="detail-section">
+            ${identityRow("ai")}
             <div class="response-panel">
-              <p class="section-label">AI 回应</p>
               <p class="detail-copy">${esc(item.followUpResponse)}</p>
             </div>
           </section>
