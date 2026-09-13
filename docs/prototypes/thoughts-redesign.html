@@ -596,34 +596,32 @@
     }
 
     .message-row {
-      display: grid;
-      grid-template-columns: 64px minmax(0, 1fr);
-      gap: 14px;
-      align-items: start;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
     }
 
-    .message-identity {
-      display: flex;
+    .message-row > .avatar {
+      margin-top: 1px;
+    }
+
+    .message-body {
       min-width: 0;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 7px;
-      padding-top: 1px;
+      flex: 1 1 auto;
     }
 
     .identity-name {
-      max-width: 64px;
-      overflow: hidden;
       color: var(--phone-ink);
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 650;
-      line-height: 1.2;
-      text-overflow: ellipsis;
+      line-height: 1.65;
       white-space: nowrap;
     }
 
-    .message-content {
-      min-width: 0;
+    .message-copy {
+      color: var(--phone-ink);
+      font-size: 16px;
+      line-height: 1.78;
     }
 
     .avatar {
@@ -661,15 +659,8 @@
       stroke-width: 1.7;
     }
 
-    .detail-copy {
-      margin: 0;
-      color: var(--phone-ink);
-      font-size: 16px;
-      line-height: 1.78;
-    }
-
     .inline-evidence {
-      margin-top: 10px;
+      margin-top: 8px;
       padding-top: 8px;
       border-top: 1px solid color-mix(in srgb, var(--phone-line) 72%, transparent);
     }
@@ -1037,7 +1028,7 @@
       `;
     }
 
-    function messageRow(kind, content) {
+    function messageRow(kind, text, extras = "") {
       const user = kind === "user";
       const avatar = user
         ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="3.5"></circle><path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path></svg>`
@@ -1046,11 +1037,11 @@
       const name = user ? identities.user : identities.assistant;
       return `
         <div class="message-row">
-          <div class="message-identity">
-            <span class="avatar ${avatarClass}" aria-hidden="true">${avatar}</span>
-            <span class="identity-name">${esc(name)}</span>
+          <span class="avatar ${avatarClass}" aria-hidden="true">${avatar}</span>
+          <div class="message-body">
+            <span class="identity-name">${esc(name)}：</span><span class="message-copy">${esc(text)}</span>
+            ${extras}
           </div>
-          <div class="message-content">${content}</div>
         </div>
       `;
     }
@@ -1066,17 +1057,17 @@
           <p class="summary-copy">${esc(item.summary)}</p>
         </div>
         <section class="detail-section">
-          ${messageRow("user", `<p class="detail-copy">${esc(item.original)}</p>`)}
+          ${messageRow("user", item.original)}
         </section>
         <section class="detail-section">
-          ${messageRow("ai", `<p class="detail-copy">${esc(item.response)}</p>${evidenceDetails(item)}`)}
+          ${messageRow("ai", item.response, evidenceDetails(item))}
         </section>
         ${hasFollowUp ? `
           <section class="detail-section">
-            ${messageRow("user", `<p class="detail-copy">${esc(item.followUp)}</p>`)}
+            ${messageRow("user", item.followUp)}
           </section>
           <section class="detail-section">
-            ${messageRow("ai", `<p class="detail-copy">${esc(item.followUpResponse)}</p>`)}
+            ${messageRow("ai", item.followUpResponse)}
           </section>
         ` : ""}
         <div class="composer-placeholder">
