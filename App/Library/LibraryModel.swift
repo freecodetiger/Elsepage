@@ -191,6 +191,7 @@ final class LibraryModel {
                 throw error
             }
             files.commitDeletion(trashed)
+            readium.invalidate(files.url(for: book.id))
             books.removeAll { $0.id == book.id }
             readingProgress[book.id] = nil
             bookStats[book.id] = nil

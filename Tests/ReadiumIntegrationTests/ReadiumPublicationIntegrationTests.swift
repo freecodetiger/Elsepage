@@ -19,6 +19,17 @@ final class ReadiumPublicationIntegrationTests: XCTestCase {
         XCTAssertEqual(publication.readingOrder.count, 1)
     }
 
+    func testReadiumCachesUnchangedPublicationAndCanInvalidateIt() async throws {
+        let services = ReadiumServices()
+        let first = try await services.open(fixture, allowUserInteraction: false)
+        let cached = try await services.open(fixture, allowUserInteraction: false)
+        XCTAssertTrue(first === cached)
+
+        services.invalidate(fixture)
+        let reopened = try await services.open(fixture, allowUserInteraction: false)
+        XCTAssertFalse(first === reopened)
+    }
+
     func testReadiumMetadataFeedsFingerprintAndIdempotentImport() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }

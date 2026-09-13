@@ -10,6 +10,7 @@
 
 ## 工程注意
 
-- 生成工程：`xcodegen generate`；便携测试：`swift test`（当前 123 个测试）；App 层用 unsigned iOS build 门禁。
-- `swift test` 会改写 `Package.resolved`（丢 Readium pins），跑完记得 `git checkout -- Package.resolved`。
+- 项目开发与验证分工以 [AGENTS.md](AGENTS.md) 为准。开发业务流程、修复性能问题或编写测试时，先读 [DEBUG 测试闭环](docs/DEBUG-LOOP.md)，按其维护流程更新场景与能力清单。
+- 生成工程：`xcodegen generate`；便携测试：`swift test`。Xcode 构建安装、模拟器、真机手势操作和 TestFlight 由用户执行；Agent 可在已运行的 DEBUG App 上执行 HTTP 业务场景和读取性能数据。
+- `swift test` 可能改写 `Package.resolved`（丢 Readium pins）；运行前记录状态，结束后仅恢复本次测试造成的改写，保留用户已有修改。
 - 推送走本地代理（`git config http.proxy http://127.0.0.1:7890`）。

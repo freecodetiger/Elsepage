@@ -37,6 +37,8 @@ It does **not** own your progress bar and call it a day. It does not summarize t
 
 ---
 
+开发与测试：项目已有 [AI DEBUG 测试闭环](docs/DEBUG-LOOP.md)，支持 USB 自动连接、性能报告读取和隔离数据库中的 Reflection 保存验证。业务改动与测试扩展遵循 [Agent 维护约定](AGENTS.md)。当前能力与尚未覆盖的流程见测试文档。
+
 ## Why Elsepage?
 
 Reading apps fail in two boring ways:

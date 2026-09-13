@@ -27,6 +27,24 @@ private func makeBook(fingerprint: String = "abc") -> Book {
     #expect(foreignKeys == 1)
 }
 
+@Test func backgroundOpenMigratesFileBackedDatabase() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+    let database = try await AppDatabase.openOffMain(
+        path: root.appendingPathComponent("readloop.sqlite").path
+    )
+    let completed = try await database.writer.read { db in
+        try AppDatabase.migrator.completedMigrations(db)
+    }
+
+    #expect(completed.last == "v26_retire_legacy_memories")
+    #expect(try await database.writer.read { db in
+        try Bool.fetchOne(db, sql: "SELECT 1") == true
+    })
+}
+
 @Test func bookIdentityIsStableAndFingerprintIsUnique() async throws {
     let database = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: database)

@@ -195,6 +195,38 @@ struct ReflectionTextEditor: View {
 }
 
 private final class ReflectionUITextView: UITextView {
+    private var perfTouchAt: TimeInterval?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if Perf.shared.isEnabled {
+            perfTouchAt = isFirstResponder ? nil : touches.map(\.timestamp).min()
+            Perf.shared.event("input.touchDelivered focused=\(isFirstResponder)")
+            Perf.shared.noteScrollChain(of: self)
+            Perf.shared.probeMainQueue()
+        }
+        super.touchesBegan(touches, with: event)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        Perf.shared.event("input.becomeFirstResponder.begin")
+        Perf.shared.probeMainQueue()
+        let accepted = Perf.shared.timed(.responderAcquire) { super.becomeFirstResponder() }
+        Perf.shared.event("input.becomeFirstResponder.end accepted=\(accepted)")
+        return accepted
+    }
+
+    func noteEditingBegan() {
+        guard Perf.shared.isEnabled else { return }
+        defer { perfTouchAt = nil }
+        if let began = perfTouchAt {
+            let elapsed = ProcessInfo.processInfo.systemUptime - began
+            if elapsed >= 0, elapsed < 3 {
+                Perf.shared.record(.inputTouchToEditing, ms: elapsed * 1000)
+            }
+        }
+        Perf.shared.event("input.editingDelegate.begin")
+    }
+
     private let placeholderLabel = UILabel()
     private var lastLayoutWidth: CGFloat = 0
     var onWidthChanged: (() -> Void)?
@@ -329,6 +361,7 @@ private struct ReflectionUIKitTextView: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
+            (textView as? ReflectionUITextView)?.noteEditingBegan()
             synchronization.editingBegan()
             if !isFocused.wrappedValue { isFocused.wrappedValue = true }
             updatePresentation(of: textView)
@@ -654,6 +687,11 @@ final class ReflectionConversationModel: Identifiable {
     var agentNotice: String?
     var errorMessage: String?
     private var followUpID = UUID()
+    private var streamingBuffer = StreamingResponseBuffer()
+    private var streamingFlushTask: Task<Void, Never>?
+    private var streamingFlushGeneration = 0
+
+    private static let streamingDebounceNanoseconds: UInt64 = 50_000_000
 
     init(
         reflection: Reflection,
@@ -775,10 +813,13 @@ final class ReflectionConversationModel: Identifiable {
 
     private func consume(_ stream: AsyncStream<ReaderAgentEvent>) async {
         isResponding = true
+        cancelStreamingFlush()
+        streamingBuffer.begin()
         streamingResponse = ""
         agentNotice = nil
         contextDisclosure = nil
         defer { isResponding = false }
+        var didComplete = false
         for await event in stream {
             switch event {
             case .started:
@@ -795,15 +836,18 @@ final class ReflectionConversationModel: Identifiable {
                     }
                 }
             case .textDelta(let text):
-                streamingResponse = Perf.shared.timed(.streamDelta) {
-                    Self.withoutCitationBlock(streamingResponse + text)
-                }
+                streamingBuffer.append(text)
+                scheduleStreamingFlush()
             case .citationsValidated(let provenance):
                 if let messageID = provenance.evidence.first?.messageID {
                     responseProvenance[messageID] = provenance
                 }
             case .completed:
+                flushStreamingResponse()
+                cancelStreamingFlush()
+                streamingBuffer.complete()
                 streamingResponse = ""
+                didComplete = true
             case .contextDisclosed(let disclosure):
                 contextDisclosure = disclosure
             case .cancelled:
@@ -813,6 +857,11 @@ final class ReflectionConversationModel: Identifiable {
             case .failed(let failure):
                 agentNotice = Self.message(for: failure)
             }
+        }
+        if !didComplete {
+            flushStreamingResponse()
+            cancelStreamingFlush()
+            streamingBuffer.discardPending()
         }
         do {
             try await reloadMessages()
@@ -844,6 +893,41 @@ final class ReflectionConversationModel: Identifiable {
     private static func withoutCitationBlock(_ content: String) -> String {
         guard let range = content.range(of: "---CITATIONS---") else { return content }
         return String(content[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func scheduleStreamingFlush() {
+        guard streamingFlushTask == nil else { return }
+        let generation = streamingFlushGeneration
+        streamingFlushTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.streamingDebounceNanoseconds)
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.flushStreamingResponse(generation: generation)
+        }
+    }
+
+    private func cancelStreamingFlush() {
+        streamingFlushGeneration &+= 1
+        streamingFlushTask?.cancel()
+        streamingFlushTask = nil
+    }
+
+    private func flushStreamingResponse(generation: Int? = nil) {
+        guard generation == nil || generation == streamingFlushGeneration else { return }
+        guard streamingBuffer.hasPendingText else {
+            streamingFlushTask = nil
+            return
+        }
+        streamingFlushTask = nil
+        let next = Perf.shared.timed(.streamDelta) {
+            streamingBuffer.flush(using: Self.withoutCitationBlock)
+        }
+        if streamingResponse != next {
+            streamingResponse = next
+        }
     }
 
     private static func message(for failure: ReaderAgentFailure) -> String {
@@ -1172,6 +1256,7 @@ struct ReflectionConversationView: View {
                     Color.clear.frame(height: 1).id("reflection-conversation-bottom")
                 }
                 .padding(ElsepageTheme.Spacing.page)
+                .background(ConversationTouchDelivery())
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if isComposerFocused { isComposerFocused = false }
@@ -1181,11 +1266,7 @@ struct ReflectionConversationView: View {
             .defaultScrollAnchor(.bottom)
             .background(Color.elsepageBackground)
             .onChange(of: isComposerFocused) { _, focused in
-                if focused {
-                    withAnimation(.snappy(duration: 0.2)) {
-                        proxy.scrollTo("reflection-conversation-bottom", anchor: .bottom)
-                    }
-                }
+                Perf.shared.event("composer.focus changed=\(focused)")
             }
             .onChange(of: model.messages.count) { _, _ in
                 proxy.scrollTo("reflection-conversation-bottom", anchor: .bottom)
@@ -1280,6 +1361,58 @@ struct ReflectionConversationView: View {
         }
         if disclosure.connectedReflectionID != nil { parts.append("连接过去的一则想法") }
         return parts.joined(separator: "，")
+    }
+}
+
+/// Only the conversation's outer scroll container opts out of delayed delivery.
+/// UIKit still owns long-press recognition and cancellation when scrolling begins.
+private struct ConversationTouchDelivery: UIViewRepresentable {
+    func makeUIView(context: Context) -> Probe {
+        let view = Probe()
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ uiView: Probe, context: Context) { uiView.attach() }
+
+    static func dismantleUIView(_ uiView: Probe, coordinator: ()) { uiView.restore() }
+
+    final class Probe: UIView {
+        private weak var scroll: UIScrollView?
+        private var originalDelay = true
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { restore() } else { attach() }
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            attach()
+        }
+
+        func attach() {
+            guard window != nil else { return }
+            var ancestor = superview
+            while let view = ancestor {
+                if let candidate = view as? UIScrollView, candidate.isScrollEnabled {
+                    guard scroll !== candidate else { return }
+                    restore()
+                    scroll = candidate
+                    originalDelay = candidate.delaysContentTouches
+                    candidate.delaysContentTouches = false
+                    Perf.shared.event("conversation.delaysContentTouches=false")
+                    return
+                }
+                ancestor = view.superview
+            }
+            restore()
+        }
+
+        func restore() {
+            if let scroll { scroll.delaysContentTouches = originalDelay }
+            scroll = nil
+        }
     }
 }
 

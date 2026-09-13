@@ -1,8 +1,8 @@
 # 客户端交互性能与渲染架构 Spec（供后续开发阶段参考）
 
-> 状态：**方向已定案（2026-09-05）；尚未进入实现**
+> 状态：**方向已定案（2026-09-05）；工作包 A/B/C/E-P2 已落代码，待 App target 与真机验收**
 > 定案：执行定位 = 转 active 执行计划 + ADR 按阶段推进；工作包 A 迁移面 = **最小面（会话 + 档案正文）**；工作包 B = **去抖合并解析（纯增量留二期）**；基线来源 = **近期可提供真机配合采基线**（R3/R4 尽早闭合）。配套 `docs/adr/0002-client-interaction-performance.md` 与 `docs/exec-plans/active/client-interaction-performance.md`。
-> 更新日期：2026-09-05
+> 更新日期：2026-09-12
 > 适用范围：iPhone/iPad 客户端；Reader 打开、会话与时间线的正文渲染、文本选区、键盘交互、Agent 流式输出
 > 前置阅读：`ReadLoop_PRD.md`、`ReadLoop_Technical_Design.md`、`docs/READER_EXPERIENCE_OPTIMIZATION_PLAN.md`
 > 证据基线：文中所有 `path:line` 均为调研时的源码位置；结论分「**已证**（据代码可直接判断）」「**待验证**（需 Instruments/真机确认，通常用 ⚠️ 标注）」。
@@ -40,7 +40,7 @@ SwiftUI + Observation（`@MainActor @Observable final class XxxModel`）+ 下层
 | GRDB 读写 | 全仓仓库方法全部 `await db.writer.read/write`（异步重载，闭包跑在 GRDB 私有串行队列）；`AppDatabase` 持 `DatabaseQueue`（`Sources/Persistence/AppDatabase.swift:6-23`） | 主 actor 只做续体，**不阻塞** |
 | Agent 流式产出端 | `ReaderAgent.respond` 返回 `AsyncStream<ReaderAgentEvent>`，内部 `Task` 建在非隔离 async 方法（`Sources/ReaderAgent/ReaderAgent.swift:128-148`），`AgentExecutor` 再开一层 `Task` + 流（`Sources/AgentRuntime/AgentExecutor.swift:13-67`） | 生成端在后台 executor，主 actor 只 `for await` 消费 |
 
-**⚠️ 例外（主线程同步碰 DB）：冷启动迁移。** `AppDatabase.init` 内同步 `migrator.migrate(writer)`（`AppDatabase.swift:10`），在 `@MainActor AppModel.start`（`App/AppModel.swift:46`）触发 v1–v25 全量迁移。与三卡点无关，但归入工作包 E（低优先级）。
+**⚠️ 历史例外（主线程同步碰 DB）：冷启动迁移。** `AppDatabase.init` 内同步 `migrator.migrate(writer)`（`AppDatabase.swift:10`）曾由 `@MainActor AppModel.start`（`App/AppModel.swift:46`）触发 v1–v26 全量迁移；E-P2 已通过 `AppDatabase.openOffMain(path:)` 将该步骤移出主 actor。与三卡点无关，保留在工作包 E 作为并发接缝记录。
 
 ### 1.3 三个卡点与根因的对照
 
@@ -89,7 +89,7 @@ SwiftUI + Observation（`@MainActor @Observable final class XxxModel`）+ 下层
 
 ### 3.1 现状与代价（已证）
 
-- 只读可选中正文 = 一个自报高度的 `FitTextView`（`App/DesignSystem/SelectableText.swift:150-184`）：
+- A 前基线：只读可选中正文 = 一个自报高度的 `FitTextView`（`App/DesignSystem/SelectableText.swift:150-184`）：
   - `intrinsicContentSize` **每次被查询**都对 `attributedText` 做 `boundingRect(.usesLineFragmentOrigin, .usesFontLeading)`（`:159-168`）——O(文本长度)。
   - `layoutSubviews` 检测宽度变化后 `invalidateIntrinsicContentSize()`（`:170-177`）——宽度一变，重测。
   - `updateUIView` 里 `attributedText != attributedText` 做整串内容比较（`:32`）。
@@ -98,7 +98,9 @@ SwiftUI + Observation（`@MainActor @Observable final class XxxModel`）+ 下层
   - `ThoughtsView` 档案（`App/Thoughts/ThoughtsView.swift:120-121`）：外层 LazyVStack，但**懒粒度是"月/书 section"而非单卡**（`:187-274`），一个 section 内的卡 + 展开块同时 alive；展开块内含 Agent/用户消息正文（`:429/:436`、`:471`）。
   - Journal 卡在 LazyVStack（`ThoughtsView.swift:215-228`），收起/展开即建毁正文块。
   - MyMind/Today 的正文多为普通 `Text` + `.textSelection(.enabled)`（不走 FitTextView；选区只有系统菜单，无手柄），**本次不纳入 A 的迁移**，只保留对测量原则的遵守。
-- 富文本构建：`AgentMarkdownText.attributedContent`（`App/DesignSystem/AgentMarkdownText.swift:48-58`）每次 body 求值都对整串 `AttributedString(markdown:.full)` 重解析，随即 `makeSelectableMarkdown`（`SelectableText.swift:89-113`）逐 run 重建 `NSAttributedString`。
+
+> 实现记录（2026-09-12）：`MessageText`、`RichTextBuilder` 和 `TextMeasureCache` 已加入 DesignSystem；`AgentMarkdownText` 与 `SelectableTextBody` 目前保留为薄壳，实际构建和测量已通过缓存门面执行。Phase 1 验收仍需 Xcode App 构建和真机对照，不以包测试替代。
+- A 前基线：富文本构建由 `AgentMarkdownText.attributedContent`（`App/DesignSystem/AgentMarkdownText.swift:48-58`）每次 body 求值对整串 Markdown 重解析并逐 run 重建 `NSAttributedString`；当前路径由 `RichTextBuilder` 按内容与样式缓存结构解析和落字结果。
 - **死路径提醒**：`BrainDiscussionSheet`（`App/MyMind/MyMindView.swift:1069-1163`）当前无展示点（不可达），但它自己持 `@State reply` + `Text(reply).textSelection(.enabled)`，**不经过 A/B 的任何组件**——重构时不要把它误当迁移对象，也不要在它身上重复投入。
 
 ### 3.2 目标形态
@@ -180,6 +182,8 @@ MessageText                       // SwiftUI 门面：宽度=提案，高度=查
 - UI 手感：流式整条长回复过程中无可见掉帧（配合 XCUITest/F 的采样）。
 - 行为等价：去抖后最终呈现文本与现有逐 delta 呈现**字节一致**；`withoutCitationBlock` 语义、`.completed` 清空、自动滚动锚点（`SessionReflectionSheet.swift:1198-1200`）不受影响。
 
+> 实现记录（2026-09-13）：当前 Provider 按 PRD §21.3 固定非流式，`supportsStreaming=false`；OpenAI-compatible 与 Anthropic 客户端都只在完整响应返回后 yield 一个 `.textDelta`，随后 yield `.completed`。v7 真机因此记录 `streamDelta n=1`，界面一次性出现完整回复，符合当前产品架构，不是 B 的回归。`StreamingResponseBuffer` 仍作为未来 SSE 路径的防线保留；B 的真实收益验收推迟到 v2 真流式，不能把当前单批次表现归因于 50ms 去抖。
+
 ---
 
 ## 5. 工作包 C：阅读器打开管线
@@ -188,7 +192,7 @@ MessageText                       // SwiftUI 门面：宽度=提案，高度=查
 
 ### 5.1 现状（已证）
 
-- 打开顺序：点击书 → `AppShell` 以 `fullScreenCover` 呈现 `ReaderScreen`（`App/AppShell.swift:42-48`，`ReaderScreen` 在 `App/Reader/ReaderScreen.swift`）→ body 以 `model.isPrepared` 门闩：false 显示 spinner（`:29-40`）→ `.task { await model.prepare() }`（`:54`）→ `prepare()` 串行 DB 四连查 + markOpened（`ReaderModel.swift:128-152`）→ `isPrepared=true` → 挂载 `ReadiumReaderView` → `Coordinator.open`（`ReadiumReaderView.swift:39-107`）在 @MainActor Task 内 `await readium.open` 再同步构造 `EPUBNavigatorViewController`。
+- C 前基线：点击书 → `AppShell` 以 `fullScreenCover` 呈现 `ReaderScreen`（`App/AppShell.swift:42-48`，`ReaderScreen` 在 `App/Reader/ReaderScreen.swift`）→ body 以 `model.isPrepared` 门闩：false 显示 spinner（`:29-40`）→ `.task { await model.prepare() }`（`:54`）→ `prepare()` 串行 DB 四连查 + markOpened（`ReaderModel.swift:128-152`）→ `isPrepared=true` → 挂载 `ReadiumReaderView` → `Coordinator.open`（`ReadiumReaderView.swift:39-107`）在 @MainActor Task 内 `await readium.open` 再同步构造 `EPUBNavigatorViewController`。
 - **首帧硬依赖 vs 可后置**（读 `ReadiumReaderView.swift:44-98` 与 Readium 源码）：
 
 | 数据 | 何时需要 | 判定 |
@@ -200,14 +204,16 @@ MessageText                       // SwiftUI 门面：宽度=提案，高度=查
 | markOpened | 只影响书架排序 | **无关首帧** |
 | chapters（manifest） | `Self.chapters(from:)`（`ReadiumReaderView.swift:51`） | 不依赖 DB，随 open 即可 |
 
-- **Publication 零缓存**：`ReadiumServices.open`（`App/Reader/ReadiumServices.swift:28-32`）每次 `retrieve + publicationOpener.open`；消费方除阅读器外还有元数据读取（`App/Library/ReadiumMetadataReader.swift:11,23`，同书导入时两次独立 open）与建索引（`App/Reader/ReadiumBookIndexer.swift:146`）。
+- **C 前基线：Publication 零缓存**：`ReadiumServices.open`（`App/Reader/ReadiumServices.swift:28-32`）每次 `retrieve + publicationOpener.open`；消费方除阅读器外还有元数据读取（`App/Library/ReadiumMetadataReader.swift:11,23`，同书导入时两次独立 open）与建索引（`App/Reader/ReadiumBookIndexer.swift:146`）。
 - **无"首帧就绪"公开回调**（Readium 源码：`RT/Navigator/…`）：
   - `NavigatorDelegate` 仅 `locationDidChange`/`didJumpTo`/`presentError`/`didFailToLoadResourceAt`/…；`VisualNavigatorDelegate` 有 `presentationDidChange`；`EPUBNavigatorDelegate` 只加 `setupUserScripts`。**没有 didFinishLoading/isReady**。
   - 最可靠就绪信号 = **首次 `locationDidChange`**：它在"当前 spread 已加载、能算出位置"之后触发（`PaginationView.loadPages` → spread 就绪 → `updateCurrentLocation` → delegate）；App 在加 view 前已设 delegate（`ReadiumReaderView.swift:77-88`），不会漏首次。
   - 失败反向信号：`didFailToLoadResourceAt` / `presentError`（可作揭盖 + 报错出口）。
 - **⚠️ 主执行器负担**：从 @MainActor Task 内 `await` 的非隔离 async（Readium streamer/shared 解析路径源码未见 `Task.detached`/全局队列跳转），其同步段跑在主执行器。EPUB 嗅探/解包/OPF+NCX 解析/positions 计算与首个 spread 的 WKWebView 创建都在主线程 CPU 段。**据源码判断，掉帧量级待 Instruments 证实。**
 - **进程内冷启动**：GCDWebServer 惰性启动，首次 `serve` 在 `EPUBNavigatorViewController` 构造期（`RT/.../GCDHTTPServer.swift:189-201`）；WKWebView 不在 navigator init 同步创建，而在异步 initialize → pagination → 首个 spread 创建。webview/WebKit 进程冷启动叠加在首次打开。
-- **销毁/复开**：`dismantle` → `cancelOpening`（`ReadiumReaderView.swift:23-26,109-113`）；navigator/Publication 随 fullScreenCover 关闭释放；httpServer 是 AppModel 级共享、**不随退出 stop**（只 remove 本 navigator 端点）。复开 = 新建 ReaderModel → 重跑 DB → 重解析 Publication → 新建 webview，全流程重来。
+- **C 前基线：销毁/复开**：`dismantle` → `cancelOpening`（`ReadiumReaderView.swift:23-26,109-113`）；navigator/Publication 随 fullScreenCover 关闭释放；httpServer 是 AppModel 级共享、**不随退出 stop**（只 remove 本 navigator 端点）。复开 = 新建 ReaderModel → 重跑 DB → 重解析 Publication → 新建 webview，全流程重来。
+
+> 实现记录（2026-09-12）：C 已将 position/preferences 提升为首帧唯一数据库硬依赖，highlights、notes、`markOpened` 延后处理；`ReadiumServices` 提供按本地文件签名与交互权限区分的 4 项 LRU Publication 缓存、预热和并发打开合并。缓存只复用解析后的 `Publication`，navigator/WKWebView 仍按打开生命周期新建；删除书籍会主动失效对应条目。Xcode 构建和真机首帧对照仍待验收。
 
 ### 5.2 目标时序（C）
 
@@ -307,13 +313,16 @@ MessageText                       // SwiftUI 门面：宽度=提案，高度=查
 
 ### 7.3 冷启动迁移离主（P2）
 
-- `AppModel.start` 目前 `AppDatabase(path:)` 同步跑 v1–v25 迁移（`App/AppModel.swift:46`）。处置：迁移放到启动后台任务（`Task.detached` 或非 MainActor 上下文），UI 先出 launch/骨架，迁移完成后再接续 `library.reload` 等。迁移读写都在 GRDB 队列/独立上下文执行，完成态回主 actor。
+- 此前 `AppModel.start` 由 `AppDatabase(path:)` 同步跑 v1–v26 迁移（原 `App/AppModel.swift:46`）。处置：迁移放到启动后台任务（`Task.detached` 或非 MainActor 上下文），UI 先出 launch/骨架，迁移完成后再接续 `library.reload` 等。迁移读写都在 GRDB 队列/独立上下文执行，完成态回主 actor。
 - 与三卡点无直接关系，作为独立低优先级项进入 backlog；**先由 F 基线的启动段度量决定是否本轮做**。
+
+> 实现记录（2026-09-12）：`AppDatabase.openOffMain(path:)` 通过 `Task.detached` 创建 file-backed `DatabaseQueue` 并运行现有 migrator；`AppModel.start()` 等待该后台任务完成后才在 MainActor 上组装 repositories/models。同步 initializer 保留给已有后台调用方和 in-memory 测试，迁移错误继续由 `start()` 捕获并显示为 `startupError`。包级 `backgroundOpenMigratesFileBackedDatabase` 回归测试验证 head migration 与 writer 可用。
 
 ### 7.4 验收（E）
 
 - 红线以代码评审规则落库；新增正文渲染路径在 review 时按 §7.2 五条过一遍。
 - 冷启动迁移若本轮做：启动到可交互（Today 首帧）的主线程阻塞段降到迁移后台化后的预算内。
+- 代码侧已完成：`swift test` 全部通过，新增后台打开回归测试通过；需用户用 Xcode 真机重装后观察启动骨架到 Today 可交互的体感。当前 `/perf` 尚未单独记录 `launchInteractive`，以手测为准。
 
 ---
 
@@ -386,7 +395,7 @@ MessageText                       // SwiftUI 门面：宽度=提案，高度=查
 
 **已证（据代码可直接判断）**
 - GRDB 异步离主：`Sources/Persistence/AppDatabase.swift:6-23`；各仓库 `await db.writer.read/write` 全量统计
-- 冷启动迁移同步在主：`AppDatabase.swift:10`、`App/AppModel.swift:46`
+- 冷启动迁移历史上同步在主：`AppDatabase.swift:10`、`App/AppModel.swift:46`；E-P2 已改为 `AppDatabase.openOffMain(path:)`
 - Agent 产出端离主：`Sources/ReaderAgent/ReaderAgent.swift:128-148`、`Sources/AgentRuntime/AgentExecutor.swift:13-67`
 - 流式消费整串重解析：`SessionReflectionSheet.swift:776-820`（含 `:797-798` 去 citation）、`AgentMarkdownText.swift:48-58`、`SelectableText.swift:89-113`
 - FitTextView 整串量高：`SelectableText.swift:159-177`；整串比较 `:32`

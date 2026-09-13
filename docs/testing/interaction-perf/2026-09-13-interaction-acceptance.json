@@ -1,0 +1,56 @@
+{
+  "capturedAt": "2026-09-13",
+  "platform": "iOS 26.6",
+  "instrumentationVersion": 7,
+  "reader": {
+    "cold": {
+      "readerOpenMs": 766.3729190826416,
+      "readerParseMs": 7.150053977966309,
+      "readerToFirstPageMs": 693.2669878005981,
+      "cacheHit": false
+    },
+    "reopen": {
+      "readerOpenMs": 470.37196159362793,
+      "readerParseMs": 1.1249780654907227,
+      "readerToFirstPageMs": 422.9389429092407,
+      "cacheHit": true
+    },
+    "visualResult": "pass"
+  },
+  "keyboard": {
+    "ordinaryColdFirst": {
+      "touchToEditingMs": 130.62083336990327,
+      "becomeFirstResponderMs": 49.893975257873535,
+      "touchToWillShowMs": 73.57949996367097,
+      "mainQueueMaxDelayMs": 28.362458338961005
+    },
+    "repeated": {
+      "touchToEditingMsRange": [93.79616670776159, 102.9],
+      "becomeFirstResponderMsRange": [26.46, 27.9],
+      "touchToWillShowMsRange": [34.9, 37.3]
+    },
+    "systemDeclaredAnimationMs": 383.3,
+    "bounceAfterDidShow": "fixed",
+    "autofocusSheets": "pass"
+  },
+  "selection": {
+    "firstTouchDeliveryMs": 45.2,
+    "becomeFirstResponderMs": 9.744048118591309,
+    "touchToNonemptySelectionMs": 597.818750073202,
+    "mainQueueMaxDelayMs": 137.65099993906915,
+    "dragResult": "pass"
+  },
+  "textMeasureCache": {
+    "stableMissesDuringKeyboardAndSelection": 22,
+    "laterHits": 2,
+    "laterMisses": 26
+  },
+  "nonStreamingProvider": {
+    "streamDeltaBatches": 1,
+    "result": "expected-current-architecture"
+  },
+  "coldLaunch": {
+    "manualResult": "pass"
+  },
+  "notes": "Only redacted performance and interaction outcomes are recorded; no book text, user text, URLs, tokens, or device identifiers are included."
+}

@@ -100,6 +100,7 @@ final class ReaderModel {
     @ObservationIgnored private var noteSaveTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
+    @ObservationIgnored private var deferredPreparationTask: Task<Void, Never>?
     @ObservationIgnored var onSelectionFinished: (() -> Void)?
     /// Phase-0 perf anchor: set by ReaderScreen when the cover opens; the
     /// coordinator records readerOpen = now → first locationDidChange.
@@ -130,22 +131,44 @@ final class ReaderModel {
     }
     func prepare() async {
         guard !isPrepared else { return }
+        // Begin EPUB parsing before the small DB gate. ReadiumServices joins
+        // this task when the navigator asks for the same publication.
+        readium.preload(fileURL, allowUserInteraction: true)
         do {
-            let position = try await repository.position(for: book.id)
+            // Only position and preferences gate navigator construction. The
+            // remaining reads are presentation data and can settle after the
+            // first frame is already on screen.
+            async let positionTask = repository.position(for: book.id)
+            async let preferencesTask = repository.preferences(for: book.id)
+            let (position, loadedPreferences) = try await (positionTask, preferencesTask)
             try Task.checkCancellation()
             if initialLocatorJSON == nil {
                 initialLocatorJSON = position?.locator.json
                 currentLocator = position?.locator
                 progress = position?.locator.totalProgression ?? 0
             }
-            preferences = try await repository.preferences(for: book.id)
-            try Task.checkCancellation()
-            highlights = try await repository.highlights(for: book.id)
-            notes = try await repository.notes(for: book.id)
-            try Task.checkCancellation()
-            try await books.markOpened(book.id, at: Date())
-            try Task.checkCancellation()
+            preferences = loadedPreferences
             isPrepared = true
+
+            let repository = self.repository
+            let books = self.books
+            let bookID = book.id
+            deferredPreparationTask = Task { [weak self] in
+                do {
+                    async let highlightsTask = repository.highlights(for: bookID)
+                    async let notesTask = repository.notes(for: bookID)
+                    let (loadedHighlights, loadedNotes) = try await (highlightsTask, notesTask)
+                    try Task.checkCancellation()
+                    guard let self else { return }
+                    self.highlights = loadedHighlights
+                    self.notes = loadedNotes
+                    try await books.markOpened(bookID, at: Date())
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self?.errorMessage = error.localizedDescription
+                }
+            }
         } catch is CancellationError {
             return
         } catch {

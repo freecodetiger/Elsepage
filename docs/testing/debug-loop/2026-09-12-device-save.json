@@ -1,0 +1,134 @@
+{
+  "status": {
+    "actions": [
+      "reflection.submit"
+    ],
+    "authentication": "none-usb-loopback",
+    "build": "1",
+    "busy": false,
+    "environment": "isolated-memory-grdb",
+    "instrumentationVersion": 5,
+    "protocolVersion": 1,
+    "runID": "2166E003-321A-4E03-8BC3-A0FCDEF611D0",
+    "scope": "reflection-save; no Agent or UI automation"
+  },
+  "session": {
+    "ready": true,
+    "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232"
+  },
+  "before": {
+    "model": {
+      "reflectionID": "",
+      "state": "editing"
+    },
+    "persistence": {
+      "count": 0,
+      "discussionCount": 0,
+      "reflectionIDs": [],
+      "texts": []
+    },
+    "ready": true,
+    "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232"
+  },
+  "action": {
+    "id": "59d6f089-ba2c-4af5-b396-87c13fede5df",
+    "reflectionID": "5e829842-3c19-4b31-b4d3-5432a3cb541d",
+    "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232",
+    "status": "completed"
+  },
+  "after": {
+    "model": {
+      "reflectionID": "5e829842-3c19-4b31-b4d3-5432a3cb541d",
+      "state": "saved"
+    },
+    "persistence": {
+      "count": 1,
+      "discussionCount": 1,
+      "reflectionIDs": [
+        "5e829842-3c19-4b31-b4d3-5432a3cb541d"
+      ],
+      "texts": [
+        "自动化验证：阅读后的思考应被完整保存在本机。"
+      ]
+    },
+    "ready": true,
+    "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232"
+  },
+  "save_events": {
+    "events": [
+      {
+        "actionID": "setup",
+        "name": "session.ready",
+        "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232",
+        "seq": 1,
+        "uptime": 945850.2429860417
+      },
+      {
+        "actionID": "59d6f089-ba2c-4af5-b396-87c13fede5df",
+        "name": "action.started",
+        "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232",
+        "seq": 2,
+        "uptime": 945850.2540301668
+      },
+      {
+        "actionID": "59d6f089-ba2c-4af5-b396-87c13fede5df",
+        "name": "reflection.save.returned",
+        "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232",
+        "seq": 3,
+        "uptime": 945850.26002625
+      }
+    ],
+    "firstSequence": 1,
+    "lastSequence": 3,
+    "runID": "BA579C6D-45DA-4441-A69B-3E9E0BF49232"
+  },
+  "empty_action": {
+    "id": "d77f4078-040d-4f22-99f6-620f91d196a9",
+    "reflectionID": "",
+    "runID": "FBFB7165-5218-405D-B4DB-163DEAC14C6D",
+    "status": "rejected"
+  },
+  "empty_snapshot": {
+    "model": {
+      "reflectionID": "",
+      "state": "editing"
+    },
+    "persistence": {
+      "count": 0,
+      "discussionCount": 0,
+      "reflectionIDs": [],
+      "texts": []
+    },
+    "ready": true,
+    "runID": "FBFB7165-5218-405D-B4DB-163DEAC14C6D"
+  },
+  "verdict": "PASS",
+  "latest_events": {
+    "events": [
+      {
+        "actionID": "setup",
+        "name": "session.ready",
+        "runID": "FBFB7165-5218-405D-B4DB-163DEAC14C6D",
+        "seq": 1,
+        "uptime": 945850.4405112084
+      },
+      {
+        "actionID": "d77f4078-040d-4f22-99f6-620f91d196a9",
+        "name": "action.started",
+        "runID": "FBFB7165-5218-405D-B4DB-163DEAC14C6D",
+        "seq": 2,
+        "uptime": 945850.4435072084
+      },
+      {
+        "actionID": "d77f4078-040d-4f22-99f6-620f91d196a9",
+        "name": "action.rejected",
+        "runID": "FBFB7165-5218-405D-B4DB-163DEAC14C6D",
+        "seq": 3,
+        "uptime": 945850.4435270417
+      }
+    ],
+    "firstSequence": 1,
+    "lastSequence": 3,
+    "runID": "FBFB7165-5218-405D-B4DB-163DEAC14C6D"
+  }
+}

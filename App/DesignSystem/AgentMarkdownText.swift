@@ -22,18 +22,13 @@ struct AgentMarkdownText: View {
     /// UITextView 需要显式字体/颜色——外层 `.font`/`.foregroundStyle` 不会透传进来。
     var textStyle: UIFont.TextStyle = .body
     var isSecondary = false
-    @Environment(\.dynamicTypeSize) private var typeSize
-
     var body: some View {
-        let attributed = Perf.shared.timed(.markdownRender) {
-            makeSelectableMarkdown(
-                attributedContent,
-                textStyle: textStyle,
-                color: isSecondary ? .secondaryLabel : .label
-            )
-        }
-        return SelectableTextView(attributedText: attributed, linkHandler: handleURL)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        MessageText(
+            content: .markdown(linkedContent),
+            textStyle: textStyle,
+            isSecondary: isSecondary,
+            linkHandler: handleURL
+        )
     }
 
     /// 拦截 citation 链接的轻点;无法识别的 elsepage 链接吞掉,避免系统尝试打开未知 scheme 弹错。
@@ -43,18 +38,6 @@ struct AgentMarkdownText: View {
             openCitation?(evidence)
         }
         return true
-    }
-
-    private var attributedContent: AttributedString {
-        // 读取 typeSize,让 Dynamic Type 变化时按新字号重建富文本。
-        _ = typeSize
-        return (try? AttributedString(
-            markdown: linkedContent,
-            options: .init(
-                interpretedSyntax: .full,
-                failurePolicy: .returnPartiallyParsedIfPossible
-            )
-        )) ?? AttributedString(content)
     }
 
     private var linkedContent: String {

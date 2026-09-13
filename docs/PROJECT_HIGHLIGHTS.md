@@ -24,6 +24,8 @@ ElsePage 是一个**本地优先（local-first）、自带密钥（BYOK）**的�
 - **一个 Personal Brain 域（v1.1）**：Thought/Question/Memory 强类型三对象 + 证据/关系/修订/持久化向量，BrainProjectionService 让反思**自动反哺大脑**（LLM 提议、确定性校验、碎片化护栏），用户编辑同样可追溯。
 - **一个强约束的 AI 产品行为层**：628 行中文 System Prompt + 三层强制（路由提示词 / 校验器 / 输出策略），保证 AI 是「回应优先、提问稀缺、允许对话结束」的阅读伙伴。
 
+- **一个「先测量后优化」的客户端性能工程**：三处真实卡顿（首开阅读器 / 首唤输入法 / 长按跨行选区）经代码级诊断定位为「主线程整串排版重算不缓存 + 首帧前串行可后置工作 + 可观测性空白」，产出 `docs/INTERACTION_PERFORMANCE_SPEC.md`（工作包 A–F）+ ADR-0002，并以 os_signpost + 诊断屏埋点（Phase-0）先立基线，优化待基线后按阶段推进（不虚构数字）。
+
 工程形态：Swift 6 · iOS 18 · Readium 3.3 · GRDB 7.11 · 13 个 SPM 模块（含 BrainCore）· **356 个 `@Test`（swift-testing）实测全绿**。
 
 ---
@@ -693,6 +695,56 @@ UI 把润色后的文本直接当用户输入存。
 
 ---
 
+### Highlight 6 — 客户端交互性能工程：先测量后优化（而非重写架构）
+
+#### Problem
+真实卡顿集中三处：**首次打开阅读器**、**首次唤起输入法**、**会话里长按做跨行文本选区**。逐处优化会把表面症状修在局部，退化成"打地鼠"。
+
+#### Constraints
+- 交互/标注的 UI 语义已锁定（`docs/READER_EXPERIENCE_OPTIMIZATION_PLAN.md`），不得为性能改规格；
+- SwiftUI 正文要「蓝色选区 + 双手柄 + 放大镜 + 跨行多选」，iOS ≤26 的 `Text` 不提供，只能接 UIKit；
+- "卡不卡"此前无任何量化手段（全仓零 os_signpost、无 UI 测试 target）。
+
+#### Naive Solution
+把 MVVM 换成别的模式 / 把 SwiftUI 重写成 UIKit / 引一套状态库。
+
+#### Why It Doesn't Scale
+模式不是瓶颈——三处卡顿都源于同一组结构：**主线程整串排版重算不缓存 + 首帧前串行可后置工作 + 可观测性空白**。换架构不解决其中任何一条。
+
+#### Our Design（原则 P1–P5）
+- **P1 先呈现、后落账**：首帧不等可提前做的工作（阅读器把 `open(EPUB) ∥ position+preferences` 并行，highlights/notes/markOpened 揭盖后置）。
+- **P2 排版不进 UI 层**：正文统一 `MessageText` 组件族，测量与富文本构建**各做一次、其余查表**（`TextMeasureCache`），不再每次 layout 整串 `boundingRect`。
+- **P3 主线程红线**：可观察 Model 只持有可呈现状态 + 发出命令 + 收快照；纯推导/解析离主或用缓存；一个流式 delta 不触发整树 body。
+- **P4 无度量不优化 / P5 手势与动画不和首帧抢道**。
+
+六工作包：**A 文本/测量子系统 · B 流式增量（去抖合并） · C 阅读器打开管线 + Publication 缓存 · D 键盘 frame 驱动滚动 · E 主 actor 并发接缝 · F 性能护栏**。范围经确认收敛（A 最小面=会话+档案正文；B 纯增量留二期）；明确**不做的**（模式替换 / 全站统一 / 会话改 UICollectionView / 动死路径 `BrainDiscussionSheet`）。
+
+#### Implementation（Phase-0 已落地，行为零改动）
+- `App/Performance/Perf.swift`：`@MainActor` 采样器，os_signpost（`com.readloop.app/perf`）+ 采样桶（readerOpen/readerParse/readerToFirstPage/keyboardAppear/streamDelta/markdownRender/textMeasure/alive）；DEBUG 启用、Release 单分支 no-op。
+- 埋点：阅读器 `open()→首个 locationDidChange`、流式 `.textDelta` 模型侧合并、`AgentMarkdownText` 单次渲染、`FitTextView` 单次全量测量、`UITextView/TextField begin→keyboardDidShow`。
+- 展示：真机 DEBUG → 设置 → 路由诊断顶部「交互性能（本次运行）」。
+- 配套文档：`docs/INTERACTION_PERFORMANCE_SPEC.md`（含证据索引）+ `ADR-0002` + `docs/exec-plans/active/client-interaction-performance.md`。
+
+#### Trade-offs
+- 诊断来自**源码级证据 + 待实测复核**的两类结论（文中已用 ⚠️ 标注）；Readium 的 parse/首帧 CPU 量级（R3）与 `Publication` 并发语义（R1）都未实测，A–D 预算分配留待真机基线闭合——宁可等数据，不赌手感。
+- 文本组件带跨文件约束（`MessageText` 统一面 vs 短文走普通 `Text` 的取舍），需要评审纪律守住 P2/P3。
+
+#### Engineering Value
+展示 **"诊断驱动、克制重构"的性能工程**：拒绝为了好看而重写架构；把三个症状归到一个根因（主线程整串排版 + 首帧编排 + 无度量），并以可回归的埋点（而非体感）作为后续每个阶段的验收门槛。
+
+#### Evidence
+- `App/Performance/Perf.swift`、`App/Reader/ReadiumReaderView.swift`（coordinator 计时）、`App/Reflection/SessionReflectionSheet.swift`（streamDelta）、`App/DesignSystem/AgentMarkdownText.swift` / `SelectableText.swift`（渲染/测量/存活）
+- `docs/INTERACTION_PERFORMANCE_SPEC.md` / `docs/adr/0002-…` / `docs/exec-plans/active/client-interaction-performance.md` / `docs/HANDOFF-2026-09-07-interaction-perf.md`
+- 提交 `1ede809`（Phase-0 埋点）· `e7fb5dc`（spec/ADR/执行计划）
+
+#### Interview Depth
+- 为什么三处卡顿会指向同一个根因？你如何用代码证据（而非猜测）排除「MVVM 模式问题」？
+- `FitTextView.intrinsicContentSize` 每查询整串 `boundingRect` 为什么是病根？改成「按 (文本,宽度) 缓存」后失效条件是什么？
+- Readium 没有公开"首帧就绪"回调，你选什么信号？为什么用首次 `locationDidChange`？
+- 你明确**不**做的四件事是什么？理由？
+
+---
+
 ## 13. Engineering Maturity
 
 | 维度 | 评级 | 理由 |
@@ -706,9 +758,9 @@ UI 把润色后的文本直接当用户输入存。
 | Concurrency | **Reasonable** | actor 使用正确、取消传播彻底；但 `DatabaseQueue` 单写者 + `@unchecked Sendable` repo 依赖调用方纪律 |
 | Error Handling | **Strong** | 每层降级有测试（路由/检索/rerank/embedding/Agent），错误分类细致（auth/rateLimit/unavailable/…） |
 | Testability | **Strong** | 174 个 `@Test` 全绿；内存 DB、FakeModelClient、RecordingEmbeddingProvider 等 fake 完备；领域层与 App 层解耦 |
-| Observability | **Reasonable** | `ContextPlanTrace` + 诊断页 + ContextDisclosure 是亮点；但无日志/指标采样，仅本地统计 |
+| Observability | **Reasonable** | `ContextPlanTrace` + 诊断页 + ContextDisclosure 是亮点；Phase-0 增客户端交互 os_signpost 采样（DEBUG/诊断屏「交互性能」）；Agent 链路仍仅本地统计 |
 | Extensibility | **Reasonable** | 新 Provider/embedding/reranker 通过 protocol 扩展即可；多 Agent 由 `agentKind` 预留；但 Agent 循环当前是单一确定性流程 |
-| Performance | **Reasonable** | 分块流式、批量 embedding、RRF top-k、位置防抖；但无性能基准，`FlatVectorIndex` 全内存暴力搜索 |
+| Performance | **Reasonable** | 分块流式、批量 embedding、RRF top-k、位置防抖；Phase-0 已埋 os_signpost + 诊断屏（readerOpen/streamDelta/textMeasure 等），真机基线待采、A–F 优化未实施；`FlatVectorIndex` 全内存暴力搜索 |
 
 ---
 
@@ -1011,6 +1063,15 @@ future_work:
 - `Sources/ReflectionCore/Streak.swift` / `TodayProductState.swift`
 - `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift` / `VoiceReflectionState.swift`
 - `App/Reflection/SessionReflectionSheet.swift` / `App/Reflection/VoiceReflectionRecorder.swift`
+
+### Client Interaction / Performance
+- `App/Performance/Perf.swift` — `Perf`（os_signpost + 采样桶，DEBUG 启用）
+- `App/Performance/PerfDiagnosticsView.swift` — 设置→路由诊断「交互性能」摘要
+- `App/DesignSystem/SelectableText.swift` — `SelectableTextView/FitTextView/SelectionKeeper`（原生跨行选区 + 测量埋点）
+- `App/DesignSystem/AgentMarkdownText.swift` — 流式 markdown 渲染（渲染埋点）
+- `App/Reader/ReadiumReaderView.swift` — 开书 → 首个 `locationDidChange` 计时
+- `App/Reader/ReaderScreen.swift` / `ReaderModel.swift` — `perfOpenBeganAt` 锚点
+- 文档：`docs/INTERACTION_PERFORMANCE_SPEC.md`、`docs/adr/0002-client-interaction-performance.md`、`docs/exec-plans/active/client-interaction-performance.md`、`docs/HANDOFF-2026-09-07-interaction-perf.md`
 
 ### Provider
 - `Sources/ModelProviders/ConfiguredModelClientFactory.swift` / `OpenAICompatibleModelClient.swift` / `SecretStore.swift`

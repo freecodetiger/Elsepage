@@ -65,3 +65,9 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
+
+## AI 自动化测试（项目维护约定）
+
+- 开发或修改业务流程、修复交互性能问题、编写验收计划、修改 DEBUG 服务或测试脚本时，先读 [DEBUG 测试闭环](docs/DEBUG-LOOP.md)，按其中的能力清单选择验证方式，并执行对应维护步骤。
+- 当前为已真机验证的 Reflection 保存最小闭环；新增功能须评估场景覆盖并同步更新文档。以实际命令、断言和证据报告覆盖范围。
+- 在用户安装并启动 DEBUG App 后，Agent 可直接运行 Mac 测试脚本和读取 HTTP 性能数据；Xcode 构建安装、模拟器、真机手势操作和 TestFlight 仍由用户完成。此约定补充上方 Verification 分工。

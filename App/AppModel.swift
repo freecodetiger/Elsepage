@@ -41,13 +41,20 @@ final class AppModel {
         #if DEBUG
         // Phase-0: enable in-process interaction-performance sampling (Perf.swift).
         Perf.shared.enable()
+        DebugLoop.shared.start()
         #endif
         guard library == nil, startupError == nil else { return }
         do {
             let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let databaseDirectory = support.appendingPathComponent("Database", isDirectory: true)
             try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
-            let database = try AppDatabase(path: databaseDirectory.appendingPathComponent("readloop.sqlite").path)
+            // GRDB's migrator is synchronous. Keep the v1–v26 cold-start
+            // migration off the main actor, then resume object-graph assembly
+            // here so startupError and all observable models retain their
+            // existing lifecycle and error semantics.
+            let database = try await AppDatabase.openOffMain(
+                path: databaseDirectory.appendingPathComponent("readloop.sqlite").path
+            )
             let books = GRDBBookRepository(database: database)
             let reading = GRDBReadingRepository(database: database)
             let sessions = GRDBReadingSessionRepository(database: database)

@@ -3,6 +3,8 @@
 > 俯视图:从架构视角审视当前 Agent 编排。**忠实于代码现状**(截至 `develop` 分支),节点与边界均以源码为据。
 >
 > 结论先行:**4 个 LLM 子图**(ReaderAgent / ContextPlanner / Polish / BrainProjection),共享 1 个有界执行运行时,背后是 2 个模型适配器(chat / embeddings / rerank)+ 本地 GRDB 持久化 + 1 个 **Context Engineering 层**(确定性检索/去重/预算/组装,非 LLM)+ 1 个 **Personal Brain 域**(v1.1,brainItems 三对象 + 证据/关系/修订/向量)。确定性服务(校验、策略编译、兜底路由、引用验证、small-to-big、candidate ranking、Mutation 校验)与 LLM 节点严格分离。Planner 协议 v2:**LLM 决定语义意图,代码决定执行策略**(`SemanticPlanValidator` + `ContextPolicyCompiler`)。
+>
+> **范围注记(2026-09-07)**:本文覆盖 Agent 编排链路。**客户端交互/渲染性能架构**(文本测量缓存、阅读器打开管线、流式增量、键盘聚焦、主 actor 红线、性能护栏,及 App 层测量子系统 `App/Performance/Perf.swift`)不在本文范围,见 `docs/INTERACTION_PERFORMANCE_SPEC.md`(工作包 A–F)+ `docs/adr/0002-client-interaction-performance.md` + `docs/exec-plans/active/client-interaction-performance.md`。
 
 ---
 

@@ -79,3 +79,12 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - [ ] Phase 17: BrainProjectionService(LLM 提议,代码执行;attach > update > create)
 - [ ] Phase 18: Revision / Evolution(brainItemRevisions 演化时间线)
 - [ ] Phase 19: Evaluation / Observability
+
+## Quick Tasks Completed
+
+- 2026-09-12：DEBUG 测试闭环 v1（.planning/quick/debug-loop/SUMMARY.md），包测试与执行器测试通过；App/USB 真机验收待用户，见 docs/DEBUG-LOOP.md。
+- 2026-09-12：Phase 1 A 文本测量/富文本缓存代码落地（.planning/quick/phase1-text-cache/SUMMARY.md）；包测试通过，App target 与真机命中率对照待验收。
+- 2026-09-12：Phase 2 B 流式输出去抖合并代码落地（.planning/quick/260912-gut-b-reflectionconversationmodel-textdelta-/SUMMARY.md）；包测试通过，App target 与真机刷新次数/视觉等价待用户安装验收。
+- 2026-09-12：Phase 3 C 阅读器打开管线代码落地并完成真机性能采样（.planning/quick/260912-i4j-c-reader-resume-position-preferences-pub/SUMMARY.md）；复开缓存命中，性能证据见 docs/testing/interaction-perf/2026-09-12-reader-reopen.json，视觉语义待确认。
+- 2026-09-12：Phase 5 E-P2 冷启动数据库迁移移出主 actor（.planning/quick/260912-je1-e-p2-appdatabase-appmodel-start-local-fi/SUMMARY.md）；AppDatabase.openOffMain 与 AppModel 启动接缝已落地，353 个包测试全绿，真机启动体感待验收。
+- 2026-09-13：客户端交互性能闭环真机验收通过（`.planning/quick/260913-interaction-perf-acceptance/SUMMARY.md`）；A/C/D/E-P2 通过，B 因当前 Provider 非流式延至 v2 SSE；证据见 `docs/testing/interaction-perf/2026-09-13-interaction-acceptance.json`。

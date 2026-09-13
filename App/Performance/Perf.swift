@@ -16,7 +16,17 @@ final class Perf {
         case readerParse         // EPUB open() 解析段
         case readerToFirstPage   // navigator 构造 → 首帧
         case keyboardAppear      // 编辑开始(beginEditing) → keyboardDidShow
-        case streamDelta         // 流式单 delta：模型侧合并+剥 citation
+        case keyboardToWillShow
+        case keyboardWillToDidShow
+        case keyboardAnimation
+        case inputTouchToEditing
+        case responderAcquire
+        case selectionResponderAcquire
+        case mainQueueDelay
+        case selectionStart
+        case textLayout
+        case textUpdate
+        case streamDelta         // 流式可见批次刷新：合并+剥 citation
         case markdownRender      // AgentMarkdownText 单次 body 渲染（整串解析+重建）
         case textMeasure         // FitTextView 单次全量测量（boundingRect）
     }
@@ -43,6 +53,72 @@ final class Perf {
 
     private let signposter = OSSignposter(subsystem: "com.readloop.app", category: "perf")
     private var lastEditBeganAt: CFTimeInterval?
+    private var keyboardWillShowAt: CFTimeInterval?
+    private var events: [String] = []
+    private var probeGeneration = 0
+    private let epoch = ProcessInfo.processInfo.systemUptime
+
+    /// Bounded, content-free timeline. No input, book text, URLs or credentials.
+    func event(_ name: String) {
+        guard isEnabled else { return }
+        let elapsed = (ProcessInfo.processInfo.systemUptime - epoch) * 1000
+        events.append(String(format: "%.1fms %@", elapsed, name))
+        if events.count > 200 { events.removeFirst(events.count - 200) }
+    }
+
+    func reset() {
+        probeGeneration += 1
+        samples.removeAll()
+        events.removeAll()
+        lastEditBeganAt = nil
+        keyboardWillShowAt = nil
+        peakAliveTextViews = aliveTextViews
+        event("capture.reset")
+    }
+
+    /// Short-lived probe, restarted by each interaction; no background polling.
+    func probeMainQueue() {
+        guard isEnabled else { return }
+        probeGeneration += 1
+        scheduleQueueProbe(generation: probeGeneration, remaining: 30)
+    }
+
+    private func scheduleQueueProbe(generation: Int, remaining: Int) {
+        guard remaining > 0, generation == probeGeneration else { return }
+        let deadline = ProcessInfo.processInfo.systemUptime + 0.05
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self, self.probeGeneration == generation,
+                  UIApplication.shared.applicationState == .active else { return }
+            self.record(.mainQueueDelay, ms: max(0, ProcessInfo.processInfo.systemUptime - deadline) * 1000)
+            self.scheduleQueueProbe(generation: generation, remaining: remaining - 1)
+        }
+    }
+
+    func noteScrollChain(of view: UIView) {
+        guard isEnabled else { return }
+        var ancestor: UIView? = view
+        var depth = 0
+        while let current = ancestor {
+            if let scroll = current as? UIScrollView {
+                event("scroll depth=\(depth) enabled=\(scroll.isScrollEnabled) delays=\(scroll.delaysContentTouches) cancels=\(scroll.canCancelContentTouches) dragging=\(scroll.isDragging)")
+            }
+            for gesture in current.gestureRecognizers ?? [] {
+                if let press = gesture as? UILongPressGestureRecognizer {
+                    event("longPress depth=\(depth) minimum=\(press.minimumPressDuration)s state=\(press.state.rawValue) enabled=\(press.isEnabled)")
+                }
+            }
+            ancestor = current.superview
+            depth += 1
+        }
+    }
+
+    var report: String {
+        let summary = rows.map { row in
+            "\(row.name): n=\(row.sample.count), mean=\(row.sample.totalMS / Double(max(1, row.sample.count)))ms, max=\(row.sample.maxMS)ms, last=\(row.sample.lastMS)ms"
+        }.joined(separator: "\n")
+        let cache = "textMeasureCache: hits=\(TextMeasureCache.shared.hits), misses=\(TextMeasureCache.shared.misses)"
+        return "ReadLoop interaction diagnostics\niOS \(UIDevice.current.systemVersion)\n\(summary)\n\(cache)\nalive=\(aliveTextViews), peak=\(peakAliveTextViews)\n--- recent 200 events (process-relative time) ---\n" + events.joined(separator: "\n")
+    }
 
     private init() {}
 
@@ -70,6 +146,9 @@ final class Perf {
         var sample = samples[key] ?? Sample()
         sample.add(ms)
         samples[key] = sample
+        if key == .selectionStart || key == .keyboardAppear || key == .keyboardToWillShow || key == .keyboardWillToDidShow || key == .keyboardAnimation || ms >= 8 {
+            event("\(key.rawValue) \(String(format: "%.1f", ms))ms")
+        }
     }
 
     // MARK: - os_signpost 区间
@@ -110,6 +189,16 @@ final class Perf {
         case .readerParse: "readerParse"
         case .readerToFirstPage: "readerToFirstPage"
         case .keyboardAppear: "keyboardAppear"
+        case .keyboardToWillShow: "keyboardToWillShow"
+        case .keyboardWillToDidShow: "keyboardWillToDidShow"
+        case .keyboardAnimation: "keyboardAnimation"
+        case .inputTouchToEditing: "inputTouchToEditing"
+        case .responderAcquire: "responderAcquire"
+        case .selectionResponderAcquire: "selectionResponderAcquire"
+        case .mainQueueDelay: "mainQueueDelay"
+        case .selectionStart: "selectionStart"
+        case .textLayout: "textLayout"
+        case .textUpdate: "textUpdate"
         case .streamDelta: "streamDelta"
         case .markdownRender: "markdownRender"
         case .textMeasure: "textMeasure"
@@ -129,16 +218,61 @@ final class Perf {
 
     private func startKeyboardObserver() {
         let center = NotificationCenter.default
+        for name in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                guard let self else { return }
+                let info = notification.userInfo ?? [:]
+                let begin = (info[UIResponder.keyboardFrameBeginUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
+                let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
+                let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0
+                let phase = notification.name == UIResponder.keyboardWillChangeFrameNotification ? "will" : "did"
+                self.event("keyboard.frame.\(phase) fromY=\(begin.minY) toY=\(end.minY) height=\(end.height) declared=\(duration)s")
+            }
+        }
         center.addObserver(forName: UITextView.textDidBeginEditingNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.lastEditBeganAt = CFAbsoluteTimeGetCurrent()
+            self?.lastEditBeganAt = ProcessInfo.processInfo.systemUptime
+            self?.event("editing.begin")
         }
         center.addObserver(forName: UITextField.textDidBeginEditingNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.lastEditBeganAt = CFAbsoluteTimeGetCurrent()
+            self?.lastEditBeganAt = ProcessInfo.processInfo.systemUptime
+            self?.event("editing.begin")
+        }
+        center.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let self else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            self.keyboardWillShowAt = now
+            self.event("keyboard.willShow")
+            if let began = self.lastEditBeganAt, now - began < 5 {
+                self.record(.keyboardToWillShow, ms: (now - began) * 1000)
+            }
+            if let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double {
+                self.record(.keyboardAnimation, ms: duration * 1000)
+            }
         }
         center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self, let began = self.lastEditBeganAt else { return }
+            guard let self else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            self.event("keyboard.didShow")
+            if let began = self.lastEditBeganAt, now - began < 5 {
+                self.record(.keyboardAppear, ms: (now - began) * 1000)
+            }
+            if let will = self.keyboardWillShowAt, now - will < 5 {
+                self.record(.keyboardWillToDidShow, ms: (now - will) * 1000)
+            }
             self.lastEditBeganAt = nil
-            self.record(.keyboardAppear, ms: (CFAbsoluteTimeGetCurrent() - began) * 1000)
+            self.keyboardWillShowAt = nil
+        }
+        for name in [UITextView.textDidEndEditingNotification, UITextField.textDidEndEditingNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.lastEditBeganAt = nil
+                self?.keyboardWillShowAt = nil
+                self?.event("editing.end")
+            }
+        }
+        center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.lastEditBeganAt = nil
+            self?.keyboardWillShowAt = nil
+            self?.event("keyboard.willHide")
         }
     }
 }
@@ -158,7 +292,17 @@ extension Perf {
             .readerParse: "EPUB 解析 open()",
             .readerToFirstPage: "Navigator→首帧",
             .keyboardAppear: "键盘（编辑开始→DidShow）",
-            .streamDelta: "流式单 delta（模型侧）",
+            .keyboardToWillShow: "键盘（编辑开始→WillShow）",
+            .keyboardWillToDidShow: "键盘（WillShow→DidShow）",
+            .keyboardAnimation: "键盘（系统声明动画时长）",
+            .inputTouchToEditing: "输入框（触摸→开始编辑回调）",
+            .responderAcquire: "输入框 becomeFirstResponder 调用",
+            .selectionResponderAcquire: "只读文本 becomeFirstResponder 调用",
+            .mainQueueDelay: "主队列探针（超出 50ms 调度间隔）",
+            .selectionStart: "选区（触摸→首次非空回调）",
+            .textLayout: "文本 layoutSubviews（含 super）",
+            .textUpdate: "文本 updateUIView（含比较/赋值）",
+            .streamDelta: "流式可见批次刷新（模型侧）",
             .markdownRender: "Markdown 单次渲染",
             .textMeasure: "单次全量测量",
         ]

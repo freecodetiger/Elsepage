@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-09-12",
+  "platform": "iOS 26.6",
+  "scenario": "同一进程内复开同一本书",
+  "metrics": {
+    "readerOpenMs": {
+      "first": 2225.686073303223,
+      "reopen": 728.1349897384644
+    },
+    "readerParseMs": {
+      "first": 18.085002899169922,
+      "reopen": 0.6709098815917969
+    },
+    "readerToFirstPageMs": {
+      "first": 2125.860095024109,
+      "reopen": 674.5319366455078
+    }
+  },
+  "cacheHit": true,
+  "notes": "仅记录性能诊断数字；未记录书名、正文、URL、设备标识或凭据。视觉等价仍需手测确认。"
+}

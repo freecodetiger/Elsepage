@@ -17,6 +17,15 @@ public final class AppDatabase: @unchecked Sendable {
         try self.init(writer: DatabaseQueue(path: path, configuration: configuration))
     }
 
+    /// Opens a file-backed database and runs pending migrations on a detached
+    /// executor. The synchronous initializer remains available for callers
+    /// that already own a background context (and for in-memory tests).
+    public static func openOffMain(path: String) async throws -> AppDatabase {
+        try await Task.detached(priority: .userInitiated) {
+            try AppDatabase(path: path)
+        }.value
+    }
+
     public static func inMemory() throws -> AppDatabase {
         var configuration = Configuration()
         configuration.foreignKeysEnabled = true
