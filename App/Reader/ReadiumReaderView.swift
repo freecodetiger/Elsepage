@@ -6,6 +6,7 @@ import ReadiumNavigator
 @preconcurrency import ReadiumShared
 import SwiftUI
 import UIKit
+import WebKit
 
 struct ReadiumReaderView: UIViewControllerRepresentable {
     let model: ReaderModel
@@ -99,15 +100,31 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     host.navigator = navigator
                     self.navigator = navigator
                     model.onSelectionFinished = { [weak navigator] in navigator?.clearSelection() }
-                    navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self] event in
-                        guard let id = UUID(uuidString: event.decoration.id) else { return }
+                    navigator.observeDecorationInteractions(inGroup: "highlights") { [weak self, weak navigator] event in
+                        guard let id = UUID(uuidString: event.decoration.id), let navigator else { return }
                         let point = event.point.map { AnnotationLog.rect(CGRect(origin: $0, size: .zero)) } ?? "nil"
                         AnnotationLog.event("decoration.activated id=\(AnnotationLog.id(id)) rect=\(AnnotationLog.rect(event.rect)) point=\(point)")
-                        self?.model.handleHighlightActivation(for: id, anchor: event.rect)
+                        Task { [weak self] in
+                            let noteIDs = await Self.decorationIDsAtLastPoint(in: "notes", navigator: navigator)
+                            AnnotationLog.event("highlight.hit id=\(AnnotationLog.id(id)) overlapNotes=\(noteIDs.map { AnnotationLog.id($0) }.joined(separator: ","))")
+                            self?.model.handleHighlightActivation(
+                                for: id,
+                                confirmedNoteID: noteIDs.first,
+                                anchor: event.rect
+                            )
+                        }
                     }
-                    navigator.observeDecorationInteractions(inGroup: "notes") { [weak self] event in
-                        guard let id = UUID(uuidString: event.decoration.id) else { return }
-                        self?.model.handleNoteActivation(for: id, anchor: event.rect)
+                    navigator.observeDecorationInteractions(inGroup: "notes") { [weak self, weak navigator] event in
+                        guard let id = UUID(uuidString: event.decoration.id), let navigator else { return }
+                        Task { [weak self] in
+                            let highlightIDs = await Self.decorationIDsAtLastPoint(in: "highlights", navigator: navigator)
+                            AnnotationLog.event("note.hit id=\(AnnotationLog.id(id)) overlapHighlights=\(highlightIDs.map { AnnotationLog.id($0) }.joined(separator: ","))")
+                            self?.model.handleNoteActivation(
+                                for: id,
+                                confirmedHighlightID: highlightIDs.first,
+                                anchor: event.rect
+                            )
+                        }
                     }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     // Highlights own the primary hit target when ranges overlap;
@@ -299,6 +316,51 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
           };
         })()
         """
+
+        func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
+            let source = """
+            window.__readiumLastDecorationPoint = null;
+            (function() {
+              const remember = function(event) {
+                window.__readiumLastDecorationPoint = { x: event.clientX, y: event.clientY };
+              };
+              document.addEventListener("click", remember, true);
+              document.addEventListener("pointerup", remember, true);
+            })();
+            """
+            userContentController.addUserScript(WKUserScript(
+                source: source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            ))
+        }
+
+        private static func decorationIDsAtLastPoint(
+            in group: String,
+            navigator: EPUBNavigatorViewController
+        ) async -> [UUID] {
+            let script = """
+            (function() {
+              const point = window.__readiumLastDecorationPoint;
+              if (!point || !window.readium) return [];
+              const group = readium.getDecorations('\(group)');
+              const result = [];
+              for (const item of (group.items || [])) {
+                const rects = Array.from(item.range.getClientRects());
+                if (rects.some(function(rect) {
+                  return point.x >= rect.left && point.x <= rect.right &&
+                         point.y >= rect.top && point.y <= rect.bottom;
+                })) {
+                  result.push(item.decoration.id);
+                }
+              }
+              return result;
+            })()
+            """
+            guard case .success(let value) = await navigator.evaluateJavaScript(script),
+                  let ids = value as? [String] else { return [] }
+            return ids.compactMap(UUID.init(uuidString:))
+        }
 
         func update(
             preferences: ReaderPreferences,

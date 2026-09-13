@@ -511,9 +511,12 @@ final class ReaderModel {
         return .closed
     }
 
-    func handleHighlightActivation(for id: UUID, anchor: CGRect?) {
+    func handleHighlightActivation(for id: UUID, confirmedNoteID: UUID? = nil, anchor: CGRect?) {
         guard let annotation = annotation(forHighlightID: id) else { return }
-        let noteID = annotation.notes.last?.id ?? overlappingNoteID(for: annotation.range)
+        let validatedConfirmedNoteID = confirmedNoteID.flatMap { candidate in
+            annotation(forNoteID: candidate) == nil ? nil : candidate
+        }
+        let noteID = validatedConfirmedNoteID ?? annotation.notes.last?.id ?? overlappingNoteID(for: annotation.range)
         AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) conflictNote=\(noteID.map { AnnotationLog.id($0) } ?? "nil")")
         if let noteID {
             showAnnotationConflict(noteID: noteID, highlightID: id, anchor: anchor)
@@ -522,8 +525,16 @@ final class ReaderModel {
         }
     }
 
-    func handleNoteActivation(for id: UUID, anchor: CGRect?) {
+    func handleNoteActivation(for id: UUID, confirmedHighlightID: UUID? = nil, anchor: CGRect?) {
         guard let annotation = annotation(forNoteID: id) else { return }
+        let validatedConfirmedHighlightID = confirmedHighlightID.flatMap { candidate in
+            annotation(forHighlightID: candidate) == nil ? nil : candidate
+        }
+        if let validatedConfirmedHighlightID {
+            AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(validatedConfirmedHighlightID)) pointHit=true")
+            showAnnotationConflict(noteID: id, highlightID: validatedConfirmedHighlightID, anchor: anchor)
+            return
+        }
         if annotation.highlight != nil {
             AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(annotation.id)) sameRange=true")
             showAnnotationConflict(noteID: id, highlightID: annotation.id, anchor: anchor)
