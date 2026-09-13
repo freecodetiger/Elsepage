@@ -1,25 +1,27 @@
-# 跨 Range Note / Highlight 命中修复完成
+# Annotation 点击坐标冲突消歧完成
 
 ## 根因
 
-`handleHighlightActivation` 只检查了同一个 TextAnnotation 上的 Note，没有扫描其他 TextAnnotation 中与该 Highlight 重叠的 Note。
+之前只要 Note 的整个 Range 与 Highlight 重叠，点击 Note 的任何位置都会进入选择器；点击 Highlight 也只检查同一 Annotation。
 
-因此当下划线完整包含高亮时：
-
-- 点击下划线：Note 路径发现重叠 Highlight，显示选择器。
-- 点击高亮：Highlight 路径没有发现不同 Range 的 Note，直接显示高亮菜单。
+实际命中必须基于用户点击的 DOM 坐标，而不是整个 Range 是否有任意交集。
 
 ## 修复
 
-- Highlight activation 增加跨 Annotation Note overlap 扫描。
-- 命中最新的重叠 Note 并显示“高亮 / 笔记”选择器。
-- 保留无冲突时直接打开高亮菜单。
+- 在 Readium webview 中缓存最近一次 click/pointerup 的 client coordinate。
+- decoration 激活时查询同一点实际命中的 notes/highlights。
+- Note 点击：
+  - 只有该点同时命中 Highlight 时才显示选择器。
+  - 未命中 Highlight 时直接打开 Note。
+- Highlight 点击：
+  - 只有该点同时命中 Note 时才显示选择器。
+  - 未命中 Note 时直接显示高亮菜单。
+- JS 查询失败时回退到保守 Range 判断。
 - 增加诊断日志：
-  - `highlight.activate ... ownNotes ... conflictNote`
-  - `note.activate ... conflictHighlight`
-- 增加精确 Range containment 测试。
+  - `highlight.hit ... overlapNotes`
+  - `note.hit ... overlapHighlights`
 
 ## 验证
 
-- `swift test`：388 tests 全绿。
 - App Reader 文件纯语法解析通过。
+- `swift test`：388 tests 全绿。
