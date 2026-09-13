@@ -424,6 +424,15 @@
       box-shadow: 0 8px 22px rgba(0,0,0,.055);
     }
 
+    .record-card:active {
+      transform: scale(.988);
+    }
+
+    .record-card.card-pressed {
+      border-color: var(--phone-ink);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--phone-ink) 8%, transparent);
+    }
+
     .card-context {
       display: flex;
       align-items: baseline;
@@ -783,7 +792,7 @@
       </div>
       <div class="stage-controls">
         <div class="stage-note">
-          点击左侧卡片，切换右侧展开内容。<br>
+          点击左侧卡片会更新记录世界；窄屏会自动滚到详情。<br>
           概要自动生成并固定。
         </div>
         <button class="theme-toggle" type="button" id="themeToggle">预览暗色</button>
@@ -864,7 +873,7 @@
               </div>
             </div>
 
-            <button class="floating-back" type="button" aria-label="返回"><span>‹</span></button>
+            <button class="floating-back" id="floatingBack" type="button" aria-label="返回"><span>‹</span></button>
             <div class="screen-content detail-content" id="detailContent" aria-live="polite"></div>
           </div>
         </div>
@@ -1031,12 +1040,43 @@
       `;
     }
 
+    const listShell = document.querySelector(".device-block:nth-child(1) .phone-shell");
+    const detailShell = document.querySelector(".device-block:nth-child(2) .phone-shell");
+
+    function isCompactPrototype() {
+      return window.matchMedia("(max-width: 960px)").matches;
+    }
+
+    function revealDetail() {
+      if (isCompactPrototype()) {
+        detailShell.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function revealList() {
+      if (isCompactPrototype()) {
+        listShell.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
     list.addEventListener("click", event => {
       const card = event.target.closest("[data-id]");
       if (!card) return;
       state.selectedId = card.dataset.id;
       renderList();
       renderDetail();
+
+      const refreshedCard = list.querySelector(`[data-id="${card.dataset.id}"]`);
+      refreshedCard?.classList.add("card-pressed");
+      window.setTimeout(() => refreshedCard?.classList.remove("card-pressed"), 240);
+      revealDetail();
+    });
+
+    document.getElementById("floatingBack").addEventListener("click", () => {
+      state.selectedId = records[0].id;
+      renderList();
+      renderDetail();
+      revealList();
     });
 
     document.getElementById("themeToggle").addEventListener("click", event => {
