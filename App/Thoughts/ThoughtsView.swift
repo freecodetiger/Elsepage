@@ -261,39 +261,52 @@ private struct ThoughtRecordDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Group {
-            if let conversation {
-                ReflectionConversationView(
-                    model: conversation,
-                    header: AnyView(ThoughtRecordHeader(entry: entry)),
-                    recordExtras: AnyView(
-                        ThoughtRecordExtras(
-                            entry: entry,
-                            journal: journal,
-                            openSource: openSource
-                        )
-                    ),
-                    rootTitle: "我的原话",
-                    rootTextOverride: entry.reflection.originalText,
-                    showsInlineProvenance: false,
-                    openCitation: { evidence in
-                        guard evidence.bookID == entry.book.id,
-                              let locator = evidence.locator else { return }
-                        openSource(entry.book, locator)
-                    },
-                    onConversationDeleted: { dismiss() }
-                )
-            } else {
-                ProgressView()
-                    .task {
-                        if conversation == nil {
-                            conversation = makeConversation()
+        ZStack(alignment: .topLeading) {
+            Group {
+                if let conversation {
+                    ReflectionConversationView(
+                        model: conversation,
+                        header: AnyView(
+                            ThoughtRecordHeader(entry: entry)
+                                .padding(.top, 48)
+                        ),
+                        recordExtras: AnyView(
+                            ThoughtRecordExtras(
+                                entry: entry,
+                                journal: journal,
+                                openSource: openSource
+                            )
+                        ),
+                        rootTitle: "我的原话",
+                        rootTextOverride: entry.reflection.originalText,
+                        showsInlineProvenance: false,
+                        openCitation: { evidence in
+                            guard evidence.bookID == entry.book.id,
+                                  let locator = evidence.locator else { return }
+                            openSource(entry.book, locator)
+                        },
+                        onConversationDeleted: { dismiss() }
+                    )
+                } else {
+                    ProgressView()
+                        .task {
+                            if conversation == nil {
+                                conversation = makeConversation()
+                            }
                         }
-                    }
+                }
             }
+
+            ElsepageIconButton(
+                systemName: "chevron.left",
+                accessibilityLabel: "返回想法列表"
+            ) {
+                dismiss()
+            }
+            .padding(.leading, 16)
+            .padding(.top, 8)
         }
-        .navigationTitle("阅读记录")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
