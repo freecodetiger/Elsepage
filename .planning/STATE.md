@@ -95,3 +95,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Reader Help 关闭语义与回答边界修正完成（`.planning/quick/260913-reader-help-dismissal-and-grounding/SUMMARY.md`）；下滑不丢失、X 完全丢弃、Prompt v2 允许现实背景回答，未引入 WebSearch。
 - 2026-09-13：Reader Help Citation 返回体验修复完成（`.planning/quick/260913-reader-help-citation-return/SUMMARY.md`）；原文来源标签替代 E1，跳转时保留回答与 thread。
 - 2026-09-13：Agent Markdown v3 渲染完成（`.planning/quick/260913-agent-markdown-v3/SUMMARY.md`）；标题/列表/引用/代码块可渲染，Reader Help Prompt v3 支持更长结构化回答。
+- 2026-09-13：选区工具栏“聊聊”删除完成（`.planning/quick/260913-remove-reader-reflect-action/SUMMARY.md`）；保留笔记、问和复制入口。
