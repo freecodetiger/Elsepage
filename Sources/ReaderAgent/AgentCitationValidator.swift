@@ -82,12 +82,15 @@ public struct AgentCitationValidator: Sendable {
         readingBoundary: ReadingBoundary?
     ) async -> Bool {
         guard evidence.kind == .bookPassage else { return true }
+        // Unit callers without an index exercise only the marker contract.
+        // Production validation always supplies the local index and therefore
+        // must also supply a resolved read boundary.
         guard let bookIndex else { return true }
+        guard let readingBoundary else { return false }
         let chunkID = BookChunkID(rawValue: evidence.sourceID)
         guard let chunk = try? await bookIndex.chunk(id: chunkID, bookID: evidence.bookID, version: version) else { return false }
         guard chunk.bookID == evidence.bookID else { return false }
-        if let readingBoundary, !readingBoundary.contains(chunk) { return false }
-        return true
+        return readingBoundary.contains(chunk)
     }
 
     private static func splitStructuredBlock(from content: String) -> (display: String, structured: [AgentStructuredCitation]) {

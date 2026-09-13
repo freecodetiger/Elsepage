@@ -109,17 +109,27 @@ import Testing
     #expect(context.evidence[0].excerpt.count == 8)
 }
 
-private func chunk(book: BookID, id: String, resource: Int, progression: Double, text: String) throws -> BookChunk {
-    let json = try JSONSerialization.data(withJSONObject: ["href": "\(resource).xhtml", "locations": ["progression": progression], "unknownFutureField": ["kept": true]])
-    let locator = try BookLocator(json: json, href: "\(resource).xhtml", progression: progression)
+private func chunk(
+    book: BookID,
+    id: String,
+    resource: Int,
+    progression: Double,
+    endProgression: Double? = nil,
+    text: String
+) throws -> BookChunk {
+    let start = try locator(href: "\(resource).xhtml", progression: progression)
+    let end = try locator(href: "\(resource).xhtml", progression: endProgression ?? progression)
     // Retrieval targets children; fixtures insert retrieval units as .child.
-    return BookChunk(id: .init(rawValue: id), bookID: book, resourceHref: locator.href,
-        resourceOrdinal: resource, ordinal: resource, text: text, normalizedText: text,
-        startLocator: locator, endLocator: locator, sourceBlockIDs: [.init(rawValue: "block-\(id)")],
+    return BookChunk(id: .init(rawValue: id), bookID: book, resourceHref: start.href,
+        resourceOrdinal: resource, ordinal: Int(progression * 100_000), text: text, normalizedText: text,
+        startLocator: start, endLocator: end, sourceBlockIDs: [.init(rawValue: "block-\(id)")],
         role: .child)
 }
 
-private func locator(href: String, progression: Double) throws -> BookLocator {
+private func locator(href: String, progression: Double?) throws -> BookLocator {
+    guard let progression else {
+        return try BookLocator(json: Data("{\"href\":\"\(href)\"}".utf8), href: href)
+    }
     let json = try JSONSerialization.data(withJSONObject: ["href": href, "locations": ["progression": progression]])
     return try BookLocator(json: json, href: href, progression: progression)
 }
@@ -138,4 +148,74 @@ private actor InterruptibleExtractor: BookContentExtractor {
             if fail { continuation.finish(throwing: TestExtractionError.interrupted) } else { continuation.finish() }
         }
     }
+}
+
+
+@Test func readingBoundaryResolvesActiveChildAndCompleteActiveChunkPolicy() async throws {
+    let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "carc"), title: "CARC", fileName: "carc.epub", fileSize: 1)
+    try await books.insert(book)
+    let children = [
+        try chunk(book: book.id, id: "c1", resource: 0, progression: 0.1, endProgression: 0.2, text: "结构一"),
+        try chunk(book: book.id, id: "c2", resource: 0, progression: 0.2, endProgression: 0.4, text: "结构二"),
+        try chunk(book: book.id, id: "c3", resource: 0, progression: 0.4, endProgression: 0.6, text: "结构三"),
+    ]
+    try await index.replace(chunks: children, for: book.id, version: BookIndexPipeline.currentVersion)
+    let cursor = try locator(href: "0.xhtml", progression: 0.3)
+
+    let boundary = try #require(try await index.readingBoundary(bookID: book.id, locator: cursor))
+    #expect(boundary.activeChunkID == children[1].id)
+    #expect(boundary.decision(for: children[0]) == .allowCompletedChunk)
+    #expect(boundary.decision(for: children[1]) == .allowActiveChunk)
+    #expect(boundary.decision(for: children[2]) == .denyFutureChunk)
+
+    let results = try await index.lexicalSearch(
+        bookID: book.id,
+        query: "结构",
+        boundary: boundary,
+        limit: 10
+    )
+    #expect(results.map(\.0.id) == [children[0].id, children[1].id])
+}
+
+@Test func exactBoundaryDoesNotUnlockNextChildAndMissingProgressionFailsClosed() async throws {
+    let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "carc-exact"), title: "CARC", fileName: "carc.epub", fileSize: 1)
+    try await books.insert(book)
+    let children = [
+        try chunk(book: book.id, id: "c1", resource: 0, progression: 0.1, endProgression: 0.2, text: "结构一"),
+        try chunk(book: book.id, id: "c2", resource: 0, progression: 0.2, endProgression: 0.4, text: "结构二"),
+    ]
+    try await index.replace(chunks: children, for: book.id, version: BookIndexPipeline.currentVersion)
+
+    let exact = try locator(href: "0.xhtml", progression: 0.2)
+    let boundary = try #require(try await index.readingBoundary(bookID: book.id, locator: exact))
+    #expect(boundary.activeChunkID == nil)
+    #expect(boundary.decision(for: children[0]) == .allowCompletedChunk)
+    #expect(boundary.decision(for: children[1]) == .denyFutureChunk)
+
+    let missing = try BookLocator(json: Data("{\"href\":\"0.xhtml\"}".utf8), href: "0.xhtml")
+    #expect(try await index.readingBoundary(bookID: book.id, locator: missing) == nil)
+}
+
+@Test func nearbyTextUsesCompleteActiveChildWithoutLocatorTextAfter() async throws {
+    let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "nearby-carc"), title: "Nearby", fileName: "nearby.epub", fileSize: 1)
+    try await books.insert(book)
+    let active = try chunk(book: book.id, id: "active", resource: 0, progression: 0.2, endProgression: 0.4, text: "当前段落完整内容")
+    try await index.replace(chunks: [active], for: book.id, version: BookIndexPipeline.currentVersion)
+    let cursor = try BookLocator(
+        json: Data("{\"href\":\"0.xhtml\",\"locations\":{\"progression\":0.3}}".utf8),
+        href: "0.xhtml",
+        progression: 0.3,
+        textBefore: "已读前缀",
+        textHighlight: "当前",
+        textAfter: "尚未读到的下一段"
+    )
+    let builder = ReaderAgentContextBuilder(retriever: LocalBookRetriever(repository: index), repository: index)
+    let boundary = try #require(try await index.readingBoundary(bookID: book.id, locator: cursor))
+
+    let text = try #require(await builder.nearbyText(for: book.id, locator: cursor, boundary: boundary))
+    #expect(text.contains("当前段落完整内容"))
+    #expect(!text.contains("尚未读到的下一段"))
 }

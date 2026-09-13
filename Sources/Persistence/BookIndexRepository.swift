@@ -102,35 +102,83 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
                 var arguments: StatementArguments = [bookID.description, BookIndexPipeline.currentVersion, needle]
                 if let boundary, scope == .currentResource {
                     sql += " AND c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?"
-                    arguments += [boundary.resourceOrdinal, boundary.progression ?? 1]
+                    arguments += [boundary.resourceOrdinal, boundary.progression ?? -Double.greatestFiniteMagnitude]
                 } else if let boundary {
                     sql += " AND (c.resourceOrdinal < ? OR (c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?))"
-                    arguments += [boundary.resourceOrdinal, boundary.resourceOrdinal, boundary.progression ?? 1]
+                    arguments += [boundary.resourceOrdinal, boundary.resourceOrdinal, boundary.progression ?? -Double.greatestFiniteMagnitude]
                 }
                 sql += " ORDER BY c.resourceOrdinal,c.ordinal LIMIT ?"; arguments += [max(0, limit)]
-                return try Row.fetchAll(db, sql: sql, arguments: arguments).map { (try Self.chunk($0), 0.5) }
+                return try Row.fetchAll(db, sql: sql, arguments: arguments)
+                    .map { (try Self.chunk($0), 0.5) }
+                    .filter { boundary?.contains($0.0) ?? true }
             }
             var sql = "SELECT c.*, bm25(bookChunksFTS) AS rank FROM bookChunksFTS f JOIN bookChunks c ON c.id=f.chunkID WHERE f.bookChunksFTS MATCH ? AND c.bookID=? AND c.indexVersion=? AND c.role='child'"
             var arguments: StatementArguments = [terms.joined(separator: " OR "), bookID.description, BookIndexPipeline.currentVersion]
             if let boundary, scope == .currentResource {
                 sql += " AND c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?"
-                arguments += [boundary.resourceOrdinal, boundary.progression ?? 1]
+                arguments += [boundary.resourceOrdinal, boundary.progression ?? -Double.greatestFiniteMagnitude]
             } else if let boundary {
                 sql += " AND (c.resourceOrdinal < ? OR (c.resourceOrdinal = ? AND COALESCE(c.startProgression,0) <= ?))"
-                arguments += [boundary.resourceOrdinal, boundary.resourceOrdinal, boundary.progression ?? 1]
+                arguments += [boundary.resourceOrdinal, boundary.resourceOrdinal, boundary.progression ?? -Double.greatestFiniteMagnitude]
             }
             sql += " ORDER BY rank LIMIT ?"; arguments += [max(0, limit)]
-            return try Row.fetchAll(db, sql: sql, arguments: arguments).map { row in
+            return try Row.fetchAll(db, sql: sql, arguments: arguments).compactMap { row in
                 let rank: Double = row["rank"]
-                return (try Self.chunk(row), 1 / (1 + abs(rank)))
+                let chunk = try Self.chunk(row)
+                guard boundary?.contains(chunk) ?? true else { return nil }
+                return (chunk, 1 / (1 + abs(rank)))
             }
         }
     }
 
     public func readingBoundary(bookID: BookID, locator: BookLocator) async throws -> ReadingBoundary? {
         try await database.writer.read { db in
-            guard let ordinal = try Int.fetchOne(db, sql: "SELECT resourceOrdinal FROM bookChunks WHERE bookID=? AND resourceHref=? ORDER BY resourceOrdinal LIMIT 1", arguments: [bookID.description, locator.href]) else { return nil }
-            return ReadingBoundary(resourceOrdinal: ordinal, progression: locator.progression)
+            guard let progression = locator.progression,
+                  let ordinal = try Int.fetchOne(
+                    db,
+                    sql: """
+                        SELECT resourceOrdinal FROM bookChunks
+                        WHERE bookID=? AND indexVersion=? AND resourceHref=?
+                        ORDER BY resourceOrdinal LIMIT 1
+                        """,
+                    arguments: [
+                        bookID.description,
+                        BookIndexPipeline.currentVersion,
+                        locator.href,
+                    ]
+                  ) else { return nil }
+
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM bookChunks
+                    WHERE bookID=? AND indexVersion=? AND role='child' AND resourceOrdinal=?
+                    ORDER BY ordinal
+                    """,
+                arguments: [bookID.description, BookIndexPipeline.currentVersion, ordinal]
+            )
+            let children = try rows.map(Self.chunk)
+            let candidates = children.filter { child in
+                guard let start = child.startLocator.progression,
+                      let end = child.endLocator.progression else { return false }
+                return start < progression && progression < end
+            }
+            let active = candidates.min { lhs, rhs in
+                let lhsLength = (lhs.endLocator.progression ?? 0) - (lhs.startLocator.progression ?? 0)
+                let rhsLength = (rhs.endLocator.progression ?? 0) - (rhs.startLocator.progression ?? 0)
+                return lhsLength < rhsLength
+            }
+            let chapterID = active?.chapterID
+                ?? children.last {
+                    ($0.endLocator.progression ?? Double.greatestFiniteMagnitude) <= progression
+                }?.chapterID
+            return ReadingBoundary(
+                resourceOrdinal: ordinal,
+                progression: progression,
+                activeChunkID: active?.id,
+                activeEndProgression: active?.endLocator.progression,
+                chapterID: chapterID
+            )
         }
     }
 

@@ -27,25 +27,28 @@ import Testing
 }
 
 @Test func expanderClampsParentWindowAcrossReadingBoundary() async throws {
-    // Spec case: a legal child (36.5→36.9) sits in a parent that crosses the user's
-    // reading position (37.2). The window must end within the boundary: the child
-    // after the boundary is excluded and the straddling tail is trimmed.
+    // Spec case: cursor 37.2% is inside child c2 (36.9→37.5). CARC allows
+    // c1 and the complete active c2, but excludes the later c3.
     let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
     let book = Book(fingerprint: .init(rawValue: "spoiler"), title: "Spoiler", fileName: "spoiler.epub", fileSize: 1)
     try await books.insert(book)
     let (parent, children) = try makeStraddlingFamily(book: book.id)
     try await index.replace(chunks: [parent] + children, for: book.id, version: BookIndexPipeline.currentVersion)
 
-    let boundary = ReadingBoundary(resourceOrdinal: 0, progression: 0.372)
+    let boundary = ReadingBoundary(
+        resourceOrdinal: 0,
+        progression: 0.372,
+        activeChunkID: children[1].id,
+        activeEndProgression: children[1].endLocator.progression
+    )
     let expander = SmallToBigExpander(windowCharacterBudget: 1_200, maxSiblingsPerSide: 3)
     let windows = try await expander.expand([(children[0], 0.9)], boundary: boundary, using: index, bookID: book.id, version: BookIndexPipeline.currentVersion)
 
     let window = try #require(windows.first?.0)
     #expect(window.id == parent.id)
-    // In-boundary sibling + the straddler trimmed to the boundary fraction.
-    #expect(window.text == "事件发生在雨天\n\n但之后的情节")
-    // The window's end stays at or before the boundary.
-    #expect(window.endLocator.progression ?? 1 <= (boundary.progression ?? 1))
+    // Completed c1 + complete active c2; future c3 is excluded.
+    #expect(window.text == "事件发生在雨天\n\n但之后的情节走向尚未读到")
+    #expect(window.endLocator.progression == children[1].endLocator.progression)
 }
 
 @Test func expanderPassesThroughParentlessChildren() async throws {
@@ -110,4 +113,24 @@ private func chunk(book: BookID, id: String, resource: Int, ordinal: Int, progre
 private func locator(_ resource: Int, _ progression: Double) throws -> BookLocator {
     let data = try JSONSerialization.data(withJSONObject: ["href": "\(resource).xhtml", "locations": ["progression": progression]])
     return try BookLocator(json: data, href: "\(resource).xhtml", progression: progression)
+}
+
+@Test func expanderFailsClosedWhenAnchorIsDeniedByBoundary() async throws {
+    let db = try AppDatabase.inMemory(), books = GRDBBookRepository(database: db), index = GRDBBookIndexRepository(database: db)
+    let book = Book(fingerprint: .init(rawValue: "denied"), title: "Denied", fileName: "denied.epub", fileSize: 1)
+    try await books.insert(book)
+    let (parent, children) = try makeStraddlingFamily(book: book.id)
+    try await index.replace(chunks: [parent] + children, for: book.id, version: BookIndexPipeline.currentVersion)
+
+    let boundary = ReadingBoundary(resourceOrdinal: 0, progression: 0.10)
+    let expander = SmallToBigExpander()
+    await #expect(throws: RetrievalError.self) {
+        _ = try await expander.expand(
+            [(children[2], 0.9)],
+            boundary: boundary,
+            using: index,
+            bookID: book.id,
+            version: BookIndexPipeline.currentVersion
+        )
+    }
 }

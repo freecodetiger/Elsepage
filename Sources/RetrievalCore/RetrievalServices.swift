@@ -114,7 +114,8 @@ public struct LocalBookRetriever: BookRetriever {
             )
         } catch {
             expanded = ranked.prefix(query.limit).compactMap { id, score in
-                guard let chunk = chunks[id] else { return nil }
+                guard let chunk = chunks[id],
+                      query.boundary?.contains(chunk) ?? true else { return nil }
                 return (chunk, score)
             }
         }
@@ -247,7 +248,7 @@ private extension Array {
     }
 }
 
-public enum RetrievalError: Error { case invalidEmbeddings, missingExtractor }
+public enum RetrievalError: Error { case invalidEmbeddings, missingExtractor, deniedByReadingBoundary }
 
 public struct AnnotationContext: Hashable, Sendable {
     public let nearby: [BookEvidence]

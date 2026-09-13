@@ -99,7 +99,7 @@ public struct ReaderAgentPolicy: Sendable {
             ))
         }
         if !context.sessionHighlights.isEmpty {
-            let lines = context.sessionHighlights.compactMap { annotationLine($0.locator.textHighlight ?? $0.locator.textAfter) }
+            let lines = context.sessionHighlights.compactMap { annotationLine($0.locator.textHighlight) }
             if !lines.isEmpty {
                 messages.append(ModelMessage(
                     role: .system,
@@ -132,7 +132,7 @@ public struct ReaderAgentPolicy: Sendable {
 
     private static func locatorSummary(_ locator: BookLocator) -> String {
         let resource = locator.href.split(separator: "#").first.map(String.init) ?? locator.href
-        let text = [locator.textHighlight, locator.textAfter].compactMap { $0 }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = locator.textHighlight?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let detail = text.isEmpty ? "" : "（\(String(text.prefix(36)))）"
         let progression = locator.progression.map { " \(Int(($0 * 100).rounded()))%" } ?? ""
         return "\(resource)\(detail)\(progression)"

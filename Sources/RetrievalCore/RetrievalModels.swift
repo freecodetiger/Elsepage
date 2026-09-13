@@ -109,19 +109,62 @@ public struct BookIndexJob: Hashable, Sendable {
     }
 }
 
-public struct ReadingBoundary: Hashable, Sendable {
+public enum ReadAccessDecision: Equatable, Sendable {
+    case allowCompletedChunk
+    case allowActiveChunk
+    case denyFutureChunk
+}
+
+/// Resolved read-so-far access policy for one book location.
+///
+/// `activeChunkID` is the retrieval child currently being read. Its full text is
+/// allowed (Complete Active Retrieval Chunk), but no later sibling/resource may
+/// enter context. Missing progression or an ambiguous/unresolvable active chunk
+/// must not widen access.
+public struct ResolvedReadingBoundary: Hashable, Sendable {
     public let resourceOrdinal: Int
     public let progression: Double?
-    public init(resourceOrdinal: Int, progression: Double? = nil) {
-        self.resourceOrdinal = resourceOrdinal; self.progression = progression
+    public let activeChunkID: BookChunkID?
+    public let activeEndProgression: Double?
+    public let chapterID: String?
+
+    public init(
+        resourceOrdinal: Int,
+        progression: Double? = nil,
+        activeChunkID: BookChunkID? = nil,
+        activeEndProgression: Double? = nil,
+        chapterID: String? = nil
+    ) {
+        self.resourceOrdinal = resourceOrdinal
+        self.progression = progression
+        self.activeChunkID = activeChunkID
+        self.activeEndProgression = activeEndProgression
+        self.chapterID = chapterID
+    }
+
+    public func decision(for chunk: BookChunk) -> ReadAccessDecision {
+        if chunk.resourceOrdinal < resourceOrdinal { return .allowCompletedChunk }
+        if chunk.resourceOrdinal > resourceOrdinal { return .denyFutureChunk }
+
+        if let chapterID, let chunkChapterID = chunk.chapterID, chunkChapterID != chapterID {
+            return .denyFutureChunk
+        }
+        if let activeChunkID, chunk.id == activeChunkID {
+            return .allowActiveChunk
+        }
+        guard let progression else { return .denyFutureChunk }
+        let end = chunk.endLocator.progression ?? chunk.startLocator.progression
+        if let end, end <= progression { return .allowCompletedChunk }
+        return .denyFutureChunk
     }
 
     public func contains(_ chunk: BookChunk) -> Bool {
-        if chunk.resourceOrdinal != resourceOrdinal { return chunk.resourceOrdinal < resourceOrdinal }
-        guard let limit = progression else { return true }
-        return (chunk.startLocator.progression ?? 0) <= limit
+        decision(for: chunk) != .denyFutureChunk
     }
 }
+
+/// Compatibility name retained for existing call sites.
+public typealias ReadingBoundary = ResolvedReadingBoundary
 
 public struct BookEvidence: Hashable, Sendable, Identifiable {
     public let id: BookChunkID
@@ -228,18 +271,56 @@ public struct ReaderAgentContextBuilder: Sendable {
         try? await repository.readingBoundary(bookID: bookID, locator: locator)
     }
 
-    public func build(bookID: BookID, reflection: String, currentLocator: BookLocator?,
-                      evidenceLimit: Int = 4, characterBudget overrideBudget: Int? = nil,
-                      scope: BookRetrievalScope = .readSoFar) async throws -> ReaderAgentBookContext {
-        let boundary: ReadingBoundary?
-        if let currentLocator {
+    /// Builds the near-cursor passage without ever using an unbounded
+    /// `locator.text.after`. If the cursor is inside a retrieval child, its full
+    /// text is used (CARC policy); otherwise only already-read locator snippets
+    /// are eligible.
+    public func nearbyText(
+        for bookID: BookID,
+        locator: BookLocator,
+        boundary: ResolvedReadingBoundary?
+    ) async -> String? {
+        if let activeChunkID = boundary?.activeChunkID,
+           let active = try? await repository.chunk(
+                id: activeChunkID,
+                bookID: bookID,
+                version: BookIndexPipeline.currentVersion
+           ) {
+            return [locator.textBefore, active.text]
+                .compactMap { $0 }
+                .joined()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+        }
+        return [locator.textBefore, locator.textHighlight]
+            .compactMap { $0 }
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+    }
+
+    public func build(
+        bookID: BookID,
+        reflection: String,
+        currentLocator: BookLocator?,
+        boundary resolvedBoundary: ResolvedReadingBoundary? = nil,
+        evidenceLimit: Int = 4,
+        characterBudget overrideBudget: Int? = nil,
+        scope: BookRetrievalScope = .readSoFar
+    ) async throws -> ReaderAgentBookContext {
+        let boundary: ResolvedReadingBoundary?
+        if let resolvedBoundary {
+            boundary = resolvedBoundary
+        } else if let currentLocator {
             boundary = try await repository.readingBoundary(bookID: bookID, locator: currentLocator)
         } else {
             boundary = nil
         }
-        // No known reading boundary means no broad book retrieval. This is the
-        // conservative anti-spoiler default, not an invitation to search all.
-        guard boundary != nil else { return ReaderAgentBookContext(evidence: []) }
+        // No known progression means no broad retrieval for the current
+        // resource. This is the conservative anti-spoiler default.
+        guard let boundary, boundary.progression != nil else {
+            return ReaderAgentBookContext(evidence: [])
+        }
         let retrieved = try await retriever.retrieve(.init(bookID: bookID, text: reflection, boundary: boundary, limit: max(1, evidenceLimit), scope: scope))
         var remaining = max(0, overrideBudget ?? characterBudget)
         let evidence = retrieved.compactMap { item -> BookEvidence? in
@@ -280,3 +361,6 @@ public protocol Reranker: Sendable {
     func rerank(query: String, candidates: [RerankCandidate], limit: Int?) async throws -> [RerankedPassage]
 }
 
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}

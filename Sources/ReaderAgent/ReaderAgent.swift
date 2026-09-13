@@ -197,6 +197,25 @@ public struct ReaderAgent: Sendable {
                     continuation.yield(.started)
                     let evidence = (try? await reflections.evidence(for: reflection.id)) ?? []
                     let currentLocator = evidence.compactMap(\.locator).first
+                    let readingBoundary: ResolvedReadingBoundary?
+                    if let currentLocator, let contextBuilder {
+                        readingBoundary = await contextBuilder.readingBoundary(
+                            for: reflection.bookID,
+                            locator: currentLocator
+                        )
+                    } else {
+                        readingBoundary = nil
+                    }
+                    let nearbyPreviewText: String?
+                    if let currentLocator {
+                        nearbyPreviewText = await contextBuilder?.nearbyText(
+                            for: reflection.bookID,
+                            locator: currentLocator,
+                            boundary: readingBoundary
+                        ) ?? Self.nearbyPreview(currentLocator)
+                    } else {
+                        nearbyPreviewText = nil
+                    }
                     // Past-thought retrieval spans all books (WS3): same-book
                     // reflections stay preferred, cross-book ones become eligible,
                     // and long-term memories surface as evidence only.
@@ -219,7 +238,7 @@ public struct ReaderAgent: Sendable {
                         currentReading: .init(
                             bookID: reflection.bookID,
                             selectedText: currentLocator?.textHighlight,
-                            nearbyTextPreview: Self.nearbyPreview(currentLocator),
+                            nearbyTextPreview: nearbyPreviewText,
                             hasCurrentLocator: currentLocator != nil
                         ),
                         availableSources: .init(
@@ -268,6 +287,7 @@ public struct ReaderAgent: Sendable {
                             bookID: reflection.bookID,
                             reflection: bookPolicy.query,
                             currentLocator: currentLocator,
+                            boundary: readingBoundary,
                             evidenceLimit: bookPolicy.evidenceLimit,
                             characterBudget: executionPlan.budget.bookEvidenceCharacters,
                             scope: bookPolicy.scope == .readSoFar ? .readSoFar : .currentResource
@@ -283,8 +303,20 @@ public struct ReaderAgent: Sendable {
                     if executionPlan.nearbyIncluded,
                        let source = evidence.first(where: { $0.locator != nil }),
                        let locator = source.locator {
-                        let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
-                        nearbyCandidate = text.isEmpty ? nil : NearbyPassageCandidate(text: text, sourceID: source.id.uuidString.lowercased(), locator: locator)
+                        let text = await contextBuilder?.nearbyText(
+                            for: reflection.bookID,
+                            locator: locator,
+                            boundary: readingBoundary
+                        ) ?? Self.nearbyPreview(locator)
+                        if let text, !text.isEmpty {
+                            nearbyCandidate = NearbyPassageCandidate(
+                                text: text,
+                                sourceID: source.id.uuidString.lowercased(),
+                                locator: locator
+                            )
+                        } else {
+                            nearbyCandidate = nil
+                        }
                     } else {
                         nearbyCandidate = nil
                     }
@@ -329,12 +361,7 @@ public struct ReaderAgent: Sendable {
                     pipelineMetrics.semanticCacheMisses = semanticRanking?.cacheHitMiss.misses
                     pipelineMetrics.semanticUnavailable = semanticRanking == nil
                     pipelineMetrics.brainCandidateCount = assembly.brainCandidates.isEmpty ? nil : assembly.brainCandidates.count
-                    let citationBoundary: ReadingBoundary?
-                    if let currentLocator, let contextBuilder {
-                        citationBoundary = await contextBuilder.readingBoundary(for: reflection.bookID, locator: currentLocator)
-                    } else {
-                        citationBoundary = nil
-                    }
+                    let citationBoundary = readingBoundary
                     let retrievalDuration = retrievalStart.duration(to: clock.now)
                     var completedMessage: ReflectionMessage?
                     var replyUsage: TokenUsage?
@@ -506,7 +533,7 @@ public struct ReaderAgent: Sendable {
 
     private static func nearbyPreview(_ locator: BookLocator?) -> String? {
         guard let locator else { return nil }
-        let text = [locator.textBefore, locator.textHighlight, locator.textAfter].compactMap { $0 }.joined()
+        let text = [locator.textBefore, locator.textHighlight].compactMap { $0 }.joined()
         return text.isEmpty ? nil : String(text.prefix(600))
     }
 
