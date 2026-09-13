@@ -1,6 +1,6 @@
 # ReadLoop Reader Help 临时选句答疑 Spec
 
-> 状态：Proposed（2026-09-13）
+> 状态：Implemented（代码完成，2026-09-13；App 构建与真机验收待用户）
 > 分支：`codex/reader-help-spec`
 > 适用范围：EPUB 阅读器内的选中文字临时答疑
 > 核心决策：**显式触发、默认临时、书籍内上下文、CARC 防剧透、单次回复模型调用、显式保存才持久化**
@@ -231,7 +231,7 @@ Agent：<最终完整回答>
 建议修改：
 
 - `App/Reader/AnnotationUI.swift`：增加选句工具栏入口。
-- `App/Reader/ReaderModel.swift`：暴露帮助 service 与捕获的 selection，不承载回答状态。
+- `App/Reader/ReaderModel.swift`：暴露帮助 service、捕获 selection，并只持有当前 ephemeral thread 的引用；流式回答状态由 `ReaderHelpModel` 独立承载。
 - `App/Reader/ReaderScreen.swift`：呈现轻量 help sheet。
 - `App/Library/LibraryModel.swift`、`App/AppModel.swift`：将 service 注入 Reader 生命周期。
 
@@ -343,7 +343,7 @@ public enum ReaderHelpEvent: Equatable, Sendable {
     case started
     case contextPrepared(ReaderHelpContextSummary)
     case textDelta(String)
-    case citationsValidated(ReaderHelpProvenance)
+    case citationsValidated(AgentResponseProvenance)
     case completed(ReaderHelpResponse)
     case cancelled
     case failed(ReaderHelpFailure)
@@ -368,6 +368,7 @@ public enum ReaderHelpFailure: Error, Equatable, Sendable {
     case invalidSelection
     case emptyQuestion
     case selectionTooLong
+    case questionTooLong
     case runtime(AgentFailure)
     case emptyResponse
 }
@@ -381,7 +382,8 @@ public enum ReaderHelpFailure: Error, Equatable, Sendable {
 public struct ReaderHelpResponse: Hashable, Sendable {
     public let id: UUID
     public let content: String
-    public let citations: [AgentCitation]
+    public let provenance: AgentResponseProvenance
+    public let isTruncated: Bool
 }
 ```
 
@@ -844,3 +846,61 @@ Reader Help 应作为一个明确的轻量产品用例落地，而不是把现�
 - Agent 复用现有 Runtime 能力；
 - Reflection 数据与产品闭环不被污染；
 - 架构新增面保持在 Reader Help 的清晰接缝内。
+
+
+---
+
+## 19. 实现记录（2026-09-13）
+
+### Agent / Retrieval
+
+- `Sources/ReaderAgent/ReaderHelp.swift`
+  - `ReaderHelpRequest`
+  - `ReaderHelpTurn`
+  - `ReaderHelpContextSummary`
+  - `ReaderHelpEvent`
+  - `ReaderHelpFailure`
+  - `ReaderHelpResponse`
+  - `ReaderHelpPolicy`
+- `Sources/ReaderAgent/ReaderHelpService.swift`
+  - 复用 `AgentExecutor`、`ReaderAgentContextBuilder`、`ContextAssembler`、`AgentCitationValidator`
+  - 每轮一次回复模型调用
+  - 无 Reflection、Brain、Memory、routing trace 依赖
+  - 无 progression / 不可用 index fail-closed
+  - `textAfter` 不进入 Prompt
+
+### Reader UI
+
+- `App/Reader/ReaderHelpModel.swift`：内存态 thread、流式缓冲、重试、复制、保存状态
+- `App/Reader/ReaderHelpSheet.swift`：轻量面板、选段、追问、回答、引用与保存入口
+- `App/Reader/ReaderModel.swift`：选区“问”入口、help thread 生命周期、显式保存 Note
+- `App/Reader/AnnotationUI.swift`：选句工具栏新增“问”
+- `App/AppModel.swift` 与 `App/Library/LibraryModel.swift`：注入共享的 Reader Help service
+
+### 自动化证据
+
+- `Tests/AgentProviderTests/ReaderHelpServiceTests.swift`
+  - 正常流式回答
+  - 单次模型调用
+  - 请求校验
+  - Provider / runtime 错误
+  - 截断响应
+  - 最近轮次预算
+  - `textAfter` 不进入 Prompt
+- `Tests/ReadLoopCoreTests/ReaderHelpContextTests.swift`
+  - CARC active child 与 read-so-far 证据
+  - 未来文本与后续 resource 排除
+  - missing progression fail-closed
+
+执行结果：
+
+```text
+swift test
+382 tests passed
+```
+
+### 待用户门禁
+
+- `xcodegen generate` 已更新 App 工程引用。
+- 未由 Agent 运行 `xcodebuild`。
+- 真机验收按 `docs/testing/reader-help/2026-09-13-delivery-checklist.md` 执行。
