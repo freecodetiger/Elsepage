@@ -1,0 +1,1164 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>页外 · 想法页减法原型</title>
+  <style>
+    :root {
+      --stage: #11110f;
+      --stage-muted: #a6a69f;
+      --stage-line: rgba(255, 255, 255, .13);
+      --paper: #f3f3f1;
+      --paper-deep: #ebebe8;
+      --surface: #ffffff;
+      --surface-2: #f6f6f3;
+      --ink: #10100f;
+      --ink-2: #5e5e5a;
+      --ink-3: #969692;
+      --line: #d8d8d3;
+      --line-strong: #c6c6c0;
+      --phone-shadow: 0 42px 110px rgba(0, 0, 0, .46), 0 3px 0 rgba(255, 255, 255, .07) inset;
+      --radius-card: 18px;
+      --radius-phone: 54px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      min-height: 100%;
+      margin: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      color: #f4f4f0;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(255,255,255,.07), transparent 32%),
+        radial-gradient(circle at 86% 88%, rgba(255,255,255,.045), transparent 28%),
+        var(--stage);
+      font-family: "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .13;
+      background-image:
+        linear-gradient(rgba(255,255,255,.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.11) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(to bottom, black, transparent 78%);
+    }
+
+    button { font: inherit; }
+
+    .prototype {
+      position: relative;
+      z-index: 1;
+      width: min(1460px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 58px 0 72px;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 48px;
+      align-items: end;
+      margin-bottom: 48px;
+      animation: reveal .7s cubic-bezier(.2,.8,.2,1) both;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--stage-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 26px;
+      height: 1px;
+      background: currentColor;
+      opacity: .65;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin: 0;
+      color: #f7f7f2;
+      font-family: "Songti SC", "STSong", serif;
+      font-size: clamp(40px, 5vw, 72px);
+      font-weight: 600;
+      line-height: 1.04;
+      letter-spacing: -.045em;
+    }
+
+    .lede {
+      max-width: 620px;
+      margin: 24px 0 0;
+      color: var(--stage-muted);
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    .stage-controls {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      color: var(--stage-muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .stage-note {
+      max-width: 250px;
+      line-height: 1.65;
+      text-align: right;
+    }
+
+    .theme-toggle {
+      min-height: 44px;
+      padding: 0 16px;
+      color: #f5f5ef;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--stage-line);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background .2s ease, border-color .2s ease, transform .2s ease;
+    }
+
+    .theme-toggle:hover {
+      background: rgba(255,255,255,.1);
+      border-color: rgba(255,255,255,.24);
+    }
+
+    .theme-toggle:active { transform: scale(.97); }
+
+    .devices {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(48px, 8vw, 110px);
+      align-items: start;
+      justify-items: center;
+    }
+
+    .device-block {
+      width: 100%;
+      max-width: 500px;
+      animation: reveal .75s cubic-bezier(.2,.8,.2,1) both;
+    }
+
+    .device-block:nth-child(2) { animation-delay: .13s; }
+
+    .device-caption {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 20px;
+      width: min(390px, 100%);
+      margin: 0 auto 16px;
+      color: var(--stage-muted);
+      font-size: 12px;
+      letter-spacing: .08em;
+    }
+
+    .device-caption strong {
+      color: #f4f4f0;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .04em;
+    }
+
+    .phone-shell {
+      width: 390px;
+      height: 844px;
+      margin: 0 auto;
+      padding: 10px;
+      border-radius: var(--radius-phone);
+      background: #050505;
+      box-shadow: var(--phone-shadow);
+      position: relative;
+    }
+
+    .phone-shell::before,
+    .phone-shell::after {
+      content: "";
+      position: absolute;
+      left: -3px;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+      background: #1d1d1d;
+    }
+
+    .phone-shell::before { top: 180px; height: 72px; }
+    .phone-shell::after { top: 270px; height: 92px; }
+
+    .phone-screen {
+      --phone-bg: var(--paper);
+      --phone-surface: var(--surface);
+      --phone-surface-2: var(--surface-2);
+      --phone-ink: var(--ink);
+      --phone-ink-2: var(--ink-2);
+      --phone-ink-3: var(--ink-3);
+      --phone-line: var(--line);
+      --phone-line-strong: var(--line-strong);
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      color: var(--phone-ink);
+      background: var(--phone-bg);
+      border-radius: 44px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dark-preview .phone-screen {
+      --phone-bg: #0b0b0a;
+      --phone-surface: #181817;
+      --phone-surface-2: #222220;
+      --phone-ink: #f4f4ef;
+      --phone-ink-2: #a6a6a0;
+      --phone-ink-3: #777772;
+      --phone-line: #323230;
+      --phone-line-strong: #454541;
+    }
+
+    .dynamic-island {
+      position: absolute;
+      z-index: 4;
+      top: 12px;
+      left: 50%;
+      width: 124px;
+      height: 34px;
+      border-radius: 999px;
+      background: #030303;
+      transform: translateX(-50%);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.03) inset;
+    }
+
+    .statusbar {
+      flex: 0 0 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      color: var(--phone-ink);
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: .02em;
+    }
+
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .signal {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+    }
+
+    .signal i {
+      display: block;
+      width: 3px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .signal i:nth-child(1) { height: 5px; }
+    .signal i:nth-child(2) { height: 7px; }
+    .signal i:nth-child(3) { height: 9px; }
+    .signal i:nth-child(4) { height: 12px; }
+
+    .wifi {
+      width: 15px;
+      height: 11px;
+      border: 2px solid currentColor;
+      border-width: 2px 2px 0 0;
+      border-radius: 0 12px 0 0;
+      transform: translateY(2px) rotate(-18deg);
+    }
+
+    .battery {
+      width: 22px;
+      height: 11px;
+      border: 1.5px solid currentColor;
+      border-radius: 3px;
+      position: relative;
+      opacity: .9;
+    }
+
+    .battery::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 1px;
+      background: currentColor;
+    }
+
+    .battery::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      right: -3px;
+      width: 2px;
+      height: 5px;
+      border-radius: 0 2px 2px 0;
+      background: currentColor;
+      opacity: .65;
+    }
+
+    .app-nav {
+      flex: 0 0 54px;
+      display: grid;
+      grid-template-columns: 44px 1fr 44px;
+      align-items: center;
+      padding: 0 16px;
+      background: var(--phone-bg);
+    }
+
+    .app-nav h2 {
+      margin: 0;
+      font-family: "Songti SC", "STSong", serif;
+      font-size: 21px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+      text-align: center;
+    }
+
+    .nav-icon,
+    .back-button,
+    .quiet-button {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      color: var(--phone-ink);
+      background: transparent;
+      border: 0;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .nav-icon {
+      font-size: 21px;
+      letter-spacing: .08em;
+    }
+
+    .back-button {
+      font-size: 28px;
+      line-height: 1;
+      transform: translateY(-1px);
+    }
+
+    .screen-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 8px 16px 104px;
+      scrollbar-width: none;
+    }
+
+    .screen-content::-webkit-scrollbar { display: none; }
+
+    .segmented {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      margin: 4px 0 22px;
+      background: color-mix(in srgb, var(--phone-surface-2) 86%, var(--phone-line));
+      border-radius: 13px;
+      isolation: isolate;
+    }
+
+    .segmented button {
+      position: relative;
+      z-index: 1;
+      height: 34px;
+      color: var(--phone-ink-2);
+      background: transparent;
+      border: 0;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color .2s ease;
+    }
+
+    .segmented button.active {
+      color: var(--phone-ink);
+      background: var(--phone-surface);
+      box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.025);
+    }
+
+    .month-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin: 4px 2px 12px;
+    }
+
+    .month-heading strong {
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -.01em;
+    }
+
+    .month-heading span {
+      color: var(--phone-ink-3);
+      font-size: 12px;
+    }
+
+    .record-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .record-card {
+      position: relative;
+      width: 100%;
+      display: block;
+      padding: 18px 42px 17px 18px;
+      text-align: left;
+      color: var(--phone-ink);
+      background: var(--phone-surface);
+      border: 1px solid var(--phone-line);
+      border-radius: var(--radius-card);
+      box-shadow: 0 1px 0 rgba(0,0,0,.025);
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .record-card:hover {
+      transform: translateY(-1px);
+      border-color: var(--phone-line-strong);
+      box-shadow: 0 8px 22px rgba(0,0,0,.055);
+    }
+
+    .record-card.selected {
+      border-color: var(--phone-ink);
+      box-shadow: 0 6px 20px rgba(0,0,0,.07);
+    }
+
+    .record-card.selected::before {
+      content: "";
+      position: absolute;
+      top: 18px;
+      bottom: 18px;
+      left: 0;
+      width: 3px;
+      border-radius: 0 4px 4px 0;
+      background: var(--phone-ink);
+    }
+
+    .card-context {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      margin-bottom: 10px;
+      color: var(--phone-ink-3);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .card-context .book {
+      color: var(--phone-ink-2);
+      font-weight: 600;
+    }
+
+    .card-headline {
+      display: -webkit-box;
+      margin: 0;
+      overflow: hidden;
+      color: var(--phone-ink);
+      font-family: "Songti SC", "STSong", serif;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.48;
+      letter-spacing: -.015em;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 13px;
+      color: var(--phone-ink-2);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .card-meta svg { flex: 0 0 auto; opacity: .72; }
+
+    .card-chevron {
+      position: absolute;
+      top: 50%;
+      right: 17px;
+      color: var(--phone-ink-3);
+      font-family: "Helvetica Neue", sans-serif;
+      font-size: 23px;
+      font-weight: 300;
+      transform: translateY(-52%);
+    }
+
+    .archive-card .card-headline {
+      font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+      font-size: 17px;
+      font-weight: 650;
+    }
+
+    .archive-split {
+      display: grid;
+      gap: 5px;
+      margin-top: 12px;
+      color: var(--phone-ink-2);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .archive-split b {
+      color: var(--phone-ink);
+      font-weight: 650;
+    }
+
+    .tabbar {
+      position: absolute;
+      z-index: 5;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      min-height: 82px;
+      padding: 10px 14px 22px;
+      background: color-mix(in srgb, var(--phone-bg) 88%, transparent);
+      border-top: 1px solid color-mix(in srgb, var(--phone-line) 74%, transparent);
+      backdrop-filter: blur(24px) saturate(150%);
+    }
+
+    .tab {
+      display: grid;
+      justify-items: center;
+      gap: 4px;
+      padding: 0;
+      color: var(--phone-ink-3);
+      background: transparent;
+      border: 0;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .tab svg {
+      width: 21px;
+      height: 21px;
+      stroke-width: 1.65;
+    }
+
+    .tab.active { color: var(--phone-ink); font-weight: 650; }
+
+    .detail-content {
+      padding-top: 18px;
+    }
+
+    .detail-context {
+      margin-bottom: 18px;
+      color: var(--phone-ink-3);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .detail-context .book {
+      color: var(--phone-ink-2);
+      font-weight: 600;
+    }
+
+    .detail-title {
+      margin: 0 0 30px;
+      color: var(--phone-ink);
+      font-family: "Songti SC", "STSong", serif;
+      font-size: 27px;
+      font-weight: 600;
+      line-height: 1.38;
+      letter-spacing: -.035em;
+    }
+
+    .detail-section {
+      margin-top: 27px;
+    }
+
+    .detail-section + .detail-section {
+      padding-top: 27px;
+      border-top: 1px solid var(--phone-line);
+    }
+
+    .section-label {
+      margin: 0 0 10px;
+      color: var(--phone-ink-3);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+    }
+
+    .detail-copy {
+      margin: 0;
+      color: var(--phone-ink);
+      font-size: 16px;
+      line-height: 1.82;
+    }
+
+    .response-panel {
+      padding: 18px 18px 17px;
+      background: var(--phone-surface-2);
+      border: 1px solid var(--phone-line);
+      border-radius: 16px;
+    }
+
+    .response-panel .section-label { margin-bottom: 9px; }
+    .response-panel .detail-copy { font-size: 15px; line-height: 1.78; }
+
+    .continue-row {
+      width: 100%;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 14px;
+      padding: 0;
+      color: var(--phone-ink);
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--phone-line);
+      cursor: pointer;
+    }
+
+    .continue-row span:first-child {
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .continue-row span:last-child {
+      color: var(--phone-ink-3);
+      font-size: 20px;
+      font-weight: 300;
+    }
+
+    details.evidence {
+      margin-top: 26px;
+      padding-top: 20px;
+      border-top: 1px solid var(--phone-line);
+    }
+
+    details.evidence summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      color: var(--phone-ink);
+      font-size: 14px;
+      font-weight: 650;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.evidence summary::-webkit-details-marker { display: none; }
+    details.evidence summary::after {
+      content: "›";
+      color: var(--phone-ink-3);
+      font-size: 21px;
+      font-weight: 300;
+      transform: rotate(90deg);
+      transition: transform .18s ease;
+    }
+
+    details.evidence[open] summary::after { transform: rotate(-90deg); }
+
+    .evidence-body {
+      display: grid;
+      gap: 14px;
+      padding: 10px 0 4px;
+    }
+
+    .evidence-item {
+      padding-left: 12px;
+      border-left: 1px solid var(--phone-line-strong);
+    }
+
+    .evidence-item strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--phone-ink);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .evidence-item p {
+      margin: 0;
+      color: var(--phone-ink-2);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .empty-note {
+      padding: 24px 0;
+      color: var(--phone-ink-3);
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    .prototype-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 30px;
+      margin-top: 64px;
+      padding-top: 22px;
+      color: var(--stage-muted);
+      border-top: 1px solid var(--stage-line);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .prototype-footer p { margin: 0; max-width: 620px; }
+
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 960px) {
+      .prototype {
+        width: min(500px, calc(100% - 28px));
+        padding-top: 34px;
+      }
+
+      .masthead {
+        grid-template-columns: 1fr;
+        gap: 26px;
+      }
+
+      .stage-controls {
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .stage-note { text-align: left; }
+
+      .devices {
+        grid-template-columns: 1fr;
+        gap: 56px;
+      }
+    }
+
+    @media (max-width: 460px) {
+      .prototype { width: 100%; padding: 26px 14px 48px; }
+      .masthead { margin-bottom: 32px; }
+      h1 { font-size: 38px; }
+      .lede { font-size: 14px; }
+      .stage-controls { flex-direction: column; gap: 14px; }
+      .stage-note { max-width: none; }
+      .phone-shell {
+        width: 100%;
+        height: min(844px, calc(100vh - 48px));
+        min-height: 700px;
+        padding: 7px;
+        border-radius: 42px;
+      }
+      .phone-screen { border-radius: 36px; }
+      .dynamic-island { top: 9px; width: 108px; height: 30px; }
+      .prototype-footer { flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: .001ms !important;
+        transition-duration: .001ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype">
+    <header class="masthead">
+      <div>
+        <div class="eyebrow">页外 / 想法页</div>
+        <h1>让记录自己说话，<br>而不是让界面发言。</h1>
+        <p class="lede">
+          所有阅读记录默认都有 AI 回应。回应不再是一个状态标签，而是记录展开后的正文。
+          折叠态只负责扫读，展开态才负责阅读、追问和回到依据。
+        </p>
+      </div>
+      <div class="stage-controls">
+        <div class="stage-note">
+          点击左侧卡片，切换右侧展开内容。<br>
+          日期固定为中文格式。
+        </div>
+        <button class="theme-toggle" type="button" id="themeToggle">预览暗色</button>
+      </div>
+    </header>
+
+    <section class="devices" aria-label="想法页设计原型">
+      <article class="device-block">
+        <div class="device-caption">
+          <strong>扫读态</strong>
+          <span>记录 / 档案</span>
+        </div>
+
+        <div class="phone-shell">
+          <div class="phone-screen">
+            <div class="dynamic-island" aria-hidden="true"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <div class="status-right" aria-hidden="true">
+                <span class="signal"><i></i><i></i><i></i><i></i></span>
+                <span class="wifi"></span>
+                <span class="battery"></span>
+              </div>
+            </div>
+
+            <header class="app-nav">
+              <span aria-hidden="true"></span>
+              <h2>想法</h2>
+              <button class="nav-icon" type="button" aria-label="更多">•••</button>
+            </header>
+
+            <div class="screen-content">
+              <div class="segmented" role="tablist" aria-label="内容类型">
+                <button class="active" type="button" role="tab" aria-selected="true" data-mode="records">记录</button>
+                <button type="button" role="tab" aria-selected="false" data-mode="archive">档案</button>
+              </div>
+
+              <div class="month-heading">
+                <strong>2026年9月</strong>
+                <span id="listCount">3 条记录</span>
+              </div>
+
+              <div class="record-list" id="recordList" aria-live="polite"></div>
+            </div>
+
+            <nav class="tabbar" aria-label="主导航">
+              <button class="tab" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                <span>今天</span>
+              </button>
+              <button class="tab" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 5.5v16"/></svg>
+                <span>书架</span>
+              </button>
+              <button class="tab active" type="button" aria-current="page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.4 14.5A6 6 0 1 1 15.6 14.5C14.6 15.2 14 16.2 14 18h-4c0-1.8-.6-2.8-1.6-3.5z"/></svg>
+                <span>想法</span>
+              </button>
+              <button class="tab" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>
+                <span>我的</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </article>
+
+      <article class="device-block">
+        <div class="device-caption">
+          <strong>展开态</strong>
+          <span>原文 / AI 回应 / 依据</span>
+        </div>
+
+        <div class="phone-shell">
+          <div class="phone-screen">
+            <div class="dynamic-island" aria-hidden="true"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <div class="status-right" aria-hidden="true">
+                <span class="signal"><i></i><i></i><i></i><i></i></span>
+                <span class="wifi"></span>
+                <span class="battery"></span>
+              </div>
+            </div>
+
+            <header class="app-nav">
+              <button class="back-button" type="button" aria-label="返回">‹</button>
+              <h2>阅读记录</h2>
+              <button class="nav-icon" type="button" aria-label="更多">•••</button>
+            </header>
+
+            <div class="screen-content detail-content" id="detailContent" aria-live="polite"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <footer class="prototype-footer">
+      <p>
+        说明：这是一个拟真交互原型。搜索通过下拉触发，分组和设置收进工具栏，
+        卡片是全屏唯一的主点击目标。默认不显示回应状态，因为它已经是每个阅读记录的既定结果。
+      </p>
+      <p>页外 · 减法原型 / 2026.09.14</p>
+    </footer>
+  </main>
+
+  <script>
+    const records = [
+      {
+        id: "r-01",
+        book: "可能性的艺术",
+        date: "9月14日",
+        headline: "自由让人不安的地方，可能不是选择太多，而是结果必须由自己承担。",
+        meta: "与 8 月 27 日的一条记录有关",
+        original: "最近一直在想，自由当然意味着选择变多，但真正让人不安的可能不是选择本身，而是选择之后必须承担的结果。选择越多，责任越无法转移。",
+        response: "你把自由的重心从“能不能选”移到了“愿不愿意承担”。这会引出一个新的问题：如果一个人没有能力承担结果，他还拥有完整的选择吗？",
+        evidence: [
+          ["本次阅读", "参考了《可能性的艺术》第 4 章 · 2 段原文"],
+          ["过去的你", "8 月 27 日：自由不是没有重量，只是重量落在自己身上。"]
+        ]
+      },
+      {
+        id: "r-02",
+        book: "置身事内",
+        date: "9月13日",
+        headline: "地方政府不是市场之外的力量，它本身就在塑造市场。",
+        meta: "2 条高亮",
+        original: "过去我总把政府和市场理解成两股相对的力量，但这本书让我意识到，地方政府本身就是市场运行的一部分，它通过土地、财政和产业政策参与塑造了市场。",
+        response: "这里值得继续追的是“塑造”与“干预”的区别。塑造意味着市场从一开始就不是自然生成的，而干预通常预设了一个先于政府存在的市场。",
+        evidence: [
+          ["本次阅读", "收录 2 条高亮，覆盖第 3–4 章"],
+          ["相关原文", "地方政府既是市场规则的执行者，也是市场机会的创造者。"]
+        ]
+      },
+      {
+        id: "r-03",
+        book: "局外人",
+        date: "9月12日",
+        headline: "理解一个人，并不等于站在他这一边。",
+        meta: "读完这一节时留下",
+        original: "默尔索的冷漠让我想到，理解一个人并不等于替他辩护。理解只是承认他的行为有可以被叙述的理由，这和赞同不是一回事。",
+        response: "你在“理解”和“赞同”之间留出了一段距离。也许可以再问：如果理解不意味着赞同，它是否仍然会改变我们对一个人的责任判断？",
+        evidence: [
+          ["本次阅读", "参考了《局外人》第 2 部 · 3 段原文"],
+          ["相关记录", "没有找到足够接近的过去记录。"]
+        ]
+      }
+    ];
+
+    const archive = [
+      {
+        id: "a-01",
+        book: "可能性的艺术",
+        date: "9月14日",
+        headline: "自由意味着承担选择。",
+        thought: "自由不是选择数量的增加，而是承担结果的能力。",
+        question: "如果一个人没有能力承担结果，他还拥有完整的选择吗？",
+        original: "真正让人不安的可能不是选择本身，而是结果必须由自己承担。",
+        response: "这条看法已经从一次阅读记录，慢慢变成了你对“自由”的稳定理解。",
+        evidence: [
+          ["来自阅读", "《可能性的艺术》 · 2 条记录"],
+          ["形成时间", "2026年8月–9月"]
+        ]
+      },
+      {
+        id: "a-02",
+        book: "置身事内",
+        date: "9月13日",
+        headline: "市场并不是政府之外的天然秩序。",
+        thought: "地方政府既是规则的执行者，也是市场机会的创造者。",
+        question: "“塑造市场”和“干预市场”到底有什么区别？",
+        original: "过去我把政府和市场理解成两股相对的力量。",
+        response: "这条看法仍在形成，下一次遇到相关材料时值得继续修正。",
+        evidence: [
+          ["来自阅读", "《置身事内》 · 2 条高亮"],
+          ["当前状态", "演化中"]
+        ]
+      }
+    ];
+
+    const state = {
+      mode: "records",
+      selectedId: records[0].id
+    };
+
+    const list = document.getElementById("recordList");
+    const listCount = document.getElementById("listCount");
+    const detail = document.getElementById("detailContent");
+    const tabs = document.querySelectorAll(".segmented button");
+
+    function esc(value) {
+      return value.replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[character]);
+    }
+
+    function activeItems() {
+      return state.mode === "records" ? records : archive;
+    }
+
+    function activeItem() {
+      const items = activeItems();
+      return items.find(item => item.id === state.selectedId) || items[0];
+    }
+
+    function renderList() {
+      const items = activeItems();
+      listCount.textContent = state.mode === "records"
+        ? `${items.length} 条记录`
+        : `${items.length} 条档案`;
+
+      list.innerHTML = items.map(item => {
+        const selected = item.id === state.selectedId ? " selected" : "";
+        if (state.mode === "archive") {
+          return `
+            <button class="record-card archive-card${selected}" type="button" data-id="${item.id}" aria-pressed="${item.id === state.selectedId}">
+              <div class="card-context"><span class="book">《${esc(item.book)}》</span><span>·</span><span>${esc(item.date)}</span></div>
+              <p class="card-headline">${esc(item.headline)}</p>
+              <div class="archive-split">
+                <span><b>我想</b> ${esc(item.thought)}</span>
+                <span><b>还在想</b> ${esc(item.question)}</span>
+              </div>
+              <span class="card-chevron" aria-hidden="true">›</span>
+            </button>
+          `;
+        }
+
+        return `
+          <button class="record-card${selected}" type="button" data-id="${item.id}" aria-pressed="${item.id === state.selectedId}">
+            <div class="card-context"><span class="book">《${esc(item.book)}》</span><span>·</span><span>${esc(item.date)}</span></div>
+            <p class="card-headline">${esc(item.headline)}</p>
+            <div class="card-meta">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>
+              <span>${esc(item.meta)}</span>
+            </div>
+            <span class="card-chevron" aria-hidden="true">›</span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function renderDetail() {
+      const item = activeItem();
+      const archiveMode = state.mode === "archive";
+      const title = archiveMode ? "阅读档案" : "阅读记录";
+
+      const primarySection = archiveMode
+        ? `
+          <section class="detail-section">
+            <p class="section-label">我想</p>
+            <p class="detail-copy">${esc(item.thought)}</p>
+          </section>
+          <section class="detail-section">
+            <p class="section-label">还在想</p>
+            <p class="detail-copy">${esc(item.question)}</p>
+          </section>
+        `
+        : `
+          <section class="detail-section">
+            <p class="section-label">我的原话</p>
+            <p class="detail-copy">${esc(item.original)}</p>
+          </section>
+        `;
+
+      detail.innerHTML = `
+        <div class="detail-context"><span class="book">《${esc(item.book)}》</span> · ${esc(item.date)}</div>
+        <h3 class="detail-title">${esc(item.headline)}</h3>
+        ${primarySection}
+        <section class="detail-section">
+          <div class="response-panel">
+            <p class="section-label">AI 回应</p>
+            <p class="detail-copy">${esc(item.response)}</p>
+          </div>
+        </section>
+        <button class="continue-row" type="button">
+          <span>${archiveMode ? "继续想想" : "继续对话"}</span>
+          <span aria-hidden="true">›</span>
+        </button>
+        <details class="evidence">
+          <summary>${archiveMode ? "更多阅读脉络" : "更多依据"}</summary>
+          <div class="evidence-body">
+            ${item.evidence.map(([label, copy]) => `
+              <div class="evidence-item">
+                <strong>${esc(label)}</strong>
+                <p>${esc(copy)}</p>
+              </div>
+            `).join("")}
+          </div>
+        </details>
+      `;
+
+      document.querySelector(".device-block:nth-child(2) .app-nav h2").textContent = title;
+    }
+
+    list.addEventListener("click", event => {
+      const card = event.target.closest("[data-id]");
+      if (!card) return;
+      state.selectedId = card.dataset.id;
+      renderList();
+      renderDetail();
+    });
+
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        state.mode = tab.dataset.mode;
+        state.selectedId = activeItems()[0].id;
+        tabs.forEach(item => {
+          const active = item === tab;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", String(active));
+        });
+        renderList();
+        renderDetail();
+      });
+    });
+
+    document.getElementById("themeToggle").addEventListener("click", event => {
+      document.body.classList.toggle("dark-preview");
+      event.currentTarget.textContent = document.body.classList.contains("dark-preview")
+        ? "预览亮色"
+        : "预览暗色";
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("dark") === "1") {
+      document.body.classList.add("dark-preview");
+      document.getElementById("themeToggle").textContent = "预览亮色";
+    }
+    if (params.get("mode") === "archive") {
+      state.mode = "archive";
+    }
+    state.selectedId = activeItems()[0].id;
+    tabs.forEach(tab => {
+      const active = tab.dataset.mode === state.mode;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+
+    renderList();
+    renderDetail();
+  </script>
+</body>
+</html>
