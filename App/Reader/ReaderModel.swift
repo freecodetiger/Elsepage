@@ -18,6 +18,11 @@ struct ReaderSelectionContext: Equatable {
     let frame: CGRect?
 }
 
+struct ReaderHelpPresentation: Identifiable {
+    let id = UUID()
+    let model: ReaderHelpModel
+}
+
 /// The single in-place annotation surface. Either the toolbar for a fresh
 /// selection or the menu of an existing highlight — never both at once.
 enum ReaderAnnotationMenu: Equatable {
@@ -62,6 +67,7 @@ final class ReaderModel {
     private let books: any BookRepository
     let reflectionRepository: any ReflectionRepository
     let readerAgent: ReaderAgent
+    let readerHelpService: ReaderHelpService
     let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     /// Injected by ReaderScreen so reflection models built here can report
     /// achievement events (unlock badges are App-layer, not part of ReaderAgent).
@@ -83,6 +89,7 @@ final class ReaderModel {
     var jumpTargetJSON: Data?
     var annotationMenu: ReaderAnnotationMenu?
     var noteEditorRequest: ReaderNoteEditorRequest?
+    var helpPresentation: ReaderHelpPresentation?
     var transientNotice: ReaderTransientNotice?
     private var pendingHighlightAfterJumpID: UUID?
     var contextReflection: SessionReflectionModel?
@@ -101,6 +108,7 @@ final class ReaderModel {
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var noteSaveGenerations: [UUID: UInt64] = [:]
     @ObservationIgnored private var deferredPreparationTask: Task<Void, Never>?
+    @ObservationIgnored private var helpSession: ReaderHelpModel?
     @ObservationIgnored var onSelectionFinished: (() -> Void)?
     /// Phase-0 perf anchor: set by ReaderScreen when the cover opens; the
     /// coordinator records readerOpen = now → first locationDidChange.
@@ -114,6 +122,7 @@ final class ReaderModel {
         sessions: ReadingSessionService,
         reflections: any ReflectionRepository,
         readerAgent: ReaderAgent,
+        readerHelpService: ReaderHelpService,
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
         requestedLocator: BookLocator? = nil,
         readium: ReadiumServices
@@ -121,6 +130,7 @@ final class ReaderModel {
         self.book = book; self.fileURL = fileURL; self.repository = repository; self.books = books
         self.sessions = sessions; reflectionRepository = reflections
         self.readerAgent = readerAgent
+        self.readerHelpService = readerHelpService
         self.makePolishService = makePolishService
         self.readium = readium
         if let requestedLocator {
@@ -288,6 +298,32 @@ final class ReaderModel {
         annotationMenu = nil
         onSelectionFinished?()
         Task { await reflect(on: context.locator) }
+    }
+
+    func askAgentFromSelection() {
+        guard case .selection(let context) = annotationMenu else { return }
+        annotationMenu = nil
+        onSelectionFinished?()
+
+        let helpModel: ReaderHelpModel
+        if let existing = helpSession, existing.anchor.identifiesSameAnchor(as: context.locator) {
+            helpModel = existing
+        } else {
+            let anchor = context.locator
+            helpModel = ReaderHelpModel(
+                book: book,
+                anchor: anchor,
+                selectedText: context.text,
+                chapterTitle: currentChapterTitle,
+                service: readerHelpService
+            ) { [weak self] body in
+                guard let self else { throw ReaderHelpModelError.readerUnavailable }
+                try await self.saveHelpNote(anchor: anchor, body: body)
+            }
+            helpSession = helpModel
+        }
+        Perf.shared.event("readerHelp.present")
+        helpPresentation = ReaderHelpPresentation(model: helpModel)
     }
 
     // MARK: Highlight menu
@@ -486,6 +522,21 @@ final class ReaderModel {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    func saveHelpNote(anchor: BookLocator, body: String) async throws {
+        let highlightID = highlights.first(where: {
+            $0.locator.identifiesSameAnchor(as: anchor)
+        })?.id
+        let note = Note(
+            bookID: book.id,
+            highlightID: highlightID,
+            locator: anchor,
+            body: body
+        )
+        try await repository.save(note: note)
+        notes.append(note)
+        notes.sort { $0.createdAt < $1.createdAt }
     }
     func update(note: Note, body: String) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }

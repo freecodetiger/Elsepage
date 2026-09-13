@@ -98,13 +98,14 @@ final class AppModel {
                 retriever: brainRetriever,
                 traceRepository: GRDBBrainProjectionTraceRepository(database: database)
             )
+            let readerContextBuilder = ReaderAgentContextBuilder(
+                retriever: LocalBookRetriever(repository: bookIndex, embeddingProvider: makeEmbeddingProvider, reranker: makeReranker),
+                repository: bookIndex
+            )
             let readerAgent = ReaderAgent(
                 reflections: reflections,
                 models: modelClientFactory,
-                contextBuilder: ReaderAgentContextBuilder(
-                    retriever: LocalBookRetriever(repository: bookIndex, embeddingProvider: makeEmbeddingProvider, reranker: makeReranker),
-                    repository: bookIndex
-                ),
+                contextBuilder: readerContextBuilder,
                 sessionContextBuilder: SessionContextBuilder(
                     sessions: sessions,
                     reading: reading,
@@ -117,6 +118,10 @@ final class AppModel {
                 // a process-local cache; nil provider degrades to lexical. Memory
                 // recall rides the brain lane, not a separate semantic lane.
                 semanticRanking: QueryTimeSemanticRanking(embeddingFactory: makeEmbeddingProvider)
+            )
+            let readerHelpService = ReaderHelpService(
+                models: modelClientFactory,
+                contextBuilder: readerContextBuilder
             )
             // Standalone voice-polish chain sharing the same BYOK provider (independent of ReaderAgent).
             // Re-checked every time a reflection sheet opens, so the polish button appears as soon
@@ -147,6 +152,7 @@ final class AppModel {
                 sessions: sessions,
                 reflections: reflections,
                 readerAgent: readerAgent,
+                readerHelpService: readerHelpService,
                 makePolishService: makePolishService,
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),

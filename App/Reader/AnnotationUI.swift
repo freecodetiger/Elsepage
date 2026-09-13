@@ -48,7 +48,7 @@ struct ReaderAnnotationOverlays: View {
     let model: ReaderModel
     private static let margin: CGFloat = 12
     fileprivate static let gap: CGFloat = 10
-    fileprivate static let menuSizeEstimate = CGSize(width: 320, height: 50)
+    fileprivate static let menuSizeEstimate = CGSize(width: 240, height: 96)
 
     /// Safe-area insets from the key window. The overlay's GeometryReader
     /// ignores the safe area so its coordinates match the navigator's
@@ -93,6 +93,7 @@ struct ReaderAnnotationOverlays: View {
                         SelectionToolbar(
                             onSelectColor: { model.createHighlightFromSelection(with: $0) },
                             onNote: { model.beginNoteFromSelection() },
+                            onAsk: { model.askAgentFromSelection() },
                             onReflect: { model.reflectOnSelection() },
                             onCopy: { model.copySelection() }
                         )
@@ -171,40 +172,43 @@ private struct AnchoredMenu<Menu: View>: View {
 struct SelectionToolbar: View {
     let onSelectColor: (HighlightColor) -> Void
     let onNote: () -> Void
+    let onAsk: () -> Void
     let onReflect: () -> Void
     let onCopy: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(HighlightColor.allCases, id: \.self) { color in
-                Button {
-                    onSelectColor(color)
-                } label: {
-                    Circle()
-                        .fill(color.annotationColor)
-                        .frame(width: 28, height: 28)
-                        .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
-                        // A11Y-03: the 28pt swatch rides in a 44pt hit target.
-                        .frame(width: AccessibilityMetrics.minimumTapTargetSide, height: AccessibilityMetrics.minimumTapTargetSide)
-                        .contentShape(Rectangle())
+        VStack(spacing: 2) {
+            HStack(spacing: 4) {
+                ForEach(HighlightColor.allCases, id: \.self) { color in
+                    Button {
+                        onSelectColor(color)
+                    } label: {
+                        Circle()
+                            .fill(color.annotationColor)
+                            .frame(width: 28, height: 28)
+                            .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+                            // A11Y-03: the 28pt swatch rides in a 44pt hit target.
+                            .frame(width: AccessibilityMetrics.minimumTapTargetSide, height: AccessibilityMetrics.minimumTapTargetSide)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(color.accessibilityName)
+                    .accessibilityHint("创建这个颜色的高亮")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(color.accessibilityName)
-                .accessibilityHint("创建这个颜色的高亮")
             }
 
             Divider()
-                .frame(height: 26)
 
-            toolButton("笔记", action: onNote)
-            toolButton("聊聊", action: onReflect)
-            toolButton("复制", action: onCopy)
+            HStack(spacing: 2) {
+                toolButton("笔记", action: onNote)
+                toolButton("问", action: onAsk)
+                toolButton("聊聊", action: onReflect)
+                toolButton("复制", action: onCopy)
+            }
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 10)
-        .padding(.vertical, 4)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.primary.opacity(0.08)))
+        .padding(6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.primary.opacity(0.08)))
         .shadow(color: .black.opacity(0.14), radius: 16, y: 7)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("标注工具")
@@ -214,7 +218,7 @@ struct SelectionToolbar: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 7)
                 .frame(minHeight: 40)
                 .contentShape(Rectangle())
         }

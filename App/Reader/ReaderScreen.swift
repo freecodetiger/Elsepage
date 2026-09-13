@@ -82,6 +82,11 @@ struct ReaderScreen: View {
         }) { request in
             NoteEditorSheet(model: model, target: request.target)
         }
+        .sheet(item: $model.helpPresentation) { presentation in
+            ReaderHelpSheet(model: presentation.model) { evidence in
+                jumpToCitation(evidence)
+            }
+        }
         .sheet(item: $model.contextReflection) { reflection in
             SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
                 jumpToCitation(evidence)
