@@ -18,7 +18,7 @@
 - Highlight 点击：
   - 只有该点同时命中 Note 时才显示选择器。
   - 未命中 Note 时直接显示高亮菜单。
-- JS 查询失败时回退到保守 Range 判断。
+- JS 查询明确返回空时直接走单一标注；只有 JS 查询失败时才回退到保守 Range 判断。
 - 增加诊断日志：
   - `highlight.hit ... overlapNotes`
   - `note.hit ... overlapHighlights`
