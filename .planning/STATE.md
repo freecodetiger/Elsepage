@@ -94,3 +94,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Reader Help 临时选句答疑代码完成（`.planning/quick/260913-reader-help-delivery/SUMMARY.md`）；382 tests 全绿，真机验收见 `docs/testing/reader-help/2026-09-13-delivery-checklist.md`。
 - 2026-09-13：Reader Help 关闭语义与回答边界修正完成（`.planning/quick/260913-reader-help-dismissal-and-grounding/SUMMARY.md`）；下滑不丢失、X 完全丢弃、Prompt v2 允许现实背景回答，未引入 WebSearch。
 - 2026-09-13：Reader Help Citation 返回体验修复完成（`.planning/quick/260913-reader-help-citation-return/SUMMARY.md`）；原文来源标签替代 E1，跳转时保留回答与 thread。
+- 2026-09-13：Agent Markdown v3 渲染完成（`.planning/quick/260913-agent-markdown-v3/SUMMARY.md`）；标题/列表/引用/代码块可渲染，Reader Help Prompt v3 支持更长结构化回答。

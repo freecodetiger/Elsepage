@@ -150,6 +150,7 @@ Reader Help 是阅读器内的轻量 Agent 能力：用户读到一句令自己�
 ### 4.5 关闭与生命周期
 
 - Sheet 禁止交互式下滑关闭；下滑最多改变 detent，不能让临时问答离开用户视野。
+- Agent 回答支持阅读级 Markdown：标题、段落、列表、引用块、分隔线和代码块。
 - 右上角 X 是唯一的“取消并完全丢弃”入口；触发后清空当前 help thread。
 - 从 Citation 跳回原文不 dismiss sheet；面板收起到 compact detent，thread 保持可展开。
 - 关闭面板会取消正在进行的请求。
@@ -947,3 +948,36 @@ swift test
   1. 跳转到对应原文；
   2. sheet 收起到 184pt compact detent；
   3. 当前问答、追问历史和流式状态保持不丢。
+
+
+---
+
+## 22. Agent Markdown v3（2026-09-13）
+
+### 输出
+
+- Prompt 升级为 `reader-help-v3`。
+- 复杂问题允许 250–800 字，用户要求深入时允许约 1,000 字。
+- 回答第一句直接给结论。
+- 多层级内容使用 Markdown 分节、列表和引用块。
+- 简单问题不为了形式添加标题。
+- 默认禁止表格、HTML 和装饰性代码围栏。
+
+### 渲染
+
+- `makeSelectableMarkdown` 映射 Foundation block intent：
+  - 标题层级与间距
+  - 有序列表和无序列表的缩进
+  - blockquote 左边线
+  - thematic break
+  - code block 等宽字体和背景
+  - paragraph spacing / line spacing
+- Citation 在 Reader Help 中显示为上标 `¹`，底部生成来源列表。
+- Reader Help 回答卡片降低背景和操作按钮权重。
+- 不引入新的 Markdown 依赖。
+
+### 验证
+
+- App Markdown 文件通过 iOS SDK `typecheck`。
+- `swift test`：383 tests 全绿。
+- `Package.resolved` 无变化。
