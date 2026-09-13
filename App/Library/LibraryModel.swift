@@ -184,6 +184,11 @@ final class LibraryModel {
         defer { deletingBookID = nil }
         do {
             let audioNames = try await reflectionRepository.audioFileNames(for: book.id)
+            for audioName in audioNames {
+                if let metadata = try? await audioStore.metadata(for: audioName) {
+                    try? await AudioWaveformStore.shared.remove(cacheKey: metadata.checksum)
+                }
+            }
             let stagedAudio = try audioStore.stageDeletion(fileNames: audioNames)
             let trashed: TrashedBookFile?
             do {

@@ -852,6 +852,7 @@ final class ReflectionConversationModel: Identifiable {
               let fileName = message.audioFileName else { return }
         do {
             try await repository.updateAudioFileName(nil, forMessageID: messageID)
+            await removeWaveformCache(fileName: fileName)
             audioStore.discardSaved(fileName: fileName)
             try await reloadMessages()
         } catch {
@@ -865,11 +866,17 @@ final class ReflectionConversationModel: Identifiable {
         guard let audioFileName else { return }
         do {
             try await repository.updateAudioFileName(nil, for: reflection.id)
+            await removeWaveformCache(fileName: audioFileName)
             audioStore.discardSaved(fileName: audioFileName)
             self.audioFileName = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func removeWaveformCache(fileName: String) async {
+        guard let metadata = try? await audioStore.metadata(for: fileName) else { return }
+        try? await AudioWaveformStore.shared.remove(cacheKey: metadata.checksum)
     }
 
     func deleteLatestUserTurn() async -> Bool {
@@ -878,13 +885,20 @@ final class ReflectionConversationModel: Identifiable {
         do {
             switch try await repository.deleteLatestUserTurn(in: reflection.id) {
             case .deletedFollowUp:
+                if let deletingAudioFileName {
+                    await removeWaveformCache(fileName: deletingAudioFileName)
+                }
                 audioStore.discardSaved(fileName: deletingAudioFileName)
                 try await reloadMessages()
                 agentNotice = nil
                 contextDisclosure = nil
                 return false
             case .deletedConversation:
-                deleteAudioFileIfNeeded()
+                if let audioFileName {
+                    await removeWaveformCache(fileName: audioFileName)
+                }
+                audioStore.discardSaved(fileName: audioFileName)
+                audioFileName = nil
                 messages = []
                 responseProvenance = [:]
                 isDeleted = true
@@ -966,11 +980,6 @@ final class ReflectionConversationModel: Identifiable {
             loaded[message.id] = try await repository.provenance(for: message.id)
         }
         responseProvenance = loaded
-    }
-
-    private func deleteAudioFileIfNeeded() {
-        audioStore.discardSaved(fileName: audioFileName)
-        audioFileName = nil
     }
 
     private static func withoutCitationBlock(_ content: String) -> String {

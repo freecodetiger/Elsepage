@@ -400,6 +400,8 @@ final class ReflectionAudioPlayerModel {
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
     private(set) var metadata: AudioFileMetadata?
+    private(set) var waveform: AudioWaveform?
+    private(set) var isWaveformLoading = false
     private(set) var errorMessage: String?
 
     init(source: Source, audioStore: AudioFileStore = .live()) {
@@ -435,9 +437,16 @@ final class ReflectionAudioPlayerModel {
 
     func loadMetadata() async {
         guard let resolved = try? resolvedSource() else { return }
-        metadata = try? await audioStore.metadata(
+        guard let metadata = try? await audioStore.metadata(
             forDraftURL: resolved.url,
             fileName: resolved.fileName
+        ) else { return }
+        self.metadata = metadata
+        isWaveformLoading = true
+        defer { isWaveformLoading = false }
+        waveform = try? await AudioWaveformStore.shared.waveform(
+            for: resolved.url,
+            cacheKey: metadata.checksum
         )
     }
 
@@ -550,17 +559,31 @@ struct ReflectionAudioAttachment: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 38, alignment: .trailing)
 
-                Slider(
-                    value: Binding(
-                        get: { isScrubbing ? scrubTime : model.currentTime },
-                        set: { scrubTime = $0 }
-                    ),
-                    in: 0...max(model.duration, 0.1),
-                    onEditingChanged: handleScrub
-                )
-                .disabled(model.duration <= 0 || model.errorMessage != nil)
-                .accessibilityLabel("录音进度")
-                .accessibilityValue(Self.timeText(isScrubbing ? scrubTime : model.currentTime))
+                if let waveform = model.waveform, !waveform.peaks.isEmpty {
+                    WaveformScrubber(
+                        peaks: waveform.peaks,
+                        progress: model.duration > 0
+                            ? (isScrubbing ? scrubTime : model.currentTime) / model.duration
+                            : 0,
+                        currentTime: isScrubbing ? scrubTime : model.currentTime,
+                        duration: model.duration,
+                        onChanged: handleWaveformChanged,
+                        onEnded: handleWaveformEnded
+                    )
+                    .frame(height: 36)
+                } else {
+                    Slider(
+                        value: Binding(
+                            get: { isScrubbing ? scrubTime : model.currentTime },
+                            set: { scrubTime = $0 }
+                        ),
+                        in: 0...max(model.duration, 0.1),
+                        onEditingChanged: handleScrub
+                    )
+                    .disabled(model.duration <= 0 || model.errorMessage != nil)
+                    .accessibilityLabel("录音进度")
+                    .accessibilityValue(Self.timeText(isScrubbing ? scrubTime : model.currentTime))
+                }
 
                 Text(Self.timeText(model.duration))
                     .font(.caption.monospacedDigit())
@@ -618,10 +641,107 @@ struct ReflectionAudioAttachment: View {
         }
     }
 
+    private func handleWaveformChanged(_ normalized: Double) {
+        guard model.duration > 0 else { return }
+        if !isScrubbing {
+            isScrubbing = true
+            wasPlayingBeforeScrub = model.isPlaying
+            model.pause()
+        }
+        scrubTime = min(max(0, normalized), 1) * model.duration
+    }
+
+    private func handleWaveformEnded() {
+        guard isScrubbing else { return }
+        model.seek(to: scrubTime)
+        if wasPlayingBeforeScrub {
+            model.togglePlayback()
+        }
+        wasPlayingBeforeScrub = false
+        isScrubbing = false
+    }
+
     private static func audioLabel(_ metadata: AudioFileMetadata?) -> String {
         guard let metadata else { return "原始录音" }
         let size = ByteCountFormatter.string(fromByteCount: metadata.byteSize, countStyle: .file)
         return "原始录音 · \(size)"
+    }
+
+    private static func timeText(_ time: TimeInterval) -> String {
+        guard time.isFinite, time > 0 else { return "0:00" }
+        let seconds = Int(time.rounded(.down))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+
+@MainActor
+private struct WaveformScrubber: View {
+    let peaks: [Float]
+    let progress: Double
+    let currentTime: TimeInterval
+    let duration: TimeInterval
+    let onChanged: (Double) -> Void
+    let onEnded: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            Canvas { context, size in
+                let count = peaks.count
+                guard count > 0, size.width > 0, size.height > 0 else { return }
+                let slot = size.width / CGFloat(count)
+                let barWidth = max(1, slot * 0.56)
+                let centerY = size.height / 2
+                var played = Path()
+                var remaining = Path()
+
+                for index in 0..<count {
+                    let height = max(2, CGFloat(peaks[index]) * (size.height - 6))
+                    let x = CGFloat(index) * slot + (slot - barWidth) / 2
+                    let rect = CGRect(
+                        x: x,
+                        y: centerY - height / 2,
+                        width: barWidth,
+                        height: height
+                    )
+                    if Double(index + 1) / Double(count) <= progress {
+                        played.addRect(rect)
+                    } else {
+                        remaining.addRect(rect)
+                    }
+                }
+                context.fill(remaining, with: .color(Color.secondary.opacity(0.28)))
+                context.fill(played, with: .color(Color.elsepageAccent))
+
+                let playheadX = min(max(0, progress), 1) * size.width
+                let playhead = Path(CGRect(x: playheadX - 0.75, y: 2, width: 1.5, height: size.height - 4))
+                context.fill(playhead, with: .color(Color.elsepageAccent))
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard geometry.size.width > 0 else { return }
+                        onChanged(Double(value.location.x / geometry.size.width))
+                    }
+                    .onEnded { _ in onEnded() }
+            )
+        }
+        .accessibilityElement()
+        .accessibilityLabel("录音波形")
+        .accessibilityValue("\(Self.timeText(currentTime)) / \(Self.timeText(duration))")
+        .accessibilityAdjustableAction { direction in
+            guard duration > 0 else { return }
+            let step = min(max(duration * 0.05, 5), 30)
+            let target: TimeInterval
+            switch direction {
+            case .increment: target = min(duration, currentTime + step)
+            case .decrement: target = max(0, currentTime - step)
+            @unknown default: return
+            }
+            onChanged(target / duration)
+            onEnded()
+        }
     }
 
     private static func timeText(_ time: TimeInterval) -> String {

@@ -101,7 +101,7 @@ A real product loop, not a demo: read → reflect → save → grounded reply �
 | Reflection loop | ~80% |
 | Book context / Agent | ~90% — citations grounded; **small-to-big** child retrieval (≈350-char retrieval units → parent-anchored evidence windows), hybrid lexical + semantic recall for reflections/memories, cross-encoder rerank gate |
 | Context engineering | planner-grade context plan (dense/lexical split) → source-specific retrieval → candidate ranking/dedup/budget → `ContextBundle`; anti-spoiler enforced at retrieval **and** expansion |
-| Voice reflection | shipped: root and follow-up requests both support default AAC/M4A recording, editable transcript, seekable playback, per-recording delete, storage summary, AI polish |
+| Voice reflection | shipped: root and follow-up requests both support default AAC/M4A recording, editable transcript, PCM-derived waveform seek, per-recording delete, storage summary, AI polish |
 | Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall, semantic memory matching |
 | Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
 

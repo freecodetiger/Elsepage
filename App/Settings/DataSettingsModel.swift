@@ -91,6 +91,7 @@ final class DataSettingsModel {
             audioStore.commitDeletion(staged)
             do {
                 try audioStore.removeAllAudio()
+                try await AudioWaveformStore.shared.clearAll()
             } catch {
                 errorMessage = "部分录音文件未能清理，重启 App 后会再次尝试。"
             }
@@ -113,6 +114,11 @@ final class DataSettingsModel {
             let allBooks = try await books.allBooks()
             for book in allBooks {
                 let audioNames = try await reflections.audioFileNames(for: book.id)
+                for audioName in audioNames {
+                    if let metadata = try? await audioStore.metadata(for: audioName) {
+                        try? await AudioWaveformStore.shared.remove(cacheKey: metadata.checksum)
+                    }
+                }
                 let stagedAudio = try audioStore.stageDeletion(fileNames: audioNames)
                 let trashed: TrashedBookFile?
                 do {
@@ -170,6 +176,7 @@ final class DataSettingsModel {
             audioStore.commitDeletion(stagedAudio)
             do {
                 try audioStore.removeAllAudio()
+                try await AudioWaveformStore.shared.clearAll()
             } catch {
                 errorMessage = "部分录音文件未能清理，重启 App 后会再次尝试。"
             }

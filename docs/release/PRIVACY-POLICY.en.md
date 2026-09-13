@@ -54,7 +54,7 @@ Our commitments, matching the code:
 - You can always see in the App which content was used for a request (reflection evidence and local request traces);
 - Requests go **directly from your device to that provider** — through none of our servers, because we have none.
 
-**Speech-to-text** uses the speech recognition capability provided by Apple's operating system and is subject to Apple's privacy policy. What the App keeps is the transcript plus the raw audio file for each user request; audio is saved by default when you start recording but can be turned off before recording, and both stay local.
+**Speech-to-text** uses the speech recognition capability provided by Apple's operating system and is subject to Apple's privacy policy. What the App keeps is the transcript plus the raw audio file for each user request; audio is saved by default when you start recording but can be turned off before recording, and both stay local. The waveform shown in the interface is a derived representation computed from the audio; raw PCM is not stored, and waveform caches are removed with the recording.
 
 ## 4. What we do not do
 
