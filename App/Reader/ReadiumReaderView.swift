@@ -342,23 +342,38 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             let script = """
             (function() {
               const point = window.__readiumLastDecorationPoint;
-              if (!point || !window.readium) return [];
+              if (!point || !window.readium) return { x: null, y: null, ids: [] };
               const group = readium.getDecorations('\(group)');
               const result = [];
-              for (const item of (group.items || [])) {
-                const rects = Array.from(item.range.getClientRects());
-                if (rects.some(function(rect) {
-                  return point.x >= rect.left && point.x <= rect.right &&
-                         point.y >= rect.top && point.y <= rect.bottom;
-                })) {
-                  result.push(item.decoration.id);
-                }
+              function contains(rect) {
+                return point.x >= rect.left && point.x <= rect.right &&
+                       point.y >= rect.top && point.y <= rect.bottom;
               }
-              return result;
+              for (const item of (group.items || [])) {
+                let matched = false;
+                const elements = item.clickableElements || [];
+                for (const element of elements) {
+                  if (contains(element.getBoundingClientRect())) {
+                    matched = true;
+                    break;
+                  }
+                }
+                if (!matched) {
+                  const rects = Array.from(item.range.getClientRects());
+                  matched = rects.some(contains);
+                }
+                if (matched) result.push(item.decoration.id);
+              }
+              return { x: point.x, y: point.y, ids: result };
             })()
             """
             guard case .success(let value) = await navigator.evaluateJavaScript(script),
-                  let ids = value as? [String] else { return [] }
+                  let payload = value as? [String: Any],
+                  let ids = payload["ids"] as? [String] else { return [] }
+            let x = (payload["x"] as? NSNumber)?.doubleValue
+            let y = (payload["y"] as? NSNumber)?.doubleValue
+            let pointDescription = x.flatMap { x in y.map { y in String(format: "(%.1f,%.1f)", x, y) } } ?? "nil"
+            AnnotationLog.event("decoration.point group=\(group) point=\(pointDescription) ids=\(ids.joined(separator: ","))")
             return ids.compactMap(UUID.init(uuidString:))
         }
 
