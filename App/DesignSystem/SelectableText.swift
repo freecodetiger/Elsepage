@@ -249,32 +249,261 @@ struct SelectableTextBody: View {
     }
 }
 
-/// 把 SwiftUI 解析过的 Markdown `AttributedString` 落地成给 UITextView 的
-/// `NSAttributedString`:映射加粗/斜体/代码/链接,其余退化为基础样式。
+/// 把 Foundation 解析过的 Markdown 落地成给 UITextView 的 NSAttributedString。
+/// 除 inline intent 外，这里也映射 paragraph/header/list/quote/code/thematic break，
+/// 避免模型输出的结构化 Markdown 在 UI 中被压平成一坨普通文本。
 func makeSelectableMarkdown(
     _ markdown: AttributedString,
     textStyle: UIFont.TextStyle,
     color: UIColor
 ) -> NSAttributedString {
     let base = UIFont.preferredFont(forTextStyle: textStyle)
-    let result = NSMutableAttributedString()
+    var blocks: [NSAttributedString] = []
+    var currentIdentity: String?
+    var currentIntent: PresentationIntent?
+    var current = NSMutableAttributedString()
+
+    func flush() {
+        guard current.length > 0 || currentIntent != nil else { return }
+        blocks.append(renderMarkdownBlock(current, intent: currentIntent, base: base, color: color))
+        current = NSMutableAttributedString()
+    }
+
     for run in markdown.runs {
         let text = String(markdown[run.range].characters)
         guard !text.isEmpty else { continue }
-        let font = selectableFont(for: run.inlinePresentationIntent, base: base)
-        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let identity = markdownBlockIdentity(run.presentationIntent)
+        if let currentIdentity, identity != currentIdentity {
+            flush()
+        }
+        if currentIdentity != identity {
+            currentIdentity = identity
+            currentIntent = run.presentationIntent
+        }
+
+        let style = markdownBlockStyle(run.presentationIntent, base: base, color: color)
+        let font = selectableFont(for: run.inlinePresentationIntent, base: style.font)
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: run.link == nil ? style.foregroundColor : UIColor.tintColor,
+            .paragraphStyle: style.paragraphStyle,
+        ]
+        if let backgroundColor = style.backgroundColor {
+            attributes[.backgroundColor] = backgroundColor
+        }
+        if run.inlinePresentationIntent?.contains(.code) == true {
+            attributes[.backgroundColor] = UIColor.secondarySystemBackground.withAlphaComponent(0.72)
+        }
         if let link = run.link {
             attributes[.link] = link
         }
-        result.append(NSAttributedString(string: text, attributes: attributes))
+        current.append(NSAttributedString(string: text, attributes: attributes))
     }
-    if result.length == 0 {
-        result.append(NSAttributedString(
+    flush()
+
+    guard !blocks.isEmpty else {
+        return NSAttributedString(
             string: String(markdown.characters),
             attributes: [.font: base, .foregroundColor: color]
-        ))
+        )
+    }
+
+    let separatorStyle = NSMutableParagraphStyle()
+    separatorStyle.lineSpacing = 0
+    separatorStyle.paragraphSpacing = 0
+    let separator = NSAttributedString(
+        string: "\n",
+        attributes: [.font: base, .foregroundColor: color, .paragraphStyle: separatorStyle]
+    )
+    let result = NSMutableAttributedString()
+    for (index, block) in blocks.enumerated() {
+        if index > 0 { result.append(separator) }
+        result.append(block)
     }
     return result
+}
+
+private struct MarkdownBlockStyle {
+    let font: UIFont
+    let foregroundColor: UIColor
+    let paragraphStyle: NSParagraphStyle
+    let backgroundColor: UIColor?
+}
+
+private func renderMarkdownBlock(
+    _ content: NSMutableAttributedString,
+    intent: PresentationIntent?,
+    base: UIFont,
+    color: UIColor
+) -> NSAttributedString {
+    let style = markdownBlockStyle(intent, base: base, color: color)
+    var text = content
+    let components = intent?.components.map(\.kind) ?? []
+
+    if components.contains(where: { if case .thematicBreak = $0 { return true }; return false }) {
+        text = NSMutableAttributedString(
+            string: "────────────────",
+            attributes: [
+                .font: style.font,
+                .foregroundColor: style.foregroundColor,
+                .paragraphStyle: style.paragraphStyle,
+            ]
+        )
+    }
+
+    if let prefix = markdownBlockPrefix(components, font: style.font, color: style.foregroundColor, paragraphStyle: style.paragraphStyle) {
+        text.insert(prefix, at: 0)
+    }
+
+    trimTrailingNewlines(text)
+    return text
+}
+
+private func markdownBlockIdentity(_ intent: PresentationIntent?) -> String {
+    guard let intent else { return "plain" }
+    return String(describing: intent)
+}
+
+private func markdownBlockStyle(
+    _ intent: PresentationIntent?,
+    base: UIFont,
+    color: UIColor
+) -> MarkdownBlockStyle {
+    let components = intent?.components.map(\.kind) ?? []
+    var headerLevel: Int?
+    var listKind: MarkdownListKind?
+    var listDepth = 0
+    var isQuote = false
+    var isCodeBlock = false
+
+    for component in components {
+        switch component {
+        case .header(let level):
+            headerLevel = level
+        case .orderedList:
+            listKind = .ordered
+            listDepth += 1
+        case .unorderedList:
+            listKind = .unordered
+            listDepth += 1
+        case .listItem:
+            break
+        case .blockQuote:
+            isQuote = true
+        case .codeBlock:
+            isCodeBlock = true
+        default:
+            break
+        }
+    }
+
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.alignment = .natural
+    paragraph.lineSpacing = 4
+    paragraph.paragraphSpacing = 10
+    paragraph.paragraphSpacingBefore = 0
+
+    var font = base
+    var foreground = color
+    var background: UIColor?
+
+    if let headerLevel {
+        font = markdownHeaderFont(level: headerLevel)
+        paragraph.lineSpacing = 2
+        paragraph.paragraphSpacingBefore = 14
+        paragraph.paragraphSpacing = 7
+    } else if isCodeBlock {
+        font = .monospacedSystemFont(ofSize: max(base.pointSize - 1, 13), weight: .regular)
+        paragraph.lineSpacing = 2
+        paragraph.paragraphSpacing = 12
+        paragraph.firstLineHeadIndent = 10
+        paragraph.headIndent = 10
+        background = UIColor.secondarySystemBackground.withAlphaComponent(0.72)
+    } else if isQuote {
+        font = base
+        foreground = color.withAlphaComponent(0.82)
+        paragraph.lineSpacing = 4
+        paragraph.paragraphSpacing = 9
+        paragraph.firstLineHeadIndent = 0
+        paragraph.headIndent = 16
+    } else if let listKind {
+        let indent = CGFloat(max(0, listDepth - 1)) * 16
+        paragraph.lineSpacing = 3
+        paragraph.paragraphSpacing = 6
+        paragraph.firstLineHeadIndent = indent
+        paragraph.headIndent = indent + (listKind == .ordered ? 22 : 18)
+    }
+
+    return MarkdownBlockStyle(
+        font: font,
+        foregroundColor: foreground,
+        paragraphStyle: paragraph,
+        backgroundColor: background
+    )
+}
+
+private enum MarkdownListKind {
+    case ordered
+    case unordered
+}
+
+private func markdownBlockPrefix(
+    _ components: [PresentationIntent.Kind],
+    font: UIFont,
+    color: UIColor,
+    paragraphStyle: NSParagraphStyle
+) -> NSAttributedString? {
+    for component in components {
+        switch component {
+        case .header, .codeBlock, .thematicBreak, .table, .tableHeaderRow, .tableRow, .tableCell:
+            return nil
+        case .blockQuote:
+            return NSAttributedString(
+                string: "▎ ",
+                attributes: [
+                    .font: font,
+                    .foregroundColor: UIColor.tintColor,
+                    .paragraphStyle: paragraphStyle,
+                ]
+            )
+        case .listItem(let ordinal):
+            let isOrdered = components.contains(where: { if case .orderedList = $0 { return true }; return false })
+            return NSAttributedString(
+                string: isOrdered ? "\(ordinal). " : "• ",
+                attributes: [
+                    .font: font,
+                    .foregroundColor: color,
+                    .paragraphStyle: paragraphStyle,
+                ]
+            )
+        default:
+            continue
+        }
+    }
+    return nil
+}
+
+private func markdownHeaderFont(level: Int) -> UIFont {
+    let textStyle: UIFont.TextStyle
+    switch level {
+    case 1: textStyle = .title3
+    case 2: textStyle = .headline
+    default: textStyle = .subheadline
+    }
+    var font = UIFont.preferredFont(forTextStyle: textStyle)
+    if let serif = font.fontDescriptor.withDesign(.serif) {
+        font = UIFont(descriptor: serif, size: 0)
+    }
+    if let descriptor = font.fontDescriptor.withSymbolicTraits(.traitBold) {
+        font = UIFont(descriptor: descriptor, size: 0)
+    }
+    return font
+}
+
+private func trimTrailingNewlines(_ text: NSMutableAttributedString) {
+    while text.length > 0, text.string.unicodeScalars.last?.value == 10 {
+        text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1))
+    }
 }
 
 /// 只读可选中文本的“第一响应者协调器”:任意时刻至多一个文本视图持有选区。
@@ -423,6 +652,12 @@ final class FitTextView: UITextView {
             }
             if let link = attributes[.link] {
                 result += ":link=\(String(describing: link))"
+            }
+            if let paragraph = attributes[.paragraphStyle] as? NSParagraphStyle {
+                result += ":para=\(paragraph.lineSpacing):\(paragraph.paragraphSpacing):\(paragraph.paragraphSpacingBefore):\(paragraph.firstLineHeadIndent):\(paragraph.headIndent):\(paragraph.alignment.rawValue)"
+            }
+            if let background = attributes[.backgroundColor] as? UIColor {
+                result += ":bg=\(background.description)"
             }
         }
         return result

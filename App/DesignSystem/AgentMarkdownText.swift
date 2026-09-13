@@ -15,6 +15,11 @@ extension AgentEvidenceKind {
 
 /// Renders model-authored Markdown without treating it as executable HTML.
 /// User-authored Reflection text intentionally continues to use plain `Text`.
+enum AgentCitationStyle {
+    case superscript
+    case label
+}
+
 struct AgentMarkdownText: View {
     let content: String
     var provenance: AgentResponseProvenance = .init(evidence: [], citations: [])
@@ -22,6 +27,7 @@ struct AgentMarkdownText: View {
     /// UITextView 需要显式字体/颜色——外层 `.font`/`.foregroundStyle` 不会透传进来。
     var textStyle: UIFont.TextStyle = .body
     var isSecondary = false
+    var citationStyle: AgentCitationStyle = .label
     var body: some View {
         MessageText(
             content: .markdown(linkedContent),
@@ -44,8 +50,20 @@ struct AgentMarkdownText: View {
         provenance.citations.reduce(content) { result, citation in
             result.replacingOccurrences(
                 of: "[\(citation.marker)]",
-                with: "[\(citationLabel(for: citation))](elsepage-citation://\(citation.evidenceID))"
+                with: "[\(displayLabel(for: citation))](elsepage-citation://\(citation.evidenceID))"
             )
+        }
+    }
+
+    private func displayLabel(for citation: AgentCitation) -> String {
+        switch citationStyle {
+        case .superscript:
+            guard let index = provenance.citations.firstIndex(where: { $0.marker == citation.marker }) else {
+                return citation.marker
+            }
+            return Self.superscript(index + 1)
+        case .label:
+            return citationLabel(for: citation)
         }
     }
 
@@ -58,5 +76,13 @@ struct AgentMarkdownText: View {
         case .bookPassage: "书中"
         case .pastReflection: "过去"
         }
+    }
+
+    static func superscript(_ number: Int) -> String {
+        let map: [Character: Character] = [
+            "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+            "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+        ]
+        return String(String(number).map { map[$0] ?? $0 })
     }
 }

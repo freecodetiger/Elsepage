@@ -20,6 +20,7 @@ struct ReaderHelpSheet: View {
                 LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
                     quoteCard
                     conversation
+                    completedExtras
                     disclosure
                     saveError
                 }
@@ -113,7 +114,7 @@ struct ReaderHelpSheet: View {
                 agentBubble(model.streamingContent, provenance: model.provenance)
             }
         case .completed:
-            answerActions
+            EmptyView()
         case .cancelled:
             retryRow("已停止")
         case .failed(let message):
@@ -142,15 +143,52 @@ struct ReaderHelpSheet: View {
         .accessibilityHint("向 Agent 解释当前选中的文字")
     }
 
+    @ViewBuilder private var completedExtras: some View {
+        if model.state == .completed {
+            sourceList
+            answerActions
+        }
+    }
+
+    @ViewBuilder private var sourceList: some View {
+        if let provenance = model.provenance, !provenance.citations.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Divider()
+                ForEach(Array(provenance.citations.enumerated()), id: \.offset) { index, citation in
+                    if let evidence = provenance.evidence.first(where: { $0.id == citation.evidenceID }) {
+                        Button {
+                            handleCitation(evidence)
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(AgentMarkdownText.superscript(index + 1))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.elsepageAccent)
+                                Text(sourceTitle(for: evidence))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("来源 \(index + 1)：\(sourceTitle(for: evidence))")
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder private var answerActions: some View {
-        HStack(spacing: ElsepageTheme.Spacing.small) {
+        HStack(spacing: ElsepageTheme.Spacing.large) {
             Button {
                 model.copyLatestAnswer()
             } label: {
                 Label("复制", systemImage: "doc.on.doc")
                     .frame(minHeight: 44)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
 
             Button {
                 Task { await model.saveLatestAnswer() }
@@ -158,11 +196,14 @@ struct ReaderHelpSheet: View {
                 Label(model.isSaved ? "已保存" : "存为笔记", systemImage: model.isSaved ? "checkmark" : "note.text.badge.plus")
                     .frame(minHeight: 44)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.elsepageAccent)
+            .buttonStyle(.plain)
             .disabled(!model.canSave)
+
+            Spacer()
         }
-        .font(.subheadline.weight(.semibold))
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .opacity(model.canSave || model.isSaved ? 1 : 0.55)
     }
 
     private var disclosure: some View {
@@ -270,14 +311,23 @@ struct ReaderHelpSheet: View {
             content: text,
             provenance: provenance ?? .init(evidence: [], citations: []),
             openCitation: handleCitation,
-            isSecondary: true
+            citationStyle: .superscript
         )
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Agent 回答")
+    }
+
+    private func sourceTitle(for evidence: AgentResponseEvidence) -> String {
+        switch evidence.kind {
+        case .nearbyPassage:
+            return "原文 · 当前阅读位置"
+        case .bookPassage:
+            return "书中 · \(evidence.title ?? "已读内容")"
+        case .pastReflection:
+            return "过去 · 你的想法"
+        }
     }
 
     private func handleCitation(_ evidence: AgentResponseEvidence) {
