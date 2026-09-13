@@ -25,6 +25,8 @@ final class DataSettingsModel {
     var exportedDataURL: URL?
     private(set) var isDeletingAllBooks = false
     private(set) var isWipingAllData = false
+    private(set) var isClearingAudio = false
+    private(set) var audioStorageSummary = AudioStorageSummary(fileCount: 0, byteSize: 0)
     var errorMessage: String?
 
     init(
@@ -68,6 +70,37 @@ final class DataSettingsModel {
         }
     }
 
+    func refreshAudioStorage() {
+        audioStorageSummary = (try? audioStore.storageSummary())
+            ?? AudioStorageSummary(fileCount: 0, byteSize: 0)
+    }
+
+    /// Removes every saved recording while preserving all Reflection text.
+    func clearAllAudio() async {
+        guard !isClearingAudio else { return }
+        isClearingAudio = true
+        defer { isClearingAudio = false }
+        do {
+            let staged = try audioStore.stageAllSavedFiles()
+            do {
+                try await reflections.clearAllAudio()
+            } catch {
+                audioStore.restoreDeletion(staged)
+                throw error
+            }
+            audioStore.commitDeletion(staged)
+            do {
+                try audioStore.removeAllAudio()
+            } catch {
+                errorMessage = "部分录音文件未能清理，重启 App 后会再次尝试。"
+            }
+            refreshAudioStorage()
+            exportedDataURL = nil
+        } catch {
+            errorMessage = ProviderSettingsModel.message(for: error)
+        }
+    }
+
     /// Deletes every book's DB record (FK cascade removes positions, highlights,
     /// notes, preferences, sessions, reflections, journal and index rows) plus
     /// its sandbox EPUB file. Provider configuration and Keychain stay untouched.
@@ -99,6 +132,7 @@ final class DataSettingsModel {
                     throw error
                 }
             }
+            refreshAudioStorage()
             exportedDataURL = nil
             await onDataDeleted?()
         } catch {
@@ -141,6 +175,7 @@ final class DataSettingsModel {
                 errorMessage = "部分录音文件未能清理，重启 App 后会再次尝试。"
             }
             files.removeAllBookFiles()
+            refreshAudioStorage()
             clearUserDefaults()
             exportedDataURL = nil
             await onAllDataWiped?()

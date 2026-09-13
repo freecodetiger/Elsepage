@@ -146,3 +146,29 @@ private func writeTone(to url: URL, seconds: Double) throws {
     let staged = try store.stageAllSavedFiles()
     #expect(Set(staged.map(\.fileName)) == ["new.m4a", "legacy.caf", "older.mp3"])
 }
+
+@Test func audioMetadataAndStorageSummaryDescribeSavedFiles() async throws {
+    let (store, root) = try makeAudioStore()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let first = try store.newDraftURL(fileExtension: "caf")
+    let second = try store.newDraftURL(fileExtension: "caf")
+    try writeTone(to: first, seconds: 0.2)
+    try writeTone(to: second, seconds: 0.2)
+    let merged = try await store.mergeDraftSegments([first, second])
+    let metadata = try await store.metadata(
+        forDraftURL: merged,
+        fileName: "voice.m4a"
+    )
+    let promotion = try store.stagePromotion(draftURL: merged, finalFileName: "voice.m4a")
+    try store.commitPromotion(promotion)
+
+    #expect(metadata.duration > 0.15)
+    #expect(metadata.byteSize > 0)
+    #expect(metadata.format == "m4a")
+    #expect(metadata.checksum.count == 64)
+
+    let summary = try store.storageSummary()
+    #expect(summary.fileCount == 1)
+    #expect(summary.byteSize > 0)
+}

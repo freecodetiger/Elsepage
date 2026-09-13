@@ -146,6 +146,7 @@ enum VoiceReflectionControlStyle: Equatable {
 
 struct VoiceReflectionControls: View {
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("voice.saveAudioByDefault") private var saveAudioByDefault = true
     @Binding var editableText: String
     @Binding var audioDraftURLs: [URL]
     /// Conversation follow-ups use speech as an input method only. They do not
@@ -247,7 +248,9 @@ struct VoiceReflectionControls: View {
             }
         }
         .onAppear {
-            if !allowsAudioSaving {
+            if allowsAudioSaving {
+                recorder.saveAudio = saveAudioByDefault
+            } else {
                 recorder.saveAudio = false
                 audioDraftURLs = []
             }
@@ -371,6 +374,7 @@ final class ReflectionAudioPlayerModel {
     private(set) var isPlaying = false
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
+    private(set) var metadata: AudioFileMetadata?
     private(set) var errorMessage: String?
 
     init(fileName: String, audioStore: AudioFileStore = .live()) {
@@ -393,6 +397,10 @@ final class ReflectionAudioPlayerModel {
         } catch {
             errorMessage = "录音文件暂不可用。"
         }
+    }
+
+    func loadMetadata() async {
+        metadata = try? await audioStore.metadata(for: fileName)
     }
 
     func togglePlayback() {
@@ -468,6 +476,7 @@ final class ReflectionAudioPlayerModel {
 
 /// Compact playback surface for an audio file that belongs to a saved
 /// Reflection. Missing files degrade to text without interrupting the thread.
+@MainActor
 struct ReflectionAudioAttachment: View {
     let fileName: String
     let onDelete: (() -> Void)?
@@ -533,7 +542,7 @@ struct ReflectionAudioAttachment: View {
 
             HStack(spacing: ElsepageTheme.Spacing.xSmall) {
                 Image(systemName: "waveform")
-                Text("原始录音")
+                Text(Self.audioLabel(model.metadata))
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -544,7 +553,10 @@ struct ReflectionAudioAttachment: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .task { model.prepare() }
+        .task {
+            model.prepare()
+            await model.loadMetadata()
+        }
         .onChange(of: model.currentTime) { _, value in
             if !isScrubbing { scrubTime = value }
         }
@@ -563,6 +575,12 @@ struct ReflectionAudioAttachment: View {
             }
             wasPlayingBeforeScrub = false
         }
+    }
+
+    private static func audioLabel(_ metadata: AudioFileMetadata?) -> String {
+        guard let metadata else { return "原始录音" }
+        let size = ByteCountFormatter.string(fromByteCount: metadata.byteSize, countStyle: .file)
+        return "原始录音 · \(size)"
     }
 
     private static func timeText(_ time: TimeInterval) -> String {

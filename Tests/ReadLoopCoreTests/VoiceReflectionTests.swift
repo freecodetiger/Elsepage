@@ -193,3 +193,31 @@ import Testing
     #expect(reloaded.originalText == "保留文字")
     #expect(reloaded.audioFileName == nil)
 }
+
+
+@Test func clearAllAudioRemovesOnlyAudioReferences() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book()
+    try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let first = Reflection(
+        bookID: book.id,
+        originalText: "第一条文字",
+        inputKind: .voiceTranscript,
+        audioFileName: "first.m4a"
+    )
+    let second = Reflection(
+        bookID: book.id,
+        originalText: "第二条文字",
+        inputKind: .voiceTranscript,
+        audioFileName: "second.m4a"
+    )
+    try await repository.insert(first, linkedHighlightIDs: [], evidence: [])
+    try await repository.insert(second, linkedHighlightIDs: [], evidence: [])
+
+    try await repository.clearAllAudio()
+
+    let reloaded = try await repository.reflections(for: book.id)
+    #expect(reloaded.map(\.audioFileName) == [nil, nil])
+    #expect(Set(reloaded.map(\.originalText)) == ["第一条文字", "第二条文字"])
+}

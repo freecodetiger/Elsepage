@@ -1,5 +1,32 @@
 import AVFoundation
+import CryptoKit
 import Foundation
+
+public struct AudioFileMetadata: Hashable, Sendable {
+    public let fileName: String
+    public let duration: TimeInterval
+    public let byteSize: Int64
+    public let format: String
+    public let checksum: String
+
+    public init(fileName: String, duration: TimeInterval, byteSize: Int64, format: String, checksum: String) {
+        self.fileName = fileName
+        self.duration = duration
+        self.byteSize = byteSize
+        self.format = format
+        self.checksum = checksum
+    }
+}
+
+public struct AudioStorageSummary: Hashable, Sendable {
+    public let fileCount: Int
+    public let byteSize: Int64
+
+    public init(fileCount: Int, byteSize: Int64) {
+        self.fileCount = fileCount
+        self.byteSize = byteSize
+    }
+}
 
 /// Owns every filesystem transition for optional Reflection audio.
 ///
@@ -122,6 +149,50 @@ public struct AudioFileStore: Sendable {
             try? FileManager.default.removeItem(at: item.originalURL)
             try? FileManager.default.moveItem(at: item.trashedURL, to: item.originalURL)
         }
+    }
+
+    public func storageSummary() throws -> AudioStorageSummary {
+        try ensureDirectories()
+        let files = try FileManager.default.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: []
+        ).filter { Self.audioExtensions.contains($0.pathExtension.lowercased()) }
+        let bytes = try files.reduce(into: Int64(0)) { total, url in
+            let values = try url.resourceValues(forKeys: [.fileSizeKey])
+            total += Int64(values.fileSize ?? 0)
+        }
+        return AudioStorageSummary(fileCount: files.count, byteSize: bytes)
+    }
+
+    public func metadata(for fileName: String) async throws -> AudioFileMetadata {
+        try await metadata(forDraftURL: safeFileURL(named: fileName), fileName: fileName)
+    }
+
+    public func metadata(forDraftURL url: URL, fileName: String) async throws -> AudioFileMetadata {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw AudioFileStoreError.missingDraft
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let byteSize = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        let duration = try await AVURLAsset(url: url).load(.duration).seconds
+        guard duration.isFinite, duration > 0 else {
+            throw AudioFileStoreError.audioMergeFailed("录音文件为空")
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty {
+            hasher.update(data: data)
+        }
+        let checksum = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        return AudioFileMetadata(
+            fileName: fileName,
+            duration: duration,
+            byteSize: byteSize,
+            format: url.pathExtension.lowercased(),
+            checksum: checksum
+        )
     }
 
     /// Combines sequential voice takes into one M4A draft. A single segment is

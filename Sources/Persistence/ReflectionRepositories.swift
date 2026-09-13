@@ -289,6 +289,12 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
         }
     }
 
+    public func clearAllAudio() async throws {
+        try await db.writer.write { db in
+            try db.execute(sql: "UPDATE reflections SET audioFileName = NULL")
+        }
+    }
+
     public func delete(id: ReflectionID) async throws {
         try await db.writer.write { db in
             // Reflection-sourced brain evidence carries the reflection ID as a

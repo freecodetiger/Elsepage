@@ -9,6 +9,7 @@ import SwiftUI
 /// configured before entering. Destructive actions live in their own pages.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("voice.saveAudioByDefault") private var saveAudioByDefault = true
     @Bindable var model: SettingsRootModel
 
     var body: some View {
@@ -42,6 +43,14 @@ struct SettingsView: View {
                             statusRow(title: "每本书的检索进度", status: "索引状态与重新嵌入", muted: false, icon: "doc.text.magnifyingglass")
                         }
                     }
+                }
+
+                Section {
+                    Toggle("默认保存录音", isOn: $saveAudioByDefault)
+                } header: {
+                    Text("反思")
+                } footer: {
+                    Text("仅在你主动开始录音后生效；打开反思页面不会自动开启麦克风。当前录音仍可在保存前关闭。")
                 }
 
                 Section("诊断") {
@@ -404,6 +413,7 @@ struct DiagnosticsView: View {
 struct DataSettingsView: View {
     @Bindable var model: DataSettingsModel
     @State private var showsDeleteAllConfirmation = false
+    @State private var showsClearAudioConfirmation = false
     @State private var showsWipeList = false
     @State private var showsWipeConfirmation = false
 
@@ -417,7 +427,20 @@ struct DataSettingsView: View {
                     }
                 }
             } footer: {
-                Text("导出包含你的书籍、阅读位置、高亮、笔记、反思、长期记忆与「AI 眼中的我」档案，不含 Provider 配置或 API Key。")
+                Text("导出包含你的书籍、阅读位置、高亮、笔记、反思、长期记忆、「AI 眼中的我」档案与已保存录音，不含 Provider 配置或 API Key。")
+            }
+
+            Section {
+                LabeledContent("已保存录音", value: "\(model.audioStorageSummary.fileCount) 段")
+                LabeledContent("占用空间", value: Self.byteText(model.audioStorageSummary.byteSize))
+                Button("清理所有录音", role: .destructive) {
+                    showsClearAudioConfirmation = true
+                }
+                .disabled(model.audioStorageSummary.fileCount == 0 || model.isClearingAudio)
+            } header: {
+                Text("录音")
+            } footer: {
+                Text("清理录音只删除音频文件，所有 Reflection 文字、会话和记忆都会保留。")
             }
 
             Section {
@@ -426,17 +449,26 @@ struct DataSettingsView: View {
                 }
                 .disabled(model.isDeletingAllBooks)
             } footer: {
-                Text("删除书籍会一并移除数据库记录与沙盒文件（含索引），且不可撤销；Provider 配置和 Keychain 不受影响。")
+                Text("删除书籍会一并移除数据库记录、音频文件与沙盒文件（含索引），且不可撤销；Provider 配置和 Keychain 不受影响。")
             }
 
             wipeSection
         }
+        .task { model.refreshAudioStorage() }
         .navigationTitle("数据与隐私")
         .navigationBarTitleDisplayMode(.inline)
         .alert("操作失败", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
+        .alert("清理所有录音？", isPresented: $showsClearAudioConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("清理录音", role: .destructive) {
+                Task { await model.clearAllAudio() }
+            }
+        } message: {
+            Text("原始录音会被永久删除，Reflection 文字与 Agent 会话不受影响。")
+        }
         .alert("删除全部书籍与索引？", isPresented: $showsDeleteAllConfirmation) {
             Button("取消", role: .cancel) {}
             Button("全部删除", role: .destructive) {
@@ -484,6 +516,10 @@ struct DataSettingsView: View {
         } footer: {
             Text("清除后应用回到首次启动状态：需要重新配置 Provider 并重新导入书籍。此操作不可撤销。")
         }
+    }
+
+    private static func byteText(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private static let wipeScope = [

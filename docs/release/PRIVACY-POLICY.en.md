@@ -77,7 +77,7 @@ Switching providers or deleting your key never loses any local reading data or m
 
 In "Settings → Data & Privacy" you can:
 
-- **Export My Data**: export all of your personal data (books, reading positions, highlights, notes, reflections, long-term memory, your reader profile, etc.) as a JSON file to keep or migrate. The export matches what you see in the App, embeds audio you chose to save as Base64, and **excludes** provider configuration and API keys;
+- **Export My Data**: export all of your personal data (books, reading positions, highlights, notes, reflections, long-term memory, your reader profile, etc.) as a JSON file to keep or migrate. The export matches what you see in the App, embeds audio saved by default as Base64, and **excludes** provider configuration and API keys;
 - **Delete a single book**, including its progress, highlights, notes, reflections, and index;
 - **Clear All Local Data**: after a two-step confirmation, delete every book and file, the index, progress, highlights, notes, sessions, reflections, journal, memories, achievements, provider configuration, the keychain keys, and the App's own preferences — returning the App to first-launch state;
 - **Delete the App**: uninstalling removes all local data (keychain items included).

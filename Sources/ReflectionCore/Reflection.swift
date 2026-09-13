@@ -226,6 +226,7 @@ public protocol ReflectionRepository: Sendable {
     /// after it. Otherwise deletes the root Reflection and its entire conversation.
     func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult
     func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws
+    func clearAllAudio() async throws
     func delete(id: ReflectionID) async throws
 }
 
@@ -235,6 +236,9 @@ public extension ReflectionRepository {
         throw ReflectionConversationDeletionError.unsupportedRepository
     }
     func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws {
+        throw ReflectionConversationDeletionError.unsupportedRepository
+    }
+    func clearAllAudio() async throws {
         throw ReflectionConversationDeletionError.unsupportedRepository
     }
 }
