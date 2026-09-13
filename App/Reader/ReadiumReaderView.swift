@@ -317,7 +317,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         })()
         """
 
-        func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
+        nonisolated func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
             let source = """
             window.__readiumLastDecorationPoint = null;
             (function() {
