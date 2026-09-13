@@ -136,6 +136,28 @@ final class ReaderHelpModel {
         }
     }
 
+    /// The only destructive close path. The sheet cannot be swiped away, so an
+    /// accidental gesture cannot make the current temporary thread disappear.
+    func discard() {
+        runTask?.cancel()
+        runTask = nil
+        flushTask?.cancel()
+        flushTask = nil
+        streamingBuffer.complete()
+        turns.removeAll()
+        activeQuestion = nil
+        streamingContent = ""
+        contextSummary = nil
+        provenance = nil
+        latestResponseID = nil
+        savedResponseID = nil
+        isLatestResponseTruncated = false
+        saveError = nil
+        lastQuestion = nil
+        composerText = ""
+        state = .idle
+    }
+
     func copyLatestAnswer() {
         guard let latestAgentAnswer else { return }
         UIPasteboard.general.string = latestAgentAnswer

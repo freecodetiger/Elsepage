@@ -32,6 +32,7 @@ struct ReaderHelpSheet: View {
         .background(Color.elsepageBackground)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(true)
         .onDisappear { model.cancel() }
     }
 
@@ -49,6 +50,7 @@ struct ReaderHelpSheet: View {
             }
             Spacer()
             Button {
+                model.discard()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -57,7 +59,7 @@ struct ReaderHelpSheet: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("关闭")
+            .accessibilityLabel("关闭并丢弃这次问答")
         }
         .padding(.leading, ElsepageTheme.Spacing.medium)
         .padding(.trailing, ElsepageTheme.Spacing.small)
