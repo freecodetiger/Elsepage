@@ -21,6 +21,7 @@ struct ReaderHelpSheet: View {
                     quoteCard
                     conversation
                     completedExtras
+                    saveFeedback
                     disclosure
                     saveError
                 }
@@ -35,6 +36,12 @@ struct ReaderHelpSheet: View {
         .presentationDetents([.height(184), .medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(true)
+        .onChange(of: model.saveNotice) { _, notice in
+            // Reveal the newly persisted underline/highlight behind the sheet.
+            if notice != nil {
+                selectedDetent = .height(184)
+            }
+        }
         .onDisappear { model.cancel() }
     }
 
@@ -181,6 +188,9 @@ struct ReaderHelpSheet: View {
     }
 
     @ViewBuilder private var answerActions: some View {
+        let isSaving = model.isSavingNote
+        let isSaved = model.isSaved
+
         HStack(spacing: ElsepageTheme.Spacing.large) {
             Button {
                 model.copyLatestAnswer()
@@ -193,8 +203,11 @@ struct ReaderHelpSheet: View {
             Button {
                 Task { await model.saveLatestAnswer() }
             } label: {
-                Label(model.isSaved ? "已保存" : "存为笔记", systemImage: model.isSaved ? "checkmark" : "note.text.badge.plus")
-                    .frame(minHeight: 44)
+                Label(
+                    isSaving ? "保存中…" : (isSaved ? "已保存" : "存为笔记"),
+                    systemImage: isSaving ? "clock" : (isSaved ? "checkmark.circle.fill" : "note.text.badge.plus")
+                )
+                .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
             .disabled(!model.canSave)
@@ -203,7 +216,17 @@ struct ReaderHelpSheet: View {
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
-        .opacity(model.canSave || model.isSaved ? 1 : 0.55)
+        .opacity(model.canSave || isSaved ? 1 : 0.55)
+    }
+
+    @ViewBuilder private var saveFeedback: some View {
+        if let notice = model.saveNotice {
+            Label(notice, systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .accessibilityLabel("笔记保存成功：\(notice)")
+        }
     }
 
     private var disclosure: some View {

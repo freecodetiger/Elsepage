@@ -46,6 +46,8 @@ final class ReaderHelpModel {
     private(set) var provenance: AgentResponseProvenance?
     private(set) var latestResponseID: UUID?
     private(set) var isLatestResponseTruncated = false
+    private(set) var isSavingNote = false
+    private(set) var saveNotice: String?
     var saveError: String?
 
     private var savedResponseID: UUID?
@@ -55,6 +57,7 @@ final class ReaderHelpModel {
     @ObservationIgnored private var streamingBuffer = StreamingResponseBuffer()
     @ObservationIgnored private var lastQuestion: String?
     @ObservationIgnored private var firstDeltaRecorded = false
+    @ObservationIgnored private var saveNoticeTask: Task<Void, Never>?
 
     init(
         book: Book,
@@ -89,7 +92,7 @@ final class ReaderHelpModel {
     }
 
     var canSave: Bool {
-        state == .completed && !isSaved && latestAgentAnswer != nil
+        state == .completed && !isSaved && !isSavingNote && latestAgentAnswer != nil
     }
 
     var latestAgentAnswer: String? {
@@ -143,6 +146,8 @@ final class ReaderHelpModel {
         runTask = nil
         flushTask?.cancel()
         flushTask = nil
+        saveNoticeTask?.cancel()
+        saveNoticeTask = nil
         streamingBuffer.complete()
         turns.removeAll()
         activeQuestion = nil
@@ -152,6 +157,8 @@ final class ReaderHelpModel {
         latestResponseID = nil
         savedResponseID = nil
         isLatestResponseTruncated = false
+        isSavingNote = false
+        saveNotice = nil
         saveError = nil
         lastQuestion = nil
         composerText = ""
@@ -165,10 +172,21 @@ final class ReaderHelpModel {
 
     func saveLatestAnswer() async {
         guard canSave, let responseID = latestResponseID, let body = noteBody else { return }
+        isSavingNote = true
+        saveNotice = nil
+        saveError = nil
+        defer { isSavingNote = false }
+
         do {
             try await persistNote(body)
             savedResponseID = responseID
-            saveError = nil
+            saveNotice = "已保存到标注"
+            saveNoticeTask?.cancel()
+            saveNoticeTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                self?.saveNotice = nil
+            }
         } catch {
             saveError = error.localizedDescription
         }
@@ -209,6 +227,7 @@ final class ReaderHelpModel {
         provenance = nil
         latestResponseID = nil
         isLatestResponseTruncated = false
+        saveNotice = nil
         saveError = nil
         state = .preparing
         runTask?.cancel()

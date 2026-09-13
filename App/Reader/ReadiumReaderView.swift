@@ -11,6 +11,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
     /// Value snapshots make Observation changes visible to the SwiftUI/UIKit bridge.
     let preferences: ReaderPreferences
     let highlights: [Highlight]
+    let notes: [Note]
     let jumpTargetJSON: Data?
     let colorScheme: ColorScheme
 
@@ -32,6 +33,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         private var lastPreferences: ReaderPreferences?
         private var lastColorScheme: ColorScheme?
         private var lastHighlights: [Highlight] = []
+        private var lastNotes: [Note] = []
         private var lastJumpTarget: Data?
         private var openingTask: Task<Void, Never>?
         /// Phase-0 perf: open() → first locationDidChange timing.
@@ -102,8 +104,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         AnnotationLog.event("decoration.activated id=\(AnnotationLog.id(id)) rect=\(AnnotationLog.rect(event.rect)) point=\(point)")
                         self?.model.showHighlightMenu(for: id, anchor: event.rect)
                     }
+                    navigator.observeDecorationInteractions(inGroup: "notes") { [weak self] event in
+                        guard let id = UUID(uuidString: event.decoration.id) else { return }
+                        self?.model.openNoteEditor(.note(id))
+                    }
                     apply(preferences: model.preferences, colorScheme: host.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
                     applyHighlights(model.highlights)
+                    applyNotes(model.notes)
                     navigatorReadyAt = CFAbsoluteTimeGetCurrent()
                 } catch is CancellationError {
                     self?.abortParseIfNeeded()
@@ -194,6 +201,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         func update(
             preferences: ReaderPreferences,
             highlights: [Highlight],
+            notes: [Note],
             colorScheme: ColorScheme,
             jumpTarget: Data?
         ) {
@@ -201,6 +209,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 apply(preferences: preferences, colorScheme: colorScheme)
             }
             applyHighlights(highlights)
+            applyNotes(notes)
             guard let jumpTarget, jumpTarget != lastJumpTarget else { return }
             lastJumpTarget = jumpTarget
             Task {
@@ -251,6 +260,24 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 )
             }
             navigator.apply(decorations: decorations, in: "highlights")
+        }
+
+        private func applyNotes(_ notes: [Note]) {
+            guard let navigator else { return }
+            guard notes != lastNotes else { return }
+            lastNotes = notes
+            let decorations = notes.compactMap { note -> Decoration? in
+                // Notes attached to a highlight already have a visible mark.
+                // Standalone notes get a quiet underline as their only in-text anchor.
+                guard note.highlightID == nil,
+                      let locator = try? Self.readiumLocator(from: note.locator.json) else { return nil }
+                return Decoration(
+                    id: note.id.uuidString.lowercased(),
+                    locator: locator,
+                    style: .underline(tint: UIColor.tintColor.withAlphaComponent(0.55))
+                )
+            }
+            navigator.apply(decorations: decorations, in: "notes")
         }
 
         private func search(publication: Publication, query: String) async throws -> [ReaderSearchResult] {
@@ -326,6 +353,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         context.coordinator.update(
             preferences: preferences,
             highlights: highlights,
+            notes: notes,
             colorScheme: colorScheme,
             jumpTarget: jumpTargetJSON
         )

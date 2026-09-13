@@ -32,6 +32,7 @@ struct ReaderScreen: View {
                     model: model,
                     preferences: model.preferences,
                     highlights: model.highlights,
+                    notes: model.notes,
                     jumpTargetJSON: model.jumpTargetJSON,
                     colorScheme: colorScheme
                 )
