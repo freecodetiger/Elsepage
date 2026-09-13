@@ -180,6 +180,9 @@ Agent：<最终完整回答>
 - 无 Highlight 的独立 Note 在正文中使用轻量 underline decoration。
 - 已有 Highlight 的 Note 继续使用 Highlight，不重复添加下划线。
 - 点击正文中的 note decoration 可打开对应 Note。
+- Note decoration 在命中顺序上优先于 Highlight，避免重叠时无法进入 Note。
+- Note editor 默认显示 Markdown 预览，用户主动切换到编辑态后才显示裸文本和键盘。
+- Reader Help 保存 Note 时移除内部 `[E1]` citation marker。
 - v1 不自动保存 Agent 引用，也不创建 Reflection 或 Memory。
 
 ### 4.7 视觉与无障碍

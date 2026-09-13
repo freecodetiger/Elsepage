@@ -83,6 +83,10 @@
 - [ ] 保存成功后按钮显示“已保存”，面板显示“已保存到标注”
 - [ ] 保存成功后面板自动收起，正文对应选区出现轻量下划线或已有 Highlight
 - [ ] 点击正文中的 note 下划线可打开对应 Note
+- [ ] 当 Note 与 Highlight 部分重叠时，点击重叠区域优先打开 Note
+- [ ] Note editor 默认显示 Markdown 预览，不显示裸 Markdown 源码
+- [ ] 切换到“编辑”后才显示 TextEditor 和键盘
+- [ ] 预览中的标题、列表、引用和段落排版正确
 - [ ] 保存失败时回答仍保留在面板
 - [ ] 关闭再打开同一选段时，当前 ReaderScreen 内 thread 可恢复
 - [ ] 切换另一句话时创建新 help thread
