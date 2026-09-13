@@ -104,25 +104,27 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         guard let id = UUID(uuidString: event.decoration.id), let navigator else { return }
                         let point = event.point.map { AnnotationLog.rect(CGRect(origin: $0, size: .zero)) } ?? "nil"
                         AnnotationLog.event("decoration.activated id=\(AnnotationLog.id(id)) rect=\(AnnotationLog.rect(event.rect)) point=\(point)")
+                        let anchor = Self.menuAnchor(for: event)
                         Task { [weak self] in
                             let noteIDs = await Self.decorationIDsAtLastPoint(in: "notes", navigator: navigator)
                             AnnotationLog.event("highlight.hit id=\(AnnotationLog.id(id)) overlapNotes=\(noteIDs.map { AnnotationLog.id($0) }.joined(separator: ","))")
                             self?.model.handleHighlightActivation(
                                 for: id,
                                 confirmedNoteID: noteIDs.first,
-                                anchor: event.rect
+                                anchor: anchor
                             )
                         }
                     }
                     navigator.observeDecorationInteractions(inGroup: "notes") { [weak self, weak navigator] event in
                         guard let id = UUID(uuidString: event.decoration.id), let navigator else { return }
+                        let anchor = Self.menuAnchor(for: event)
                         Task { [weak self] in
                             let highlightIDs = await Self.decorationIDsAtLastPoint(in: "highlights", navigator: navigator)
                             AnnotationLog.event("note.hit id=\(AnnotationLog.id(id)) overlapHighlights=\(highlightIDs.map { AnnotationLog.id($0) }.joined(separator: ","))")
                             self?.model.handleNoteActivation(
                                 for: id,
                                 confirmedHighlightID: highlightIDs.first,
-                                anchor: event.rect
+                                anchor: anchor
                             )
                         }
                     }
@@ -333,6 +335,11 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: false
             ))
+        }
+
+        private static func menuAnchor(for event: OnDecorationActivatedEvent) -> CGRect? {
+            guard let point = event.point else { return event.rect }
+            return CGRect(x: point.x, y: point.y, width: 1, height: 1)
         }
 
         private static func decorationIDsAtLastPoint(
