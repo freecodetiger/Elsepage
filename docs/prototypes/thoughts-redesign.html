@@ -651,16 +651,6 @@
       line-height: 1.78;
     }
 
-    .response-panel {
-      padding: 18px 18px 15px;
-      background: var(--phone-surface-2);
-      border: 1px solid var(--phone-line);
-      border-radius: 16px;
-      box-shadow: 0 1px 0 rgba(0,0,0,.025);
-    }
-
-    .response-panel .detail-copy { color: var(--phone-ink-2); }
-
     .inline-evidence {
       margin-top: 10px;
       padding-top: 8px;
@@ -817,7 +807,7 @@
         <div class="eyebrow">页外 / 想法页</div>
         <h1>让记录自己说话，<br>而不是让界面发言。</h1>
         <p class="lede">
-          用户原话保持无卡片的原文形态，AI 回应使用次级表面面板；
+          用户和 AI 都保持平面正文，身份由头像、署名和内容层级承担；
           依据只作为对应回应下方的一行脚注，不再占据详情页末尾。
         </p>
       </div>
@@ -1073,10 +1063,8 @@
         </section>
         <section class="detail-section">
           ${identityRow("ai")}
-          <div class="response-panel">
-            <p class="detail-copy">${esc(item.response)}</p>
-            ${evidenceDetails(item)}
-          </div>
+          <p class="detail-copy">${esc(item.response)}</p>
+          ${evidenceDetails(item)}
         </section>
         ${hasFollowUp ? `
           <section class="detail-section">
@@ -1085,9 +1073,7 @@
           </section>
           <section class="detail-section">
             ${identityRow("ai")}
-            <div class="response-panel">
-              <p class="detail-copy">${esc(item.followUpResponse)}</p>
-            </div>
+            <p class="detail-copy">${esc(item.followUpResponse)}</p>
           </section>
         ` : ""}
         <div class="composer-placeholder">
