@@ -514,7 +514,7 @@ final class ReaderModel {
     func handleHighlightActivation(for id: UUID, confirmedNoteID: UUID? = nil, anchor: CGRect?) {
         guard let annotation = annotation(forHighlightID: id) else { return }
         let validatedConfirmedNoteID = confirmedNoteID.flatMap { candidate in
-            annotation(forNoteID: candidate) == nil ? nil : candidate
+            self.annotation(forNoteID: candidate) == nil ? nil : candidate
         }
         let noteID = validatedConfirmedNoteID ?? annotation.notes.last?.id ?? overlappingNoteID(for: annotation.range)
         AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) conflictNote=\(noteID.map { AnnotationLog.id($0) } ?? "nil")")
@@ -528,7 +528,7 @@ final class ReaderModel {
     func handleNoteActivation(for id: UUID, confirmedHighlightID: UUID? = nil, anchor: CGRect?) {
         guard let annotation = annotation(forNoteID: id) else { return }
         let validatedConfirmedHighlightID = confirmedHighlightID.flatMap { candidate in
-            annotation(forHighlightID: candidate) == nil ? nil : candidate
+            self.annotation(forHighlightID: candidate) == nil ? nil : candidate
         }
         if let validatedConfirmedHighlightID {
             AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(validatedConfirmedHighlightID)) pointHit=true")
