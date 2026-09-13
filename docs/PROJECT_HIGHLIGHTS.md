@@ -262,8 +262,8 @@ fileImporter → LibraryModel.importBook
 | 意图级上下文预算 | `ContextPolicyCompiler.budget(for:)` 按 intent 分拆（v2 起） | total 6000 字符，emotionalRecord 不检索书籍 |
 | 证据截断 | 检索到的 evidence 按字符预算逐条截断（`ReaderAgentContextBuilder.build`） | `characterBudget` 4000（可覆盖） |
 | 会话/对话截断 | `boundedConversation` / `bounded`（从新到旧，超预算即停） | 见 6.1 表 |
-| 路由调用预算 | `ExecutionBudget(maxModelCalls:1, maxWallTime:8s, maxOutputTokens:500)` | — |
-| 回复调用预算 | `ExecutionBudget.readerReply`（45s / 400） | — |
+| 路由调用预算 | `ExecutionBudget(maxModelCalls:1, maxWallTime:8s, maxOutputTokens:800)` | — |
+| 回复调用预算 | `ExecutionBudget.readerReply`（45s / 1000） | — |
 | 防御性截断 | embedding 入参 6000 字符 / rerank 文档 4000 字符 | — |
 | 检索上限 | `validatedBookPlan` 钳制 `maximumEvidenceCount ∈ [1,4]` | — |
 
@@ -372,7 +372,7 @@ ElsePage 把「AI 是阅读伙伴而不是聊天机器人」当成**产品约束
    - **允许对话结束**：不要制造「还有下一题」的感觉；认知负担高时，作用是沉淀而不是消耗。
    - 不替用户下结论、不泛泛赞美、不炫耀知识（一次最多引入 1 个外部概念/书/过去想法）、不定义用户人格、区分「书的内容 / 用户观点 / AI 的推断」、克制长度（80–220 中文字）、按 6 种 Reflection 类型差异化回应、禁止行为清单（不自动总结章节、不评分、不强行升华、不编造原文、不用「作为 AI」措辞）。
 
-2. **校验器层**（`SemanticPlanValidator`）：**上一轮 Agent 提问 → 强制 `posture = respondOnly`**（编译为 `allowQuestion=false` 且 `shouldNaturallyEnd=true`）；`responseGuidance` 的目标长度在 Reflection 模式把 long 压到 medium。即「提问稀缺」不是靠提示词自觉，而是**结构性强制**。
+2. **校验器层**（`SemanticPlanValidator`）：**上一轮 Agent 提问 → 强制 `posture = respondOnly`**（编译为 `allowQuestion=false` 且 `shouldNaturallyEnd=true`）；`responseGuidance` 的目标长度在 Reflection 模式默认把 long 压到 medium，只有用户明确要求深入/展开/比较时才允许 long。即「提问稀缺」不是靠提示词自觉，而是**结构性强制**。
 
 3. **路由层**（Router prompt）：输入含 `previousAgentAskedQuestion`，路由规划时要求其遵守相同禁令。
 
@@ -910,7 +910,7 @@ agent:
   budget:
     total_per_intent: 6000 字符（ContextPolicyCompiler.budget(for:)，按 intent 分账）
     routing_call: 8s / 500 output tokens / temp 0
-    reply_call: 45s / 400 output tokens（ExecutionBudget.readerReply）/ temp 0.4
+    reply_call: 45s / 1000 output tokens（ExecutionBudget.readerReply）/ temp 0.4
     max_evidence: 4（clamp [1,4]）；query 截断 240 字符
   llm: 一次回复 = 两次顺序调用（路由零温 + 回应）；BYOK，13 个预设 Provider，OpenAI Chat Completions 兼容协议；DeepSeek 显式 thinking:disabled
   lifecycle: 校验幂等（稳定 messageID）→ 路由 → 校验 → 连接过去想法 → 检索 → 组装 → 执行 → 引用验证 → 持久化 → ContextDisclosure + trace

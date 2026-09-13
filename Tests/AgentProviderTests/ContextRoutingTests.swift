@@ -224,6 +224,25 @@ private func routingInput(
     #expect(validatedLength(.conversation) == .long)
 }
 
+@Test func validatorAllowsLongReflectionOnlyWhenUserExplicitlyRequestsDepth() {
+    let semantic = SemanticContextPlan(
+        intent: .conceptualQuestion,
+        requests: [],
+        response: SemanticResponsePlan(length: .long, posture: .respondOnly)
+    )
+    let explicit = ContextRoutingInput(
+        interactionMode: .reflection,
+        currentReflection: "请深入展开比较一下作者前后的论证。",
+        recentConversation: [],
+        currentReading: nil,
+        availableSources: .init(hasNearbyPassage: false, hasBookIndex: false, hasPastThoughts: false),
+        previousAgentAskedQuestion: false
+    )
+    let (validated, corrections) = SemanticPlanValidator().validate(semantic, input: explicit)
+    #expect(validated.response.length == .long)
+    #expect(corrections.isEmpty)
+}
+
 // MARK: - D. Policy compiler
 
 @Test func compilerMapsPurposeToRetrievalStrategy() throws {

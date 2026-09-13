@@ -124,6 +124,10 @@ public struct LLMReaderContextRouter: ReaderContextRouting {
     - denseQuery：把当前诉求改写成表述完整的一句话，用于语义召回；lexicalTerms：人物名、术语、实体、原句关键词（空格分隔），用于词法召回；省略时都回退 query。
     - brainRetrieval：仅当用户明确提及过去的想法、问题、或需要回顾的长期记忆时才请求，query 指向当时的主题；默认 null。
     - posture=mayAskQuestion 表示本轮允许提出问题；respondOnly 表示回应、整理或连接之后自然结束。
+    - length=short：只接住情绪、确认感受，或用户输入很短。
+    - length=medium：默认档；摘录观察、解释当前段落、普通个人连接。
+    - length=long：用户明确要求深入、展开、比较、挑战、系统整理，或多个强证据需要综合。
+    - 首次 Reflection 通常使用 medium；只有用户明确要求深入时才使用 long，不能因为可引用内容多就自行写成长文。
     - 取多少证据、候选数、是否重排、扩展方式与上下文预算由系统按 intent 与 purpose 决定，不在你的输出里。
 
     原则：默认少取上下文；情绪记录通常不检索；附近原文足够时不扩大范围；过去想法只有强连接才检索；
@@ -172,7 +176,7 @@ public struct DeterministicReaderContextRouter: Sendable {
             intent: input.interactionMode == .conversation ? .conversationContinuation : .unclear,
             requests: requests,
             response: SemanticResponsePlan(
-                length: .short,
+                length: .medium,
                 posture: input.previousAgentAskedQuestion ? .respondOnly : .mayAskQuestion
             )
         )

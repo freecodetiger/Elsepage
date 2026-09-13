@@ -115,6 +115,7 @@ private func makeInput() -> ContextRoutingInput {
         #expect(fallback.plan.bookRequest?.query == "兜底计划的查询文本")
         #expect(fallback.plan.pastThoughtRequest != nil)
         #expect(fallback.plan.response.posture == .respondOnly, "hard conversation rule baked into fallback")
+        #expect(fallback.plan.response.length == .medium, "fallback defaults to a restrained but useful reply length")
 
         let (validated, corrections) = SemanticPlanValidator().validate(fallback.plan, input: input)
         #expect(corrections.isEmpty)

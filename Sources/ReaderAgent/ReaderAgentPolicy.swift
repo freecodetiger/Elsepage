@@ -31,9 +31,9 @@ public struct ReaderAgentPolicy: Sendable {
         var modelMessages = [ModelMessage(role: .system, content: ReaderAgentSystemPrompt.v3)]
         if let responseGuidance {
             let length = switch responseGuidance.targetLength {
-            case .short: "保持简短，通常 80–140 个中文字。"
-            case .medium: "保持克制，通常 120–220 个中文字。"
-            case .long: "用户明确进入深入讨论，可以适度展开，但不要写成文章。"
+            case .short: "保持简短，通常 120–180 个中文字。"
+            case .medium: "默认保持克制但有信息量，通常 200–320 个中文字。"
+            case .long: "用户明确进入深入讨论，通常 350–500 个中文字，最多两到三个自然段。"
             }
             let question = responseGuidance.allowQuestion
                 ? "只有问题明显比评论更有价值时，才可以提出最多一个问题。"

@@ -74,8 +74,11 @@ public struct SemanticPlanValidator: Sendable {
             response = SemanticResponsePlan(length: response.length, posture: .respondOnly)
             corrections.append("posture forced to respondOnly: previous agent turn asked a question")
         }
-        if input.interactionMode == .reflection, response.length == .long {
-            // Reflection replies stay restrained; depth comes from context, not length.
+        if input.interactionMode == .reflection,
+           response.length == .long,
+           !Self.explicitlyRequestsDepth(input.currentReflection) {
+            // Reflection replies stay restrained unless the user explicitly asks
+            // for a deeper treatment.
             response = SemanticResponsePlan(length: .medium, posture: response.posture)
             corrections.append("length capped from long to medium in reflection mode")
         }
@@ -86,6 +89,16 @@ public struct SemanticPlanValidator: Sendable {
     /// A secondary query that is blank after trimming falls back to the primary
     /// query (the same default the wire normalizer applies) so requests never
     /// carry whitespace-only retrieval text.
+    private static func explicitlyRequestsDepth(_ text: String) -> Bool {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+        let markers = [
+            "深入", "展开", "详细", "具体说", "系统地", "多讲", "继续聊",
+            "继续探讨", "比较一下", "对比一下", "挑战我", "拆解", "展开说",
+        ]
+        return markers.contains { normalized.contains($0) }
+    }
+
     private static func repairedQuery(_ value: String, fallback: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : trimmed
