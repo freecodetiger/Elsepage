@@ -95,7 +95,7 @@ final class DebugLoop {
         guard let url = URLComponents(string: target) else { return reply(400, ["error": "invalid_target"]) }
         let path = url.path
         if method == "GET", path == "/status" {
-            return reply(200, ["protocolVersion": 1, "authentication": "none-usb-loopback", "instrumentationVersion": 7,
+            return reply(200, ["protocolVersion": 1, "authentication": "none-usb-loopback", "instrumentationVersion": 8,
                                "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
                                "runID": runID, "busy": busy, "environment": "isolated-memory-grdb",
                                "actions": ["reflection.submit"], "scope": "reflection-save; no Agent or UI automation"])

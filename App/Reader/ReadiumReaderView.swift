@@ -365,10 +365,6 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     break;
                   }
                 }
-                if (!matched) {
-                  const rects = Array.from(item.range.getClientRects());
-                  matched = rects.some(contains);
-                }
                 if (matched) result.push(item.decoration.id);
               }
               return { x: point.x, y: point.y, ids: result };
@@ -381,6 +377,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             let y = (payload["y"] as? NSNumber)?.doubleValue
             let pointDescription = x.flatMap { x in y.map { y in String(format: "(%.1f,%.1f)", x, y) } } ?? "nil"
             AnnotationLog.event("decoration.point group=\(group) point=\(pointDescription) ids=\(ids.joined(separator: ","))")
+            Perf.shared.event("annotation.point group=\(group) point=\(pointDescription) ids=\(ids.joined(separator: ","))")
             return ids.compactMap(UUID.init(uuidString:))
         }
 

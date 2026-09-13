@@ -517,7 +517,9 @@ final class ReaderModel {
             self.annotation(forNoteID: candidate) == nil ? nil : candidate
         }
         let noteID = validatedConfirmedNoteID ?? annotation.notes.last?.id ?? overlappingNoteID(for: annotation.range)
-        AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) conflictNote=\(noteID.map { AnnotationLog.id($0) } ?? "nil")")
+        let noteDescription = noteID.map { AnnotationLog.id($0) } ?? "nil"
+        AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) conflictNote=\(noteDescription)")
+        Perf.shared.event("annotation.activate kind=highlight id=\(AnnotationLog.id(id)) overlapNote=\(noteDescription)")
         if let noteID {
             showAnnotationConflict(noteID: noteID, highlightID: id, anchor: anchor)
         } else {
@@ -532,11 +534,13 @@ final class ReaderModel {
         }
         if let validatedConfirmedHighlightID {
             AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(validatedConfirmedHighlightID)) pointHit=true")
+            Perf.shared.event("annotation.activate kind=note id=\(AnnotationLog.id(id)) overlapHighlight=\(AnnotationLog.id(validatedConfirmedHighlightID)) pointHit=true")
             showAnnotationConflict(noteID: id, highlightID: validatedConfirmedHighlightID, anchor: anchor)
             return
         }
         if annotation.highlight != nil {
             AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(annotation.id)) sameRange=true")
+            Perf.shared.event("annotation.activate kind=note id=\(AnnotationLog.id(id)) overlapHighlight=\(AnnotationLog.id(annotation.id)) sameRange=true")
             showAnnotationConflict(noteID: id, highlightID: annotation.id, anchor: anchor)
             return
         }
@@ -544,10 +548,12 @@ final class ReaderModel {
             $0.highlight != nil && $0.range.appearsToOverlapText(with: annotation.range)
         }) {
             AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(overlappingHighlight.id)) sameRange=false")
+            Perf.shared.event("annotation.activate kind=note id=\(AnnotationLog.id(id)) overlapHighlight=\(AnnotationLog.id(overlappingHighlight.id)) sameRange=false")
             showAnnotationConflict(noteID: id, highlightID: overlappingHighlight.id, anchor: anchor)
             return
         }
         AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=nil")
+        Perf.shared.event("annotation.activate kind=note id=\(AnnotationLog.id(id)) overlapHighlight=nil")
         openNoteEditor(.note(id))
     }
 
