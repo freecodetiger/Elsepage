@@ -1,4 +1,5 @@
 import Foundation
+import LibraryCore
 import ReaderCore
 import ReadiumAdapterGCDWebServer
 import ReadiumNavigator
@@ -188,17 +189,116 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         }
 
         func navigator(_ navigator: SelectableNavigator, shouldShowMenuForSelection selection: Selection) -> Bool {
-            guard let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator) else {
+            guard let anchor = try? ReadiumReaderView.Coordinator.anchor(from: selection.locator),
+                  let epubNavigator = self.navigator else {
                 AnnotationLog.event("selection.callback → fallback to system menu (anchor conversion failed)")
                 return true
             }
-            model.showSelectionMenu(
-                locator: anchor,
-                text: selection.locator.text.highlight ?? "",
-                frame: selection.frame
-            )
+            let selectedText = selection.locator.text.highlight ?? ""
+            let expectedAnchor = anchor
+            Task { [weak self, weak epubNavigator] in
+                guard let self, let epubNavigator else { return }
+                let range = await self.resolveSelectionRange(
+                    anchor: expectedAnchor,
+                    fallback: epubNavigator,
+                    bookID: self.model.book.id
+                )
+                guard let current = epubNavigator.currentSelection,
+                      let currentAnchor = try? ReadiumReaderView.Coordinator.anchor(from: current.locator),
+                      currentAnchor.identifiesSameAnchor(as: expectedAnchor) else {
+                    return
+                }
+                self.model.showSelectionMenu(
+                    locator: expectedAnchor,
+                    range: range,
+                    text: selectedText,
+                    frame: selection.frame
+                )
+            }
             return false
         }
+
+        private func resolveSelectionRange(
+            anchor: BookLocator,
+            fallback navigator: EPUBNavigatorViewController,
+            bookID: BookID
+        ) async -> AnnotationRange? {
+            guard case .success(let value) = await navigator.evaluateJavaScript(Self.selectionRangeScript),
+                  let result = value as? [String: Any],
+                  let startValue = result["start"] as? NSNumber,
+                  let endValue = result["end"] as? NSNumber else {
+                return nil
+            }
+            let startProgression = startValue.doubleValue
+            let endProgression = endValue.doubleValue
+            guard startProgression.isFinite, endProgression.isFinite,
+                  (0...1).contains(startProgression), (0...1).contains(endProgression) else {
+                return nil
+            }
+            do {
+                let start = try Self.rangeLocator(
+                    from: anchor,
+                    progression: min(startProgression, endProgression)
+                )
+                let end = try Self.rangeLocator(
+                    from: anchor,
+                    progression: max(startProgression, endProgression)
+                )
+                return AnnotationRange(
+                    bookID: bookID,
+                    resourceHref: anchor.href,
+                    startLocator: start,
+                    endLocator: end
+                )
+            } catch {
+                AnnotationLog.event("selection.range.failed \(error)")
+                return nil
+            }
+        }
+
+        private static func rangeLocator(from anchor: BookLocator, progression: Double) throws -> BookLocator {
+            let text = anchor.textHighlight ?? ""
+            let json = try JSONSerialization.data(withJSONObject: [
+                "href": anchor.href,
+                "type": "application/xhtml+xml",
+                "locations": ["progression": progression],
+                "text": ["highlight": text],
+            ], options: [.sortedKeys])
+            return try BookLocator(
+                json: json,
+                href: anchor.href,
+                progression: progression,
+                textHighlight: text
+            )
+        }
+
+        private static let selectionRangeScript = """
+        (function() {
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+          const range = selection.getRangeAt(0);
+          const selected = selection.toString();
+          if (!selected || !selected.trim()) return null;
+          function textOffset(node, offset) {
+            try {
+              const probe = document.createRange();
+              probe.selectNodeContents(document.body);
+              probe.setEnd(node, offset);
+              return probe.toString().length;
+            } catch (_) {
+              return null;
+            }
+          }
+          const startOffset = textOffset(range.startContainer, range.startOffset);
+          const endOffset = textOffset(range.endContainer, range.endOffset);
+          const total = (document.body.textContent || "").length;
+          if (startOffset === null || endOffset === null || total <= 0) return null;
+          return {
+            start: Math.min(startOffset, endOffset) / total,
+            end: Math.max(startOffset, endOffset) / total
+          };
+        })()
+        """
 
         func update(
             preferences: ReaderPreferences,

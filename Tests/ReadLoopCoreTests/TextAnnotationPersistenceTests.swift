@@ -5,6 +5,22 @@ import Persistence
 import ReaderCore
 import Testing
 
+@Test func annotationRangesUsePreciseStartEndForOverlapWhenAvailable() throws {
+    let lhsBook = BookID()
+    let lhsStart = try annotationLocator(progression: 0.1, text: "结构")
+    let lhsEnd = try annotationLocator(progression: 0.6, text: "结构")
+    let rhsStart = try annotationLocator(progression: 0.4, text: "结构")
+    let rhsEnd = try annotationLocator(progression: 0.8, text: "结构")
+    let lhs = AnnotationRange(bookID: lhsBook, resourceHref: lhsStart.href, startLocator: lhsStart, endLocator: lhsEnd)
+    let rhs = AnnotationRange(bookID: lhsBook, resourceHref: rhsStart.href, startLocator: rhsStart, endLocator: rhsEnd)
+    #expect(lhs.appearsToOverlapText(with: rhs))
+
+    let disjointStart = try annotationLocator(progression: 0.7, text: "结构")
+    let disjointEnd = try annotationLocator(progression: 0.9, text: "结构")
+    let disjoint = AnnotationRange(bookID: lhsBook, resourceHref: disjointStart.href, startLocator: disjointStart, endLocator: disjointEnd)
+    #expect(!lhs.appearsToOverlapText(with: disjoint))
+}
+
 @Test func textAnnotationRepositoryRoundTripsIndependentLayersAndNoteEntries() async throws {
     let database = try AppDatabase.inMemory()
     let books = GRDBBookRepository(database: database)

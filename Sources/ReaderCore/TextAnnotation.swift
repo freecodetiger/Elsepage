@@ -38,6 +38,33 @@ public struct AnnotationRange: Hashable, Codable, Sendable {
         rangeKey == other.rangeKey
     }
 
+    /// Locator used only for rendering and UI projection. It preserves the
+    /// canonical start Locator while carrying the range identity in custom
+    /// locations so equal starts with different ends cannot collapse in UI.
+    public var renderLocator: BookLocator {
+        guard var object = try? JSONSerialization.jsonObject(with: startLocator.json) as? [String: Any] else {
+            return startLocator
+        }
+        var locations = object["locations"] as? [String: Any] ?? [:]
+        locations["rangeKey"] = rangeKey
+        if let endProgression = endLocator.progression {
+            locations["rangeEndProgression"] = endProgression
+        }
+        object["locations"] = locations
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else {
+            return startLocator
+        }
+        return (try? BookLocator(
+            json: data,
+            href: startLocator.href,
+            progression: startLocator.progression,
+            totalProgression: startLocator.totalProgression,
+            textBefore: startLocator.textBefore,
+            textHighlight: startLocator.textHighlight,
+            textAfter: startLocator.textAfter
+        )) ?? startLocator
+    }
+
     /// Conservative overlap used for annotation conflict UI and highlight
     /// collision checks. It avoids claiming certainty when locators lack
     /// progression; false negatives are safer than destructive merges.
@@ -46,6 +73,11 @@ public struct AnnotationRange: Hashable, Codable, Sendable {
             return false
         }
         if isExactSameRange(as: other) { return true }
+
+        if let lhsStart = preciseStart, let lhsEnd = preciseEnd,
+           let rhsStart = other.preciseStart, let rhsEnd = other.preciseEnd {
+            return lhsStart < rhsEnd && rhsStart < lhsEnd
+        }
 
         let lhsText = Self.normalizedText(startLocator.textHighlight ?? endLocator.textHighlight)
         let rhsText = Self.normalizedText(other.startLocator.textHighlight ?? other.endLocator.textHighlight)
@@ -58,6 +90,20 @@ public struct AnnotationRange: Hashable, Codable, Sendable {
             return sameOrContainedText
         }
         return sameOrContainedText
+    }
+
+    private var preciseStart: Double? {
+        guard let start = startLocator.progression,
+              let end = endLocator.progression,
+              start < end else { return nil }
+        return start
+    }
+
+    private var preciseEnd: Double? {
+        guard let start = startLocator.progression,
+              let end = endLocator.progression,
+              start < end else { return nil }
+        return end
     }
 
     private static func resourceIdentifier(_ href: String) -> String {

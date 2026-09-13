@@ -14,6 +14,7 @@ import UIKit
 /// visible exactly while a context is set.
 struct ReaderSelectionContext: Equatable {
     let locator: BookLocator
+    let range: AnnotationRange?
     let text: String
     let frame: CGRect?
 }
@@ -231,14 +232,14 @@ final class ReaderModel {
             showHighlightMenu(for: highlight.id, anchor: nil)
         }
     }
-    private func annotation(for locator: BookLocator) -> TextAnnotation? {
-        let range = AnnotationRange(
+    private func annotation(for locator: BookLocator, range: AnnotationRange? = nil) -> TextAnnotation? {
+        let resolvedRange = range ?? AnnotationRange(
             bookID: book.id,
             resourceHref: locator.href,
             startLocator: locator,
             endLocator: locator
         )
-        return textAnnotations.first { $0.range.rangeKey == range.rangeKey }
+        return textAnnotations.first { $0.range.rangeKey == resolvedRange.rangeKey }
     }
 
     private func annotation(forHighlightID id: UUID) -> TextAnnotation? {
@@ -282,7 +283,7 @@ final class ReaderModel {
             return Highlight(
                 id: annotation.id,
                 bookID: annotation.range.bookID,
-                locator: annotation.range.startLocator,
+                locator: annotation.range.renderLocator,
                 color: layer.color,
                 createdAt: layer.createdAt
             )
@@ -293,7 +294,7 @@ final class ReaderModel {
                     id: entry.id,
                     bookID: annotation.range.bookID,
                     highlightID: nil,
-                    locator: annotation.range.startLocator,
+                    locator: annotation.range.renderLocator,
                     body: entry.body,
                     createdAt: entry.createdAt,
                     updatedAt: entry.updatedAt
@@ -304,9 +305,9 @@ final class ReaderModel {
     }
 
     @discardableResult
-    func saveHighlight(locator: BookLocator, color: HighlightColor) -> Highlight? {
+    func saveHighlight(locator: BookLocator, range: AnnotationRange? = nil, color: HighlightColor) -> Highlight? {
         let now = Date()
-        if var existing = annotation(for: locator) {
+        if var existing = annotation(for: locator, range: range) {
             if var highlight = existing.highlight {
                 highlight.color = color
                 highlight.updatedAt = now
@@ -321,21 +322,21 @@ final class ReaderModel {
             return highlights.first { $0.id == existing.id }
         }
 
-        let range = AnnotationRange(
+        let resolvedRange = range ?? AnnotationRange(
             bookID: book.id,
             resourceHref: locator.href,
             startLocator: locator,
             endLocator: locator
         )
         if textAnnotations.contains(where: {
-            $0.highlight != nil && $0.range.appearsToOverlapText(with: range)
+            $0.highlight != nil && $0.range.appearsToOverlapText(with: resolvedRange)
         }) {
             showNotice(.highlightOverlap)
             return nil
         }
 
         let annotation = TextAnnotation(
-            range: range,
+            range: resolvedRange,
             highlight: HighlightLayer(color: color, createdAt: now, updatedAt: now),
             createdAt: now,
             updatedAt: now
@@ -350,9 +351,9 @@ final class ReaderModel {
     // selection exists in the navigator. Opening it replaces any highlight
     // menu; acting on it closes it and clears the navigator selection.
 
-    func showSelectionMenu(locator: BookLocator, text: String, frame: CGRect?) {
+    func showSelectionMenu(locator: BookLocator, range: AnnotationRange? = nil, text: String, frame: CGRect?) {
         let replacedMenu = annotationMenu != nil
-        annotationMenu = .selection(.init(locator: locator, text: text, frame: frame))
+        annotationMenu = .selection(.init(locator: locator, range: range, text: text, frame: frame))
         showsControls = false
         AnnotationLog.event("selection.show frame=\(AnnotationLog.rect(frame)) replacedMenu=\(replacedMenu) text=\"\(text.prefix(24))\"")
     }
@@ -370,7 +371,7 @@ final class ReaderModel {
         onSelectionFinished?()
         preferences.lastUsedHighlightColor = color
         savePreferences()
-        if saveHighlight(locator: context.locator, color: color) != nil {
+        if saveHighlight(locator: context.locator, range: context.range, color: color) != nil {
             AnnotationHaptics.highlightCreated()
         }
     }
@@ -380,13 +381,14 @@ final class ReaderModel {
         annotationMenu = nil
         onSelectionFinished?()
         let now = Date()
-        var annotation = annotation(for: context.locator) ?? TextAnnotation(
-            range: AnnotationRange(
-                bookID: book.id,
-                resourceHref: context.locator.href,
-                startLocator: context.locator,
-                endLocator: context.locator
-            ),
+        let resolvedRange = context.range ?? AnnotationRange(
+            bookID: book.id,
+            resourceHref: context.locator.href,
+            startLocator: context.locator,
+            endLocator: context.locator
+        )
+        var annotation = annotation(for: context.locator, range: resolvedRange) ?? TextAnnotation(
+            range: resolvedRange,
             createdAt: now,
             updatedAt: now
         )
@@ -435,7 +437,7 @@ final class ReaderModel {
                 service: readerHelpService
             ) { [weak self] body in
                 guard let self else { throw ReaderHelpModelError.readerUnavailable }
-                try await self.saveHelpNote(anchor: anchor, body: body)
+                try await self.saveHelpNote(anchor: anchor, range: context.range, body: body)
             }
             helpSession = helpModel
         }
@@ -654,17 +656,18 @@ final class ReaderModel {
         replaceAnnotation(annotation)
     }
 
-    func saveHelpNote(anchor: BookLocator, body: String) async throws {
+    func saveHelpNote(anchor: BookLocator, range: AnnotationRange? = nil, body: String) async throws {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let now = Date()
-        var annotation = annotation(for: anchor) ?? TextAnnotation(
-            range: AnnotationRange(
-                bookID: book.id,
-                resourceHref: anchor.href,
-                startLocator: anchor,
-                endLocator: anchor
-            ),
+        let resolvedRange = range ?? AnnotationRange(
+            bookID: book.id,
+            resourceHref: anchor.href,
+            startLocator: anchor,
+            endLocator: anchor
+        )
+        var annotation = annotation(for: anchor, range: resolvedRange) ?? TextAnnotation(
+            range: resolvedRange,
             createdAt: now,
             updatedAt: now
         )
