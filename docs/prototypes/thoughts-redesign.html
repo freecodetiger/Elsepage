@@ -512,7 +512,31 @@
     .tab.active { color: var(--phone-ink); font-weight: 650; }
 
     .detail-content {
-      padding-top: 18px;
+      padding-top: 62px;
+    }
+
+    .floating-back {
+      position: absolute;
+      z-index: 8;
+      top: 57px;
+      left: 16px;
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      color: var(--phone-ink);
+      background: color-mix(in srgb, var(--phone-surface) 82%, transparent);
+      border: 1px solid var(--phone-line);
+      border-radius: 50%;
+      box-shadow: 0 8px 22px rgba(0,0,0,.08);
+      backdrop-filter: blur(18px) saturate(150%);
+      cursor: pointer;
+    }
+
+    .floating-back span {
+      font-size: 28px;
+      line-height: 1;
+      transform: translateY(-1px);
     }
 
     .detail-context {
@@ -579,100 +603,91 @@
     .detail-copy {
       margin: 0;
       color: var(--phone-ink);
-      font-size: 15px;
+      font-size: 16px;
       line-height: 1.78;
     }
 
     .response-panel {
-      padding: 18px 18px 17px;
+      padding: 18px 18px 15px;
       background: var(--phone-surface-2);
       border: 1px solid var(--phone-line);
       border-radius: 16px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.025);
     }
 
     .response-panel .section-label { margin-bottom: 9px; }
-    .response-panel .detail-copy { font-size: 15px; line-height: 1.78; }
+    .response-panel .detail-copy { color: var(--phone-ink-2); }
 
-    .continue-row {
-      width: 100%;
-      min-height: 50px;
-      display: flex;
+    .inline-evidence {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid color-mix(in srgb, var(--phone-line) 72%, transparent);
+    }
+
+    .inline-evidence summary {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      margin-top: 14px;
-      padding: 0;
-      color: var(--phone-ink);
-      background: transparent;
-      border: 0;
-      border-bottom: 1px solid var(--phone-line);
-      cursor: pointer;
-    }
-
-    .continue-row span:first-child {
-      font-size: 14px;
-      font-weight: 650;
-    }
-
-    .continue-row span:last-child {
+      gap: 5px;
+      min-height: 28px;
       color: var(--phone-ink-3);
-      font-size: 20px;
-      font-weight: 300;
-    }
-
-    details.evidence {
-      margin-top: 26px;
-      padding-top: 20px;
-      border-top: 1px solid var(--phone-line);
-    }
-
-    details.evidence summary {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 44px;
-      color: var(--phone-ink);
-      font-size: 14px;
-      font-weight: 650;
+      font-size: 12px;
       cursor: pointer;
       list-style: none;
     }
 
-    details.evidence summary::-webkit-details-marker { display: none; }
-    details.evidence summary::after {
+    .inline-evidence summary::-webkit-details-marker { display: none; }
+    .inline-evidence summary::after {
       content: "›";
-      color: var(--phone-ink-3);
-      font-size: 21px;
+      font-size: 16px;
       font-weight: 300;
       transform: rotate(90deg);
       transition: transform .18s ease;
     }
 
-    details.evidence[open] summary::after { transform: rotate(-90deg); }
+    .inline-evidence[open] summary::after { transform: rotate(-90deg); }
 
     .evidence-body {
       display: grid;
-      gap: 14px;
-      padding: 10px 0 4px;
+      gap: 10px;
+      padding: 8px 0 2px;
     }
 
     .evidence-item {
-      padding-left: 12px;
+      padding-left: 10px;
       border-left: 1px solid var(--phone-line-strong);
     }
 
     .evidence-item strong {
       display: block;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       color: var(--phone-ink);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 650;
     }
 
     .evidence-item p {
       margin: 0;
       color: var(--phone-ink-2);
-      font-size: 13px;
-      line-height: 1.65;
+      font-size: 11.5px;
+      line-height: 1.6;
+    }
+
+    .composer-placeholder {
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--phone-line);
+    }
+
+    .composer-box {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      color: var(--phone-ink-3);
+      background: var(--phone-surface);
+      border: 1px solid var(--phone-line);
+      border-radius: 18px;
+      font-size: 14px;
     }
 
     .empty-note {
@@ -762,8 +777,8 @@
         <div class="eyebrow">页外 / 想法页</div>
         <h1>让记录自己说话，<br>而不是让界面发言。</h1>
         <p class="lede">
-          所有阅读记录默认都有 AI 回应。概要由第一次记录和第一次 AI 回应自动生成，
-          生成后固定；折叠态只负责扫读，展开态才负责阅读、追问和回到依据。
+          用户原话保持无卡片的原文形态，AI 回应使用次级表面面板；
+          依据只作为对应回应下方的一行脚注，不再占据详情页末尾。
         </p>
       </div>
       <div class="stage-controls">
@@ -833,7 +848,7 @@
 
       <article class="device-block">
         <div class="device-caption">
-          <strong>展开态</strong>
+          <strong>记录世界</strong>
           <span>原文 / AI 回应 / 依据</span>
         </div>
 
@@ -849,12 +864,7 @@
               </div>
             </div>
 
-            <header class="app-nav">
-              <button class="back-button" type="button" aria-label="返回">‹</button>
-              <h2>阅读记录</h2>
-              <button class="nav-icon" type="button" aria-label="更多">•••</button>
-            </header>
-
+            <button class="floating-back" type="button" aria-label="返回"><span>‹</span></button>
             <div class="screen-content detail-content" id="detailContent" aria-live="polite"></div>
           </div>
         </div>
@@ -864,7 +874,7 @@
     <footer class="prototype-footer">
       <p>
         说明：这是一个拟真交互原型。搜索通过下拉触发，分组和设置收进工具栏，
-        卡片是全屏唯一的主点击目标。默认不显示回应状态，因为它已经是每个阅读记录的既定结果；档案入口已移除。
+        卡片进入独立记录世界；用户内容像原文，AI 内容像旁注，依据附着在具体回应下。
       </p>
       <p>页外 · 减法原型 / 2026.09.14</p>
     </footer>
@@ -880,6 +890,8 @@
         meta: "与 8 月 27 日的一条记录有关",
         original: "最近一直在想，自由当然意味着选择变多，但真正让人不安的可能不是选择本身，而是选择之后必须承担的结果。选择越多，责任越无法转移。",
         response: "你把自由的重心从“能不能选”移到了“愿不愿意承担”。这会引出一个新的问题：如果一个人没有能力承担结果，他还拥有完整的选择吗？",
+        followUp: "也许承担结果并不只看能力，还要看一个人是否愿意承认结果和自己有关。",
+        followUpResponse: "对，这里多了一层“承认”。能力决定能不能承担，承认决定他是否愿意把结果算到自己身上。",
         evidence: [
           ["本次阅读", "参考了《可能性的艺术》第 4 章 · 2 段原文"],
           ["过去的你", "8 月 27 日：自由不是没有重量，只是重量落在自己身上。"]
@@ -951,8 +963,38 @@
       `).join("");
     }
 
+    function evidenceSummary(item) {
+      const bookCount = item.evidence.filter(([label]) =>
+        label === "本次阅读" || label === "相关原文"
+      ).length;
+      const pastCount = item.evidence.filter(([label]) =>
+        label === "过去的你" || label === "相关记录"
+      ).length;
+      const parts = [];
+      if (bookCount > 0) parts.push(`${bookCount} 段原文`);
+      if (pastCount > 0) parts.push(`${pastCount} 条过往记录`);
+      return parts.length > 0 ? parts.join(" · ") : `${item.evidence.length} 条来源`;
+    }
+
+    function evidenceDetails(item) {
+      return `
+        <details class="inline-evidence">
+          <summary>依据 · ${evidenceSummary(item)}</summary>
+          <div class="evidence-body">
+            ${item.evidence.map(([label, copy]) => `
+              <div class="evidence-item">
+                <strong>${esc(label)}</strong>
+                <p>${esc(copy)}</p>
+              </div>
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }
+
     function renderDetail() {
       const item = activeItem();
+      const hasFollowUp = Boolean(item.followUp && item.followUpResponse);
 
       detail.innerHTML = `
         <div class="detail-context"><span class="book">《${esc(item.book)}》</span> · ${esc(item.date)}</div>
@@ -968,23 +1010,24 @@
           <div class="response-panel">
             <p class="section-label">AI 回应</p>
             <p class="detail-copy">${esc(item.response)}</p>
+            ${evidenceDetails(item)}
           </div>
         </section>
-        <button class="continue-row" type="button">
-          <span>继续对话</span>
-          <span aria-hidden="true">›</span>
-        </button>
-        <details class="evidence">
-          <summary>更多依据</summary>
-          <div class="evidence-body">
-            ${item.evidence.map(([label, copy]) => `
-              <div class="evidence-item">
-                <strong>${esc(label)}</strong>
-                <p>${esc(copy)}</p>
-              </div>
-            `).join("")}
-          </div>
-        </details>
+        ${hasFollowUp ? `
+          <section class="detail-section">
+            <p class="section-label">你继续说</p>
+            <p class="detail-copy">${esc(item.followUp)}</p>
+          </section>
+          <section class="detail-section">
+            <div class="response-panel">
+              <p class="section-label">AI 回应</p>
+              <p class="detail-copy">${esc(item.followUpResponse)}</p>
+            </div>
+          </section>
+        ` : ""}
+        <div class="composer-placeholder">
+          <div class="composer-box">继续写下你的想法…</div>
+        </div>
       `;
     }
 
