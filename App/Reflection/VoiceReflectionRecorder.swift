@@ -361,64 +361,213 @@ struct VoiceReflectionControls: View {
 }
 
 
+@MainActor @Observable
+final class ReflectionAudioPlayerModel {
+    private let fileName: String
+    private let audioStore: AudioFileStore
+    private var player: AVAudioPlayer?
+    private var ticker: Task<Void, Never>?
+
+    private(set) var isPlaying = false
+    private(set) var currentTime: TimeInterval = 0
+    private(set) var duration: TimeInterval = 0
+    private(set) var errorMessage: String?
+
+    init(fileName: String, audioStore: AudioFileStore = .live()) {
+        self.fileName = fileName
+        self.audioStore = audioStore
+    }
+
+    func prepare() {
+        guard player == nil else { return }
+        do {
+            let url = try audioStore.url(for: fileName)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw AudioFileStoreError.missingDraft
+            }
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.prepareToPlay()
+            self.player = player
+            duration = max(0, player.duration)
+            errorMessage = nil
+        } catch {
+            errorMessage = "录音文件暂不可用。"
+        }
+    }
+
+    func togglePlayback() {
+        if isPlaying {
+            pause()
+            return
+        }
+        prepare()
+        guard let player, errorMessage == nil else { return }
+        if duration > 0, currentTime >= duration - 0.05 {
+            currentTime = 0
+            player.currentTime = 0
+        }
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true)
+            player.play()
+            isPlaying = true
+            startTicker()
+        } catch {
+            errorMessage = "录音暂时无法播放。"
+        }
+    }
+
+    func pause() {
+        player?.pause()
+        isPlaying = false
+        stopTicker()
+    }
+
+    func seek(to time: TimeInterval) {
+        prepare()
+        guard let player, errorMessage == nil, duration > 0 else { return }
+        let clamped = min(max(0, time), duration)
+        player.currentTime = clamped
+        currentTime = clamped
+    }
+
+    func stop() {
+        stopTicker()
+        player?.stop()
+        player = nil
+        isPlaying = false
+        currentTime = 0
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func startTicker() {
+        stopTicker()
+        ticker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled, let self, let player = self.player else { return }
+                self.currentTime = player.currentTime
+                guard player.isPlaying else {
+                    self.isPlaying = false
+                    if self.duration > 0 {
+                        self.currentTime = self.duration
+                    }
+                    self.stopTicker()
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopTicker() {
+        ticker?.cancel()
+        ticker = nil
+    }
+}
+
 /// Compact playback surface for an audio file that belongs to a saved
 /// Reflection. Missing files degrade to text without interrupting the thread.
 struct ReflectionAudioAttachment: View {
     let fileName: String
-    @State private var player: AVAudioPlayer?
-    @State private var isPlaying = false
-    @State private var errorMessage: String?
+    let onDelete: (() -> Void)?
+
+    @State private var model: ReflectionAudioPlayerModel
+    @State private var scrubTime: TimeInterval = 0
+    @State private var isScrubbing = false
+    @State private var wasPlayingBeforeScrub = false
+
+    init(fileName: String, onDelete: (() -> Void)? = nil) {
+        self.fileName = fileName
+        self.onDelete = onDelete
+        _model = State(initialValue: ReflectionAudioPlayerModel(fileName: fileName))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
             HStack(spacing: ElsepageTheme.Spacing.small) {
                 Button {
-                    togglePlayback()
+                    model.togglePlayback()
                 } label: {
-                    Label(isPlaying ? "停止" : "播放录音", systemImage: isPlaying ? "stop.fill" : "play.fill")
-                        .frame(minHeight: 44)
+                    Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.bordered)
-                .disabled(errorMessage != nil)
+                .buttonStyle(.borderedProminent)
+                .accessibilityLabel(model.isPlaying ? "暂停录音" : "播放录音")
 
-                Text("原始录音")
-                    .font(.caption)
+                Text(Self.timeText(model.currentTime))
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .frame(width: 38, alignment: .trailing)
+
+                Slider(
+                    value: Binding(
+                        get: { isScrubbing ? scrubTime : model.currentTime },
+                        set: { scrubTime = $0 }
+                    ),
+                    in: 0...max(model.duration, 0.1),
+                    onEditingChanged: handleScrub
+                )
+                .disabled(model.duration <= 0 || model.errorMessage != nil)
+                .accessibilityLabel("录音进度")
+                .accessibilityValue(Self.timeText(isScrubbing ? scrubTime : model.currentTime))
+
+                Text(Self.timeText(model.duration))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 38, alignment: .leading)
+
+                if let onDelete {
+                    Menu {
+                        Button("删除录音", role: .destructive) {
+                            model.stop()
+                            onDelete()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("录音管理")
+                }
             }
-            if let errorMessage {
+
+            HStack(spacing: ElsepageTheme.Spacing.xSmall) {
+                Image(systemName: "waveform")
+                Text("原始录音")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .onDisappear {
-            player?.stop()
-            player = nil
-            isPlaying = false
+        .task { model.prepare() }
+        .onChange(of: model.currentTime) { _, value in
+            if !isScrubbing { scrubTime = value }
+        }
+        .onDisappear { model.stop() }
+    }
+
+    private func handleScrub(_ editing: Bool) {
+        if editing {
+            wasPlayingBeforeScrub = model.isPlaying
+            model.pause()
+            scrubTime = model.currentTime
+        } else {
+            model.seek(to: scrubTime)
+            if wasPlayingBeforeScrub {
+                model.togglePlayback()
+            }
+            wasPlayingBeforeScrub = false
         }
     }
 
-    private func togglePlayback() {
-        if isPlaying {
-            player?.stop()
-            player = nil
-            isPlaying = false
-            return
-        }
-        do {
-            let url = try AudioFileStore.live().url(for: fileName)
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                errorMessage = "录音文件暂不可用。"
-                return
-            }
-            let player = try AVAudioPlayer(contentsOf: url)
-            player.prepareToPlay()
-            player.play()
-            self.player = player
-            isPlaying = true
-            errorMessage = nil
-        } catch {
-            errorMessage = "录音暂时无法播放。"
-        }
+    private static func timeText(_ time: TimeInterval) -> String {
+        guard time.isFinite, time > 0 else { return "0:00" }
+        let seconds = Int(time.rounded(.down))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

@@ -225,12 +225,16 @@ public protocol ReflectionRepository: Sendable {
     /// exist, deletes only the newest user message and every derived Agent message
     /// after it. Otherwise deletes the root Reflection and its entire conversation.
     func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult
+    func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws
     func delete(id: ReflectionID) async throws
 }
 
 public extension ReflectionRepository {
     func allReflections() async throws -> [Reflection] { [] }
     func deleteLatestUserTurn(in reflectionID: ReflectionID) async throws -> ReflectionConversationDeletionResult {
+        throw ReflectionConversationDeletionError.unsupportedRepository
+    }
+    func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws {
         throw ReflectionConversationDeletionError.unsupportedRepository
     }
 }

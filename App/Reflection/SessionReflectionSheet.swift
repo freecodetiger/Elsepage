@@ -668,6 +668,7 @@ final class ReflectionConversationModel: Identifiable {
     private(set) var contextDisclosure: ContextDisclosure?
     private(set) var isDeleted = false
     private(set) var pendingUserMessage: PendingReflectionMessage?
+    private(set) var audioFileName: String?
     var draft = ReflectionTextDraft()
     var followUpText: String {
         get { draft.selectedText }
@@ -692,6 +693,7 @@ final class ReflectionConversationModel: Identifiable {
     ) {
         id = reflection.id
         self.reflection = reflection
+        self.audioFileName = reflection.audioFileName
         self.repository = repository
         self.readerAgent = readerAgent
         self.makePolishService = makePolishService
@@ -778,6 +780,17 @@ final class ReflectionConversationModel: Identifiable {
 
     /// Returns true only when the root Reflection was deleted and the whole
     /// conversation should disappear from its presenting UI.
+    func deleteAudio() async {
+        guard let audioFileName else { return }
+        do {
+            try await repository.updateAudioFileName(nil, for: reflection.id)
+            audioStore.discardSaved(fileName: audioFileName)
+            self.audioFileName = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func deleteLatestUserTurn() async -> Bool {
         guard !isResponding, !isDeleted else { return false }
         do {
@@ -873,7 +886,8 @@ final class ReflectionConversationModel: Identifiable {
     }
 
     private func deleteAudioFileIfNeeded() {
-        audioStore.discardSaved(fileName: reflection.audioFileName)
+        audioStore.discardSaved(fileName: audioFileName)
+        audioFileName = nil
     }
 
     private static func withoutCitationBlock(_ content: String) -> String {
@@ -1158,8 +1172,11 @@ struct ReflectionConversationView: View {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
                     if let header { header }
                     userTurn(title: "你的 Reflection", text: model.reflection.displayText, canDelete: model.canDeleteRoot)
-                    if let audioFileName = model.reflection.audioFileName {
-                        ReflectionAudioAttachment(fileName: audioFileName)
+                    if let audioFileName = model.audioFileName {
+                        ReflectionAudioAttachment(
+                            fileName: audioFileName,
+                            onDelete: { Task { await model.deleteAudio() } }
+                        )
                     }
 
             ForEach(model.messages) { message in

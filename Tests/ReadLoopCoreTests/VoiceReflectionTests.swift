@@ -169,3 +169,24 @@ import Testing
     #expect(first.audioFileName == "voice-1.m4a")
     #expect(retried.audioFileName == "voice-1.m4a")
 }
+
+
+@Test func audioFileNameCanBeRemovedWithoutDeletingReflection() async throws {
+    let database = try AppDatabase.inMemory()
+    let book = TestFixtures.book()
+    try await GRDBBookRepository(database: database).insert(book)
+    let repository = GRDBReflectionRepository(database: database)
+    let reflection = Reflection(
+        bookID: book.id,
+        originalText: "保留文字",
+        inputKind: .voiceTranscript,
+        audioFileName: "voice.m4a"
+    )
+    try await repository.insert(reflection, linkedHighlightIDs: [], evidence: [])
+
+    try await repository.updateAudioFileName(nil, for: reflection.id)
+
+    let reloaded = try #require(try await repository.reflection(id: reflection.id))
+    #expect(reloaded.originalText == "保留文字")
+    #expect(reloaded.audioFileName == nil)
+}

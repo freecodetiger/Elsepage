@@ -280,6 +280,15 @@ public final class GRDBReflectionRepository: ReflectionRepository, @unchecked Se
         }
     }
 
+    public func updateAudioFileName(_ fileName: String?, for reflectionID: ReflectionID) async throws {
+        try await db.writer.write { db in
+            try db.execute(
+                sql: "UPDATE reflections SET audioFileName = ? WHERE id = ?",
+                arguments: [fileName, reflectionID.description]
+            )
+        }
+    }
+
     public func delete(id: ReflectionID) async throws {
         try await db.writer.write { db in
             // Reflection-sourced brain evidence carries the reflection ID as a
