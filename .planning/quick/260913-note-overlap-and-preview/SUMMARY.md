@@ -2,8 +2,9 @@
 
 ## 已完成
 
-- 调整 Readium decoration group 创建顺序，notes 优先于 highlights。
-- 当 Note underline 与 Highlight 重叠时，点击优先打开对应的 Note。
+- Highlight 保持重叠区域的主命中优先级，不再让 Note 永久盖住高亮菜单。
+- Highlight 菜单检测与其重叠的独立 Note，并显示“笔记”入口。
+- Note underline 的非重叠区域仍直接打开对应 Note。
 - Note editor 默认进入 Markdown 预览态，不自动弹出键盘。
 - 增加“预览 / 编辑”分段控件。
 - 预览使用 `AgentMarkdownText`，支持已有块级 Markdown 渲染。
@@ -14,4 +15,4 @@
 
 - App Reader 文件纯语法解析通过。
 - `swift test`：383 tests 全绿。
-- 真机需验证重叠点击优先 Note、默认预览、切换编辑和保存。
+- 真机需验证重叠区域先出现 Highlight 菜单、菜单中的“笔记”可打开重叠 Note，以及非重叠 underline 直接打开 Note。
