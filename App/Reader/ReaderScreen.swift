@@ -201,7 +201,7 @@ struct ReaderScreen: View {
 
     @ViewBuilder private var bottomBarProgress: some View {
         ProgressView(value: model.progress)
-            .tint(.elsepageAccent)
+            .tint(.elsepageInteractive)
             .accessibilityLabel("阅读进度")
             .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
         // The visible percent duplicates the ProgressView's accessibilityValue.
@@ -288,10 +288,10 @@ private struct ContentsSheet: View {
                                 Text(chapter.title)
                                 Spacer()
                                 if chapter.id == model.currentChapterID {
-                                    Image(systemName: "checkmark").foregroundStyle(Color.elsepageAccent)
+                                    Image(systemName: "checkmark").foregroundStyle(Color.elsepageInteractive)
                                 }
                             }
-                            .foregroundStyle(chapter.id == model.currentChapterID ? Color.elsepageAccent : .primary)
+                            .foregroundStyle(chapter.id == model.currentChapterID ? Color.elsepageInteractive : .primary)
                             .padding(.leading, CGFloat(chapter.depth) * 16)
                         }
                         .accessibilityHint("跳转到这一章")
@@ -394,7 +394,7 @@ private struct ReaderAnnotationsSheet: View {
                                 } else {
                                     Image(systemName: "note.text")
                                         .font(.caption)
-                                        .foregroundStyle(Color.elsepageAccent)
+                                        .foregroundStyle(Color.elsepageInteractive)
                                         .frame(width: 10)
                                         .padding(.top, 5)
                                         .accessibilityHidden(true)

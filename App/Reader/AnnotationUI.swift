@@ -365,7 +365,7 @@ struct HighlightMenu: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+                .foregroundStyle(destructive ? AnyShapeStyle(Color.elsepageDanger) : AnyShapeStyle(.primary))
                 .padding(.horizontal, 8)
                 .frame(minHeight: 40)
                 .contentShape(Rectangle())
@@ -407,7 +407,7 @@ struct TransientNoticePill: View {
             if canUndo {
                 Button("撤销", action: onUndo)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
             }
         }
         .padding(.horizontal, ElsepageTheme.Spacing.medium)

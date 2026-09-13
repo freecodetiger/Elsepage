@@ -308,14 +308,14 @@ struct VoiceReflectionControls: View {
         let iconSize: CGFloat = style == .compactComposer ? compactIconSize : fullIconSize
         return ZStack {
             Circle()
-                .fill(recorder.isRecording ? Color.red.opacity(0.12) : Color.elsepageAccent.opacity(0.10))
+                .fill(recorder.isRecording ? Color.elsepageDanger.opacity(0.12) : Color.elsepageInteractive.opacity(0.10))
                 .frame(width: size, height: size)
                 .overlay(
-                    Circle().strokeBorder(recorder.isRecording ? Color.red : Color.elsepageAccent, lineWidth: 2)
+                    Circle().strokeBorder(recorder.isRecording ? Color.elsepageDanger : Color.elsepageInteractive, lineWidth: 2)
                 )
             Image(systemName: recorder.isRecording ? "stop.fill" : "mic.fill")
                 .font(.system(size: iconSize))
-                .foregroundStyle(recorder.isRecording ? Color.red : Color.elsepageAccent)
+                .foregroundStyle(recorder.isRecording ? Color.elsepageDanger : Color.elsepageInteractive)
                 .accessibilityHidden(true)
         }
         .scaleEffect(recorder.isRecording ? 1.1 : 1.0)
@@ -711,11 +711,11 @@ private struct WaveformScrubber: View {
                     }
                 }
                 context.fill(remaining, with: .color(Color.secondary.opacity(0.28)))
-                context.fill(played, with: .color(Color.elsepageAccent))
+                context.fill(played, with: .color(Color.elsepageInteractive))
 
                 let playheadX = min(max(0, progress), 1) * size.width
                 let playhead = Path(CGRect(x: playheadX - 0.75, y: 2, width: 1.5, height: size.height - 4))
-                context.fill(playhead, with: .color(Color.elsepageAccent))
+                context.fill(playhead, with: .color(Color.elsepageInteractive))
             }
             .contentShape(Rectangle())
             .gesture(

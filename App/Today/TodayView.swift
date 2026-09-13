@@ -177,9 +177,9 @@ struct TodayView: View {
             streaksView
             Button(action, action: onTap)
                 .buttonStyle(.borderedProminent)
-                .tint(.elsepageAccent)
+                .tint(.elsepageInteractive)
                 // A11Y-03: AA label on the accent fill in both color schemes.
-                .foregroundStyle(Color.elsepageOnAccent)
+                .foregroundStyle(Color.elsepageOnInteractive)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ElsepageTheme.Spacing.xLarge)
@@ -213,11 +213,11 @@ struct TodayView: View {
                 .font(emphasized ? .subheadline.weight(.semibold) : .footnote)
                 .contentTransition(reduceMotion ? .identity : .numericText())
         }
-        .foregroundStyle(emphasized ? Color.elsepageAccent : Color.secondary)
+        .foregroundStyle(emphasized ? Color.elsepageInteractive : Color.secondary)
         .padding(.horizontal, emphasized ? ElsepageTheme.Spacing.medium : ElsepageTheme.Spacing.small)
         .padding(.vertical, ElsepageTheme.Spacing.xSmall)
         .background(
-            emphasized ? Color.elsepageAccent.opacity(0.12) : Color.secondary.opacity(0.08),
+            emphasized ? Color.elsepageInteractive.opacity(0.12) : Color.secondary.opacity(0.08),
             in: Capsule()
         )
         // A11Y-02: one element per badge — the decorative glyph stays silent.

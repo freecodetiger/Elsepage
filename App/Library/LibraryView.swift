@@ -93,7 +93,7 @@ struct LibraryView: View {
         VStack(spacing: ElsepageTheme.Spacing.large) {
             Image(systemName: "books.vertical")
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.elsepageAccent)
+                .foregroundStyle(.elsepageInteractive)
                 .accessibilityHidden(true)
             VStack(spacing: ElsepageTheme.Spacing.small) {
                 Text("带一本书进来")
@@ -105,9 +105,9 @@ struct LibraryView: View {
             }
             Button("导入 EPUB") { importing = true }
                 .buttonStyle(.borderedProminent)
-                .tint(.elsepageAccent)
+                .tint(.elsepageInteractive)
                 // A11Y-03: AA label on the accent fill in both color schemes.
-                .foregroundStyle(Color.elsepageOnAccent)
+                .foregroundStyle(Color.elsepageOnInteractive)
                 .disabled(model.isImporting)
         }
         .padding(ElsepageTheme.Spacing.xLarge)
@@ -190,7 +190,7 @@ struct LibraryView: View {
                             }
                             if let progress = model.progress(for: book) {
                                 ProgressView(value: progress)
-                                    .tint(.elsepageAccent)
+                                    .tint(.elsepageInteractive)
                                     .accessibilityLabel("阅读进度")
                                     .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
                             }

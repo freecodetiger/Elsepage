@@ -70,14 +70,44 @@ extension ShapeStyle where Self == Color {
         color(from: ElsepagePalette.surface)
     }
 
-    static var elsepageAccent: Color {
-        color(from: ElsepagePalette.accent)
+    static var elsepageBorder: Color {
+        color(from: ElsepagePalette.border)
     }
 
-    /// Label color for prominent buttons filled with the accent tint — white on
-    /// the deep light accent, near-black on the pale dark accent (A11Y-03).
-    static var elsepageOnAccent: Color {
-        color(from: ElsepagePalette.onAccent)
+    static var elsepageTextPrimary: Color {
+        color(from: ElsepagePalette.contentPrimary)
+    }
+
+    static var elsepageTextSecondary: Color {
+        color(from: ElsepagePalette.contentSecondary)
+    }
+
+    static var elsepageTextTertiary: Color {
+        color(from: ElsepagePalette.contentTertiary)
+    }
+
+    static var elsepageBrand: Color {
+        color(from: ElsepagePalette.brand)
+    }
+
+    static var elsepageInteractive: Color {
+        color(from: ElsepagePalette.interactive)
+    }
+
+    static var elsepageOnInteractive: Color {
+        color(from: ElsepagePalette.onInteractive)
+    }
+
+    static var elsepageSuccess: Color {
+        color(from: ElsepagePalette.success)
+    }
+
+    static var elsepageWarning: Color {
+        color(from: ElsepagePalette.warning)
+    }
+
+    static var elsepageDanger: Color {
+        color(from: ElsepagePalette.danger)
     }
 
     static var elsepageReaderSepia: Color {

@@ -77,7 +77,7 @@ struct OnboardingView: View {
         HStack(spacing: ElsepageTheme.Spacing.small) {
             ForEach(OnboardingStep.allCases, id: \.rawValue) { step in
                 Capsule()
-                    .fill(step == model.step ? Color.elsepageAccent : Color.secondary.opacity(0.25))
+                    .fill(step == model.step ? Color.elsepageInteractive : Color.secondary.opacity(0.25))
                     .frame(width: step == model.step ? 22 : 7, height: 7)
             }
         }
@@ -133,12 +133,12 @@ struct OnboardingView: View {
             }
             if let title = model.flow.importedBookTitle {
                 Label("《\(title)》已在书架上。", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.elsepageAccent)
+                    .foregroundStyle(.elsepageInteractive)
             }
             if let message = model.importErrorMessage {
                 Label(message, systemImage: "exclamationmark.circle")
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.elsepageDanger)
             }
         }
     }
@@ -185,12 +185,12 @@ struct OnboardingView: View {
 
     @ViewBuilder private var providerFeedback: some View {
         if provider.lastConnectionTestSucceeded, let status = provider.statusMessage {
-            Label(status, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            Label(status, systemImage: "checkmark.circle.fill").foregroundStyle(Color.elsepageSuccess)
         } else if let status = provider.statusMessage, !provider.isWorking {
             // e.g. 「配置已保存在本机」— saved, but the test has not passed yet.
             Label(status, systemImage: "tray.and.arrow.down").foregroundStyle(.secondary)
         } else if let error = provider.errorMessage {
-            Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red)
+            Label(error, systemImage: "exclamationmark.circle").foregroundStyle(Color.elsepageDanger)
         }
     }
 
@@ -220,9 +220,9 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.elsepageAccent)
+        .tint(.elsepageInteractive)
         // A11Y-03: AA label on the accent fill in both color schemes.
-        .foregroundStyle(Color.elsepageOnAccent)
+        .foregroundStyle(Color.elsepageOnInteractive)
         .disabled(primaryDisabled)
     }
 

@@ -17,8 +17,8 @@ final class AccessibilitySupportTests: XCTestCase {
     }
 
     func testRatioIsSymmetric() {
-        let sage = ElsepagePalette.accent.light
-        XCTAssertEqual(WCAGContrast.ratio(sage, white), WCAGContrast.ratio(white, sage), accuracy: 0.0001)
+        let interactive = ElsepagePalette.interactive.light
+        XCTAssertEqual(WCAGContrast.ratio(interactive, white), WCAGContrast.ratio(white, interactive), accuracy: 0.0001)
     }
 
     func testBlendCompositesStraightAlpha() {
@@ -30,10 +30,8 @@ final class AccessibilitySupportTests: XCTestCase {
 
     // MARK: - A11Y-03: theme token pairs meet WCAG AA in light AND dark
 
-    /// The accent is used as body-size text (Journal labels, feedback lines,
-    /// emphasized streak badge), so it must clear 4.5:1 on every surface it is
-    /// drawn on, in both color schemes.
-    func testAccentMeetsBodyTextContrastOnEverySurfaceInLightAndDark() {
+    /// Reading text and interactive text must clear AA on every app surface.
+    func testPrimaryAndInteractiveTextMeetBodyTextContrastOnEverySurface() {
         for dark in [false, true] {
             let scheme = dark ? "dark" : "light"
             for (surfaceName, surface) in [
@@ -41,49 +39,81 @@ final class AccessibilitySupportTests: XCTestCase {
                 ("surface", ElsepagePalette.surface),
                 ("readerSepia", ElsepagePalette.readerSepia),
             ] {
-                let ratio = WCAGContrast.ratio(ElsepagePalette.accent.resolve(dark: dark), surface.resolve(dark: dark))
-                XCTAssertGreaterThanOrEqual(
-                    ratio, WCAGContrast.bodyTextMinimum,
-                    "accent on \(surfaceName) (\(scheme)) is \(ratio)"
-                )
+                for (tokenName, token) in [
+                    ("contentPrimary", ElsepagePalette.contentPrimary),
+                    ("contentSecondary", ElsepagePalette.contentSecondary),
+                    ("contentTertiary", ElsepagePalette.contentTertiary),
+                    ("brand", ElsepagePalette.brand),
+                    ("interactive", ElsepagePalette.interactive),
+                ] {
+                    let ratio = WCAGContrast.ratio(token.resolve(dark: dark), surface.resolve(dark: dark))
+                    XCTAssertGreaterThanOrEqual(
+                        ratio, WCAGContrast.bodyTextMinimum,
+                        "\(tokenName) on \(surfaceName) (\(scheme)) is \(ratio)"
+                    )
+                }
             }
         }
     }
 
-    /// Prominent buttons fill with the accent and must keep an AA label both
-    /// schemes (dark mode uses the near-black onAccent, white fails there).
-    func testOnAccentLabelMeetsBodyTextContrastOnAccentFillInLightAndDark() {
+    /// Prominent buttons fill with the interactive token and must keep an AA
+    /// label in both schemes.
+    func testOnInteractiveLabelMeetsBodyTextContrastOnInteractiveFill() {
         for dark in [false, true] {
             let ratio = WCAGContrast.ratio(
-                ElsepagePalette.onAccent.resolve(dark: dark),
-                ElsepagePalette.accent.resolve(dark: dark)
+                ElsepagePalette.onInteractive.resolve(dark: dark),
+                ElsepagePalette.interactive.resolve(dark: dark)
             )
             XCTAssertGreaterThanOrEqual(
                 ratio, WCAGContrast.bodyTextMinimum,
-                "onAccent label on accent fill (\(dark ? "dark" : "light")) is \(ratio)"
+                "onInteractive label on interactive fill (\(dark ? "dark" : "light")) is \(ratio)"
             )
         }
     }
 
-    /// Badge fills are the accent at `badgeTintAlpha` over chrome; the accent
-    /// badge text must stay AA against the composited background.
-    func testAccentBadgeTextMeetsAAOverTintedBadgeBackgroundsInLightAndDark() {
+    /// Status colors are text-bearing tokens and must not become decorative
+    /// light pastels that fail on neutral surfaces.
+    func testStatusColorsMeetBodyTextContrastOnEverySurface() {
         for dark in [false, true] {
             let scheme = dark ? "dark" : "light"
-            let accent = ElsepagePalette.accent.resolve(dark: dark)
+            for (surfaceName, surface) in [
+                ("background", ElsepagePalette.background),
+                ("surface", ElsepagePalette.surface),
+            ] {
+                for (tokenName, token) in [
+                    ("success", ElsepagePalette.success),
+                    ("warning", ElsepagePalette.warning),
+                    ("danger", ElsepagePalette.danger),
+                ] {
+                    let ratio = WCAGContrast.ratio(token.resolve(dark: dark), surface.resolve(dark: dark))
+                    XCTAssertGreaterThanOrEqual(
+                        ratio, WCAGContrast.bodyTextMinimum,
+                        "\(tokenName) on \(surfaceName) (\(scheme)) is \(ratio)"
+                    )
+                }
+            }
+        }
+    }
+
+    /// Badge fills use the interactive token at `badgeTintAlpha` over chrome;
+    /// the token must stay AA against the composited background.
+    func testInteractiveBadgeTextMeetsAAOverTintedBadgeBackgrounds() {
+        for dark in [false, true] {
+            let scheme = dark ? "dark" : "light"
+            let interactive = ElsepagePalette.interactive.resolve(dark: dark)
             for (baseName, base) in [
                 ("background", ElsepagePalette.background),
                 ("surface", ElsepagePalette.surface),
             ] {
                 let badgeBackground = WCAGContrast.blend(
-                    accent,
+                    interactive,
                     alpha: AccessibilityMetrics.badgeTintAlpha,
                     over: base.resolve(dark: dark)
                 )
-                let ratio = WCAGContrast.ratio(accent, badgeBackground)
+                let ratio = WCAGContrast.ratio(interactive, badgeBackground)
                 XCTAssertGreaterThanOrEqual(
                     ratio, WCAGContrast.bodyTextMinimum,
-                    "accent on \(Int(AccessibilityMetrics.badgeTintAlpha * 100))% tinted badge over \(baseName) (\(scheme)) is \(ratio)"
+                    "interactive on \(Int(AccessibilityMetrics.badgeTintAlpha * 100))% tinted badge over \(baseName) (\(scheme)) is \(ratio)"
                 )
             }
         }

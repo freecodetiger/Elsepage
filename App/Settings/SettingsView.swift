@@ -87,7 +87,7 @@ struct SettingsView: View {
                 Text(title)
                 Text(status)
                     .font(.caption)
-                    .foregroundStyle(muted ? Color.secondary : Color.green)
+                    .foregroundStyle(muted ? Color.secondary : Color.elsepageSuccess)
             }
         }
         // A11Y-02: title + live status read as one stop.
@@ -144,7 +144,7 @@ struct ChatProviderView: View {
             .disabled(model.isWorking)
 
             if let status = model.statusMessage {
-                Section { Label(status, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+                Section { Label(status, systemImage: "checkmark.circle.fill").foregroundStyle(Color.elsepageSuccess) }
             }
         }
         .navigationTitle("聊天模型")
@@ -201,7 +201,7 @@ struct EmbeddingSettingsView: View {
                     .disabled(model.embeddingEnabled)
                 if model.embeddingEnabled {
                     Label("语义检索已启用（\(model.embeddingModelID)）", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.elsepageSuccess)
                 }
                 Button("测试 Embedding") { Task { await model.testEmbedding() } }
                 if let status = model.embeddingStatusMessage {
@@ -263,7 +263,7 @@ struct RerankerSettingsView: View {
                     .disabled(model.rerankerEnabled)
                 if model.rerankerEnabled {
                     Label("Reranker 已启用（\(model.rerankerModelID)）", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.elsepageSuccess)
                 }
                 Button("测试 Reranker") { Task { await model.testReranker() } }
                 if let status = model.rerankerStatusMessage {
@@ -322,7 +322,7 @@ struct DiagnosticsView: View {
                                 if trace.usedFallback {
                                     Text(Self.fallbackText(trace))
                                         .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.elsepageDanger)
                                 } else {
                                     Text("正常")
                                         .font(.caption)

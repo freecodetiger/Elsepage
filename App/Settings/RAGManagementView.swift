@@ -43,7 +43,7 @@ struct RAGManagementView: View {
             }
             if status.totalChunks > 0 {
                 ProgressView(value: status.semanticFraction)
-                    .tint(.elsepageAccent)
+                    .tint(.elsepageInteractive)
                     .accessibilityLabel("语义索引进度")
                     .accessibilityValue(Text(semanticLabel(status)))
                 Text(semanticLabel(status)).font(.caption).foregroundStyle(.secondary)
@@ -58,7 +58,7 @@ struct RAGManagementView: View {
                     .accessibilityHidden(true)
             }
             if let error = status.lastError {
-                Text(error).font(.caption).foregroundStyle(.red).lineLimit(2)
+                Text(error).font(.caption).foregroundStyle(Color.elsepageDanger).lineLimit(2)
             }
             HStack(spacing: 16) {
                 Button("重新语义索引") { model.reembed(status.bookID) }
@@ -89,10 +89,10 @@ struct RAGManagementView: View {
         let (text, color): (String, Color) = switch state {
         case .pending: ("等待中", Color.secondary)
         case .extracting: ("提取中", Color.blue)
-        case .lexicalReady: ("词法就绪", Color.teal)
-        case .embedding: ("语义索引中", Color.elsepageAccent)
-        case .ready: ("就绪", Color.green)
-        case .failed: ("失败", Color.red)
+        case .lexicalReady: ("词法就绪", Color.elsepageWarning)
+        case .embedding: ("语义索引中", Color.elsepageInteractive)
+        case .ready: ("就绪", Color.elsepageSuccess)
+        case .failed: ("失败", Color.elsepageDanger)
         }
         Text(text)
             .font(.caption.weight(.semibold))

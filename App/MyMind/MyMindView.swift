@@ -342,9 +342,9 @@ struct MyMindView: View {
         HStack(spacing: ElsepageTheme.Spacing.medium) {
             Image(systemName: achievement.systemImage)
                 .font(.title3)
-                .foregroundStyle(Color.elsepageAccent)
+                .foregroundStyle(Color.elsepageInteractive)
                 .frame(width: 40, height: 40)
-                .background(Color.elsepageAccent.opacity(0.12), in: Circle())
+                .background(Color.elsepageInteractive.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(achievement.title).font(.subheadline.weight(.semibold))
                 Text(achievement.blurb).font(.caption).foregroundStyle(.secondary)
@@ -520,8 +520,8 @@ private struct MemoryRow: View {
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(Color.elsepageAccent.opacity(isUserExplicit ? 0.18 : 0.12), in: Capsule())
-            .foregroundStyle(Color.elsepageAccent)
+            .background(Color.elsepageInteractive.opacity(isUserExplicit ? 0.18 : 0.12), in: Capsule())
+            .foregroundStyle(Color.elsepageInteractive)
     }
 
     private var metadata: some View {
@@ -529,7 +529,7 @@ private struct MemoryRow: View {
             if memory.state == .needsReview {
                 Text("待确认")
                     .font(.caption)
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
             }
             Text(memory.updatedAt, format: .dateTime.month().day().hour().minute())
                 .font(.caption)
@@ -555,7 +555,7 @@ private struct MemoryRow: View {
             }
             .font(.caption)
             .buttonStyle(.bordered)
-            .tint(Color.elsepageAccent)
+            .tint(Color.elsepageInteractive)
             // A11Y-03: keep each compact action at the 44pt minimum target.
             .frame(minHeight: 44)
         }
@@ -567,7 +567,7 @@ private struct MemoryRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("记忆来源", systemImage: "quote.bubble")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 Text(evidence.reflectionText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -576,7 +576,7 @@ private struct MemoryRow: View {
                 if let locator = evidence.locator, let book = evidence.book {
                     Button("回到《\(book.title)》") { openSource(book, locator) }
                         .font(.footnote.weight(.medium))
-                        .tint(Color.elsepageAccent)
+                        .tint(Color.elsepageInteractive)
                 }
             }
         } else {
@@ -645,8 +645,8 @@ private struct BrainItemRow: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Color.elsepageAccent)
+                        .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.elsepageInteractive)
                     Text(updatedAt, format: .dateTime.month().day())
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -705,8 +705,8 @@ private struct BrainThoughtDetailView: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Color.elsepageAccent)
+                        .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.elsepageInteractive)
                     Text("更新于 \(thought.updatedAt, format: .dateTime.year().month().day())")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -838,8 +838,8 @@ private struct BrainQuestionDetailView: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Color.elsepageAccent)
+                        .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.elsepageInteractive)
                     Text("更新于 \(question.updatedAt, format: .dateTime.year().month().day())")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -943,7 +943,7 @@ private struct BrainEvidenceSection: View {
                     if let book = context.book {
                         Text("《\(book.title)》")
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(Color.elsepageAccent)
+                            .foregroundStyle(Color.elsepageInteractive)
                     }
                     Text(brainRelationLabel(row.relation))
                         .font(.caption)
@@ -952,7 +952,7 @@ private struct BrainEvidenceSection: View {
                 if let book = context.book, let locator = context.locator {
                     Button("回到《\(book.title)》") { openSource(book, locator) }
                         .font(.footnote.weight(.medium))
-                        .tint(Color.elsepageAccent)
+                        .tint(Color.elsepageInteractive)
                 }
             }
             .padding(ElsepageTheme.Spacing.medium)
@@ -968,8 +968,8 @@ private struct BrainEvidenceSection: View {
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color.elsepageAccent.opacity(0.12), in: Capsule())
-                    .foregroundStyle(Color.elsepageAccent)
+                    .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
+                    .foregroundStyle(Color.elsepageInteractive)
                 Text(brainRelationLabel(row.relation))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1128,12 +1128,12 @@ private struct BrainDiscussionSheet: View {
                     if finished {
                         Label("已存入想法档案", systemImage: "checkmark.circle")
                             .font(.subheadline)
-                            .foregroundStyle(Color.elsepageAccent)
+                            .foregroundStyle(Color.elsepageInteractive)
                     }
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.caption)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.elsepageDanger)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

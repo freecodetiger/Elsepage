@@ -175,7 +175,7 @@ struct ThoughtsView: View {
                     ForEach(ThoughtsArchiveFilter.allCases, id: \.self) { option in
                         Button(option.title) { filter = option }
                             .buttonStyle(.bordered)
-                            .tint(filter == option ? .elsepageAccent : .secondary)
+                            .tint(filter == option ? .elsepageInteractive : .secondary)
                             // A11Y-03: keep the chip reachable at 44pt tall.
                             .frame(minHeight: 44)
                     }
@@ -443,7 +443,7 @@ private struct ThoughtEntryCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("过去的你", systemImage: "link")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 Text(connection.sourceReflection.originalText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

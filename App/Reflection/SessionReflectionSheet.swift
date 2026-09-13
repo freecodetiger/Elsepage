@@ -1165,7 +1165,7 @@ struct SessionReflectionSheet: View {
             systemImage: model.showingOptimized ? "wand.and.stars" : "text.quote"
         )
         .font(.caption.weight(.medium))
-        .foregroundStyle(Color.elsepageAccent)
+        .foregroundStyle(Color.elsepageInteractive)
         Spacer(minLength: 0)
         Button(model.showingOptimized ? "查看我的原话" : "查看 AI 优化版") {
             if model.showingOptimized { model.showRaw() } else { model.showOptimized() }
@@ -1352,7 +1352,7 @@ struct ReflectionConversationView: View {
             Color.clear.frame(height: 1).id("reflection-agent-response")
             if let connected = model.connectedReflection {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("过去的你").font(.caption.weight(.semibold)).foregroundStyle(Color.elsepageAccent)
+                    Text("过去的你").font(.caption.weight(.semibold)).foregroundStyle(Color.elsepageInteractive)
                     Text(connected.originalText).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
                 }
             }
@@ -1423,7 +1423,7 @@ struct ReflectionConversationView: View {
     private func userTurn(title: String, text: String, canDelete: Bool) -> some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(Color.elsepageAccent)
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(Color.elsepageInteractive)
                 Spacer()
                 if canDelete { deleteButton }
             }
@@ -1555,7 +1555,7 @@ private struct ReflectionComposer: View {
 
             if isVoiceInputActive {
                 HStack(spacing: ElsepageTheme.Spacing.small) {
-                    Circle().fill(.red).frame(width: 8, height: 8)
+                    Circle().fill(Color.elsepageDanger).frame(width: 8, height: 8)
                     Text("正在聆听，你可以慢慢说完整")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)

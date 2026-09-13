@@ -14,9 +14,9 @@ struct AchievementToast: View {
         HStack(spacing: 12) {
             icon
                 .font(.title3)
-                .foregroundStyle(Color.elsepageAccent)
+                .foregroundStyle(Color.elsepageInteractive)
                 .frame(width: 36, height: 36)
-                .background(Color.elsepageAccent.opacity(0.12), in: Circle())
+                .background(Color.elsepageInteractive.opacity(0.12), in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("解锁成就").font(.caption2).foregroundStyle(.secondary)

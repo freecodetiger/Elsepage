@@ -38,7 +38,7 @@ struct AppShell: View {
             .tabItem { Label("我的头脑", systemImage: "person.crop.rectangle") }
             .tag(AppTab.myMind)
         }
-        .tint(.elsepageAccent)
+        .tint(.elsepageInteractive)
         .fullScreenCover(item: $readerDestination) { destination in
             ReaderScreen(
                 model: library.readerModel(for: destination.book, locator: destination.locator),

@@ -143,8 +143,8 @@ struct ReaderHelpSheet: View {
             .font(.subheadline.weight(.semibold))
             .padding(.horizontal, 14)
             .frame(minHeight: 48)
-            .foregroundStyle(Color.elsepageAccent)
-            .background(Color.elsepageAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(Color.elsepageInteractive)
+            .background(Color.elsepageInteractive.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityHint("向 Agent 解释当前选中的文字")
@@ -169,7 +169,7 @@ struct ReaderHelpSheet: View {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(AgentMarkdownText.superscript(index + 1))
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(Color.elsepageAccent)
+                                    .foregroundStyle(Color.elsepageInteractive)
                                 Text(sourceTitle(for: evidence))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -223,7 +223,7 @@ struct ReaderHelpSheet: View {
         if let notice = model.saveNotice {
             Label(notice, systemImage: "checkmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.elsepageSuccess)
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 .accessibilityLabel("笔记保存成功：\(notice)")
         }
@@ -250,7 +250,7 @@ struct ReaderHelpSheet: View {
         if let error = model.saveError {
             Label(error, systemImage: "exclamationmark.triangle")
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.elsepageDanger)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -281,10 +281,10 @@ struct ReaderHelpSheet: View {
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.elsepageOnAccent)
+                        .foregroundStyle(Color.elsepageOnInteractive)
                         .frame(width: 44, height: 44)
                         .background(
-                            model.canSubmitComposer ? Color.elsepageAccent : Color.secondary.opacity(0.28),
+                            model.canSubmitComposer ? Color.elsepageInteractive : Color.secondary.opacity(0.28),
                             in: Circle()
                         )
                 }

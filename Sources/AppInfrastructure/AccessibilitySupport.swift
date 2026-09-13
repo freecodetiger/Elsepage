@@ -53,6 +53,10 @@ public enum WCAGContrast {
 
 /// The Elsepage theme palette (light + dark), mirrored 1:1 by
 /// `App/DesignSystem/ElsepageTheme.swift`.
+///
+/// Semantic roles are intentionally separate even when light/dark values happen
+/// to be equal. Product color, interaction color and status color must be able
+/// to evolve independently without changing call sites.
 public enum ElsepagePalette {
     public struct ThemePair: Sendable {
         public let light: PaletteRGB
@@ -68,32 +72,80 @@ public enum ElsepagePalette {
 
     /// Page background.
     public static let background = ThemePair(
-        light: PaletteRGB(red: 0.969, green: 0.965, blue: 0.949),
-        dark: PaletteRGB(red: 0.075, green: 0.078, blue: 0.071)
+        light: PaletteRGB(red: 0.980392157, green: 0.980392157, blue: 0.980392157),
+        dark: PaletteRGB(red: 0.043137255, green: 0.043137255, blue: 0.043137255)
     )
-    /// Card / chrome surface. Material chrome approximates this over background.
+
+    /// Card, form and navigation surface.
     public static let surface = ThemePair(
-        light: PaletteRGB(red: 0.992, green: 0.988, blue: 0.976),
-        dark: PaletteRGB(red: 0.125, green: 0.129, blue: 0.118)
+        light: PaletteRGB(red: 1, green: 1, blue: 1),
+        dark: PaletteRGB(red: 0.082352941, green: 0.082352941, blue: 0.082352941)
     )
-    /// Brand sage green: text accents, prominent buttons, progress.
-    /// A11Y-03: the light variant is deliberately deep enough for AA (≥ 4.5:1)
-    /// as body-size text on every theme surface, including 12%-tinted badges.
-    public static let accent = ThemePair(
-        light: PaletteRGB(red: 0.33, green: 0.39, blue: 0.33),
-        dark: PaletteRGB(red: 0.61, green: 0.69, blue: 0.60)
+
+    /// Hairlines and outlines.
+    public static let border = ThemePair(
+        light: PaletteRGB(red: 0.898039216, green: 0.898039216, blue: 0.898039216),
+        dark: PaletteRGB(red: 0.180392157, green: 0.180392157, blue: 0.180392157)
     )
+
+    /// Primary reading and UI text.
+    public static let contentPrimary = ThemePair(
+        light: PaletteRGB(red: 0.066666667, green: 0.066666667, blue: 0.066666667),
+        dark: PaletteRGB(red: 0.960784314, green: 0.960784314, blue: 0.960784314)
+    )
+
+    /// Secondary text and metadata.
+    public static let contentSecondary = ThemePair(
+        light: PaletteRGB(red: 0.4, green: 0.4, blue: 0.4),
+        dark: PaletteRGB(red: 0.639215686, green: 0.639215686, blue: 0.639215686)
+    )
+
+    /// Tertiary text and placeholders.
+    public static let contentTertiary = ThemePair(
+        light: PaletteRGB(red: 0.423529412, green: 0.423529412, blue: 0.423529412),
+        dark: PaletteRGB(red: 0.541176471, green: 0.541176471, blue: 0.541176471)
+    )
+
+    /// Product identity and emphasis.
+    public static let brand = ThemePair(
+        light: PaletteRGB(red: 0.066666667, green: 0.066666667, blue: 0.066666667),
+        dark: PaletteRGB(red: 0.960784314, green: 0.960784314, blue: 0.960784314)
+    )
+
+    /// Interactive controls, links and primary buttons.
+    public static let interactive = ThemePair(
+        light: PaletteRGB(red: 0.066666667, green: 0.066666667, blue: 0.066666667),
+        dark: PaletteRGB(red: 0.960784314, green: 0.960784314, blue: 0.960784314)
+    )
+
+    /// Content drawn on an interactive fill.
+    public static let onInteractive = ThemePair(
+        light: PaletteRGB(red: 1, green: 1, blue: 1),
+        dark: PaletteRGB(red: 0.066666667, green: 0.066666667, blue: 0.066666667)
+    )
+
+    /// Completed, connected and ready states.
+    public static let success = ThemePair(
+        light: PaletteRGB(red: 0.137254902, green: 0.478431373, blue: 0.231372549),
+        dark: PaletteRGB(red: 0.439215686, green: 0.847058824, blue: 0.545098039)
+    )
+
+    /// Attention needed, but not a failure.
+    public static let warning = ThemePair(
+        light: PaletteRGB(red: 0.541176471, green: 0.352941176, blue: 0),
+        dark: PaletteRGB(red: 0.941176471, green: 0.705882353, blue: 0.301960784)
+    )
+
+    /// Destructive action, recording and failure.
+    public static let danger = ThemePair(
+        light: PaletteRGB(red: 0.705882353, green: 0.137254902, blue: 0.094117647),
+        dark: PaletteRGB(red: 1, green: 0.478431373, blue: 0.439215686)
+    )
+
     /// Reader sepia theme background (reader chrome sits on it).
     public static let readerSepia = ThemePair(
         light: PaletteRGB(red: 0.965, green: 0.945, blue: 0.902),
         dark: PaletteRGB(red: 0.14, green: 0.13, blue: 0.105)
-    )
-    /// Label color for prominent buttons filled with `accent`. White passes on
-    /// the deep light accent, but the pale dark accent needs a near-black label
-    /// (white is only 2.3:1 there) — so the pair is theme-adaptive, not white.
-    public static let onAccent = ThemePair(
-        light: PaletteRGB(red: 1, green: 1, blue: 1),
-        dark: PaletteRGB(red: 0.075, green: 0.078, blue: 0.071)
     )
 }
 

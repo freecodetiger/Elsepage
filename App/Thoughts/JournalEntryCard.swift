@@ -108,7 +108,7 @@ struct JournalEntryCard: View {
         }
         .buttonStyle(.borderedProminent)
         // A11Y-03: AA label on the accent fill in both color schemes.
-        .foregroundStyle(Color.elsepageOnAccent)
+        .foregroundStyle(Color.elsepageOnInteractive)
 
         if let session = entry.session, session.duration != nil {
             Divider()
@@ -123,7 +123,7 @@ struct JournalEntryCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("相关高亮", systemImage: "highlighter")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 ForEach(entry.linkedHighlights) { highlight in
                     Button {
                         openSource(entry.book, highlight.locator)
@@ -141,7 +141,7 @@ struct JournalEntryCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("我想", systemImage: "brain.head.profile")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 ForEach(entry.whatIThink, id: \.id) { thought in
                     thoughtRow(thought)
                 }
@@ -152,7 +152,7 @@ struct JournalEntryCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("留下问题", systemImage: "questionmark.bubble")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 ForEach(entry.questions) { question in
                     HStack(alignment: .top, spacing: 6) {
                         Text("· \(question.text)")
@@ -171,7 +171,7 @@ struct JournalEntryCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("引用", systemImage: "quote.opening")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 ForEach(entry.citations) { citation in
                     Button {
                         if let locator = citation.locator { openSource(entry.book, locator) }
@@ -199,7 +199,7 @@ struct JournalEntryCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("记住的改变", systemImage: "arrow.triangle.2.circlepath")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageAccent)
+                    .foregroundStyle(Color.elsepageInteractive)
                 ForEach(entry.memoryChanges, id: \.id) { change in
                     Text("· \(change.changeType.rawValue)：\(change.summary)")
                         .font(.subheadline)
