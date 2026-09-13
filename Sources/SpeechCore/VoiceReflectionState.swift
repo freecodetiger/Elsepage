@@ -101,7 +101,7 @@ public protocol LiveTranscriptionProvider: AnyObject {
     func stop()
     func cancel()
     /// File extension the recorder should use for the saved audio destination.
-    /// Defaults to "m4a"; MP3-capable providers override with "mp3".
+    /// The system provider uses AAC/M4A.
     var preferredAudioFileExtension: String { get }
     /// Best-effort audio persistence hook. Called before `start` with the destination
     /// file URL (or nil to disable). Default implementation is a no-op.

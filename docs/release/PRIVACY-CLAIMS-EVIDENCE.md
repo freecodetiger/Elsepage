@@ -35,6 +35,7 @@
 | 声明 | 证据 |
 |---|---|
 | 仅使用 Apple SFSpeechRecognizer,无云端 ASR Provider | `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift`;PRD §21.1 偏差记录(云端 ASR 移至 v2) |
+| 原始音频仅由用户显式开启保存,并按 Reflection/书籍/全清生命周期删除 | `App/Reflection/VoiceReflectionRecorder.swift`、`Sources/AppInfrastructure/AudioFileStore.swift`;PRD §21.8 |
 | 权限用途文案 | `App/Info.plist`:`NSMicrophoneUsageDescription`、`NSSpeechRecognitionUsageDescription`(均为本机转写表述) |
 
 ## 5. 「服务商预设列表」
@@ -45,9 +46,9 @@
 
 | 声明 | 证据 |
 |---|---|
-| Export My Data:含 Memory 与画像,不含 Provider 配置/Key | `Sources/ReflectionCore/PersonalDataExporter.swift`(结构体注释明确排除 provider 配置、密钥引用与 routing traces);导出文件 `elsepage-my-data.json` + ShareLink:`App/Settings/DataSettingsModel.swift` |
+| Export My Data:含 Memory、画像与已保存音频 Base64,不含 Provider 配置/Key | `Sources/ReflectionCore/PersonalDataExporter.swift`;导出文件 `elsepage-my-data.json` + ShareLink:`App/Settings/DataSettingsModel.swift` |
 | 删除单本书(级联 + 文件) | `App/Settings/DataSettingsModel.swift` → `deleteAllBooks`(FK cascade + 沙盒文件两阶段删除) |
-| 清除所有本地数据(两阶段确认、逐类列明) | UI:`App/Settings/SettingsView.swift`(「数据与隐私」区,两级确认弹窗,列出将删除的各类数据);服务:`Sources/Persistence/LocalDataWipeService.swift`(DB 全表事务清除 + `removeAllSecrets`)与 `App/Settings/DataSettingsModel.swift` → `wipeAllLocalData`(另清书文件与 UserDefaults) |
+| 清除所有本地数据(两阶段确认、逐类列明) | UI:`App/Settings/SettingsView.swift`(「数据与隐私」区,两级确认弹窗,列出将删除的各类数据);服务:`Sources/Persistence/LocalDataWipeService.swift`(DB 全表事务清除 + `removeAllSecrets`)与 `App/Settings/DataSettingsModel.swift` → `wipeAllLocalData`(另清书文件、音频文件与 UserDefaults) |
 
 ## 7. 政策落地待办(用户/集成者)
 

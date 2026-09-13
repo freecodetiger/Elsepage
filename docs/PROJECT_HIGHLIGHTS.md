@@ -38,7 +38,7 @@ ElsePage 是一个**本地优先（local-first）、自带密钥（BYOK）**的�
 | **本地优先到核心** | EPUB、高亮、批注、Reflection、SQLite 全部在设备上；无后端、无账号、无云端向量库；不配 Provider 也能完整阅读与记录 |
 | **有据可依的 AI** | Agent 回复携带可点击引用，引用在持久化前经本地校验（`AgentCitationValidator`） |
 | **BYOK、Provider 无关** | 一个 `ModelClient` 契约，13 个预设端点，Keychain 存密钥，Provider 配置与密钥分离 |
-| **真正可用的语音** | 点按/按住两套手势、实时（partial）转写可编辑、可选 MP3（设备）/ AAC（模拟器）、一键 AI 润色且原文保留 |
+| **真正可用的语音** | 点按/按住两套手势、实时（partial）转写可编辑、可选 AAC/M4A 原始音频、多段续录合并、一键 AI 润色且用户原文保留 |
 | **思考是产品** | Session 上下文、同书过去想法、跨书检索、长期记忆、结构化 Journal |
 
 硬边界（不跨过）：无后端/账号/云向量库；默认不做「总结全书」；不覆盖用户原话；API key 只在 Keychain；用户数据只在用户明确选择的 Provider 上离开设备。
@@ -357,7 +357,7 @@ Query  ─Implemented─►  Query Embedding  ─Implemented─►  Top-K Retrie
 | **性能工程** | 阅读位置 750ms 防抖 + 退后台/转屏 flush；embedding 100/批；Rerank 只送 top-10；`FlatVectorIndex` 用 `lazy.filter` 避免物化全集 |
 | **内存** | 分块流式持久化，不整书驻留；`FlatVectorIndex` 一次书加载当前模型向量（个人库规模 OK） |
 | **端侧 AI 约束** | 路由/回复都限 `maxOutputTokens`；DeepSeek 显式 `thinking: disabled`（控制隐藏推理 token 成本） |
-| **语音×AI** | `AVAudioEngine + SFSpeechRecognizer` partial 转写；`ExtAudioFile` 边录边写 MP3/AAC；音频写入失败不阻塞转写；取消时删除音频文件 |
+| **语音×AI** | `AVAudioEngine + SFSpeechRecognizer` partial 转写；`ExtAudioFile` 边录边写 AAC/M4A；多段续录合并；草稿/正式/回收站文件生命周期与启动恢复 |
 
 ---
 
@@ -667,7 +667,7 @@ UI 把润色后的文本直接当用户输入存。
 
 #### Our Design
 - `Reflection.originalText`（用户原话）与 `polishedText`（AI 润色，可选）**两个独立列**；`displayText = polishedText ?? originalText`；Agent 输出根本不进 Reflection 类型（进 `reflectionMessages.author == .agent`）。
-- 润色前先捕获 `rawTranscript`（`SessionReflectionSheet.swift:102`），润色失败保留原文并提示「已保留你的原话」。
+- 用户原文与优化版由 `ReflectionTextDraft` 分离管理，编辑原文会使旧优化失效，提交始终使用用户最后确认的原文。
 - 提交幂等（`conflictingRetry`）、Agent 回复幂等（稳定 messageID）、Session end 幂等。
 - 记忆（`ReaderMemory`）为**证据支撑**的派生数据：`userEdited` 永不被自动管线覆盖、`superseded` 保留审计而非删除。
 - `PersonalDataExporter` 明确排除密钥与路由 traces。

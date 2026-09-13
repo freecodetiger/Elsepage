@@ -1,4 +1,5 @@
 import AchievementCore
+import AppInfrastructure
 import AgentRuntime
 import LibraryCore
 import Observation
@@ -72,86 +73,6 @@ enum ReflectionComposerPolicy {
 enum ReflectionTextPresentationPolicy {
     static func showsPlaceholder(text: String, hasMarkedText: Bool) -> Bool {
         text.isEmpty && !hasMarkedText
-    }
-}
-
-struct ReflectionDraft: Equatable {
-    enum Version: Equatable {
-        case original
-        case polished
-    }
-
-    private(set) var originalText: String
-    private(set) var polishedText: String?
-    private(set) var selectedVersion: Version
-    private(set) var revision: UInt64
-
-    init(
-        originalText: String = "",
-        polishedText: String? = nil,
-        selectedVersion: Version = .original,
-        revision: UInt64 = 0
-    ) {
-        self.originalText = originalText
-        self.polishedText = polishedText
-        self.selectedVersion = polishedText == nil ? .original : selectedVersion
-        self.revision = revision
-    }
-
-    var selectedText: String {
-        switch selectedVersion {
-        case .original: originalText
-        case .polished: polishedText ?? originalText
-        }
-    }
-
-    var canSend: Bool {
-        !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    mutating func updateSelectedText(_ text: String) {
-        switch selectedVersion {
-        case .original:
-            updateOriginalText(text)
-        case .polished:
-            polishedText = text
-            revision &+= 1
-        }
-    }
-
-    mutating func updateOriginalText(_ text: String) {
-        guard originalText != text || polishedText != nil || selectedVersion != .original else { return }
-        originalText = text
-        polishedText = nil
-        selectedVersion = .original
-        revision &+= 1
-    }
-
-    mutating func applyPolishedText(_ text: String) {
-        guard !text.isEmpty else { return }
-        polishedText = text
-        selectedVersion = .polished
-        revision &+= 1
-    }
-
-    mutating func select(_ version: Version) {
-        guard version != .polished || polishedText != nil else { return }
-        selectedVersion = version
-    }
-
-    mutating func clear() {
-        guard !originalText.isEmpty || polishedText != nil else { return }
-        originalText = ""
-        polishedText = nil
-        selectedVersion = .original
-        revision &+= 1
-    }
-
-    mutating func takeSelectedTextForSending() -> String? {
-        let text = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        clear()
-        return text
     }
 }
 
@@ -471,6 +392,7 @@ final class SessionReflectionModel: Identifiable {
     private let submission: TextReflectionSubmissionService
     private let voiceSubmission: VoiceReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
+    private let audioStore = AudioFileStore.live()
     private let readerAgent: ReaderAgent
     private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
     let achievements: AchievementModel?
@@ -482,24 +404,32 @@ final class SessionReflectionModel: Identifiable {
     private(set) var polishService: TranscriptPolishService?
     private let draftID = ReflectionID()
 
-    var text = "" {
-        didSet {
-            // A cleared editor is no longer a voice reflection: fall back to plain text so
-            // "record voice, delete it all, type text" saves as `.text`.
-            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    private(set) var draft = ReflectionTextDraft()
+    var text: String {
+        get { draft.selectedText }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                // Clearing the whole draft is an explicit reset. A later typed
+                // value starts a new original instead of reviving stale voice text.
+                draft.clear()
+                discardAudioDrafts()
                 inputKind = .text
+            } else {
+                draft.updateSelectedText(newValue)
             }
         }
     }
-    /// Raw audio file name (inside Documents/Reflections) when the user opted to save it.
-    var audioFileName: String?
+    /// Final audio file name once a voice Reflection is promoted.
+    private(set) var audioFileName: String?
+    /// Unsubmitted audio takes owned by the recorder.
+    var audioDraftURLs: [URL] = []
+    private(set) var audioNotice: String?
+    private(set) var isVoiceRecording = false
     private(set) var inputKind: ReflectionInputKind = .text
     private(set) var state: SubmissionState = .editing
     private(set) var reflection: Reflection?
     private(set) var conversation: ReflectionConversationModel?
-    /// The user's words captured right before an AI polish, so the raw version is
-    /// never lost (PRD P2). Non-nil means a polish has been applied.
-    private(set) var rawTranscript: String?
     var errorMessage: String?
 
     init(
@@ -535,85 +465,142 @@ final class SessionReflectionModel: Identifiable {
 
     /// A polish button is offered once a provider is configured and there is text.
     var canPolish: Bool {
-        polishService != nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        polishService != nil
+            && !draft.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// The AI-optimized version of the user's words (one tier: 忠实+清晰). Kept
-    /// separate from the editor so 查看我的原话 can swap without losing either side.
-    private(set) var optimizedText: String?
-    /// Whether the editor currently shows the optimized version instead of the raw words.
-    private(set) var showingOptimized = false
-    /// One auto-optimization per draft, so a second recording never overwrites the
-    /// first raw capture (rawTranscript stays the true original).
+    var optimizedText: String? { draft.polishedText }
+    var showingOptimized: Bool { draft.selectedVersion == .polished }
+    /// One auto-optimization per draft, so later recordings never re-run polish
+    /// behind the user's back.
     private(set) var hasAutoOptimized = false
     var isOptimizing = false
+
+    /// Voice partials must update the source transcript, not whichever AI version
+    /// happened to be on screen when recording started.
+    func prepareForVoiceRecording() {
+        draft.select(.original)
+    }
+
+    func setVoiceRecording(_ active: Bool) {
+        isVoiceRecording = active
+    }
 
     /// 录音结束后的自动优化:说得乱没关系,AI 把表达理顺(忠实+清晰),原话始终可切回。
     func autoOptimizeAfterRecording() async {
         guard !hasAutoOptimized, polishService != nil,
-              text.trimmingCharacters(in: .whitespacesAndNewlines).count >= Self.autoOptimizeMinimumCharacters else { return }
+              draft.originalText.trimmingCharacters(in: .whitespacesAndNewlines).count
+                >= Self.autoOptimizeMinimumCharacters else { return }
         hasAutoOptimized = true
         await applyOptimization()
     }
 
     /// 表达优化(唯一档位):忠于原意,把表达变清楚。保留原始转写为 source of truth。
     func applyOptimization() async {
-        let current = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = draft.originalText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !current.isEmpty, let polishService else { return }
-        if rawTranscript == nil {
-            rawTranscript = text
-        }
         isOptimizing = true
         defer { isOptimizing = false }
         do {
             let optimized = try await polishService.polish(current)
             guard !optimized.isEmpty else { return }
-            optimizedText = optimized
-            text = optimized
-            showingOptimized = true
+            draft.applyPolishedText(optimized)
         } catch {
             errorMessage = "优化暂不可用，已保留你的原话。"
         }
     }
 
     func showRaw() {
-        guard let rawTranscript, showingOptimized else { return }
-        text = rawTranscript
-        showingOptimized = false
+        draft.select(.original)
     }
 
     func showOptimized() {
-        guard let optimizedText, !showingOptimized else { return }
-        text = optimizedText
-        showingOptimized = true
+        draft.select(.polished)
     }
 
     private static let autoOptimizeMinimumCharacters = 20
 
     var canSubmit: Bool {
-        state == .editing && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        state == .editing && !isVoiceRecording && draft.canSubmit
+    }
+
+    private struct PendingAudioPromotion {
+        let fileName: String
+        let promotion: AudioFileStore.StagedPromotion
+    }
+
+    private func prepareAudioForSubmission() async -> PendingAudioPromotion? {
+        guard inputKind == .voiceTranscript else {
+            discardAudioDrafts()
+            return nil
+        }
+        guard !audioDraftURLs.isEmpty else { return nil }
+
+        var mergedDraft: URL?
+        do {
+            let merged = try await audioStore.mergeDraftSegments(audioDraftURLs)
+            mergedDraft = merged
+            for oldDraft in audioDraftURLs where oldDraft != merged {
+                audioStore.discardDraft(at: oldDraft)
+            }
+            audioDraftURLs = [merged]
+
+            let fileName = "\(draftID.description).m4a"
+            let promotion = try audioStore.stagePromotion(
+                draftURL: merged,
+                finalFileName: fileName
+            )
+            return .init(fileName: fileName, promotion: promotion)
+        } catch {
+            audioStore.discardDraft(at: mergedDraft)
+            discardAudioDrafts()
+            audioNotice = "表达可以继续保存，但这段录音未能保留。"
+            return nil
+        }
+    }
+
+    private func discardAudioDrafts() {
+        for url in audioDraftURLs {
+            audioStore.discardDraft(at: url)
+        }
+        audioDraftURLs = []
+        audioFileName = nil
     }
 
     func submit() async -> Reflection? {
         guard canSubmit else { return nil }
         state = .saving
+        let audioPlan = await prepareAudioForSubmission()
         do {
             let reflection: Reflection
             if inputKind == .voiceTranscript {
                 reflection = try await voiceSubmission.submit(.init(
                     id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator,
-                    editedTranscript: rawTranscript ?? text,
-                    audioFileName: audioFileName,
-                    polishedText: showingOptimized ? text : nil,
+                    editedTranscript: draft.originalText,
+                    audioFileName: audioPlan?.fileName,
+                    polishedText: draft.polishedText,
                     linkedHighlightIDs: linkedHighlightIDs
                 ))
             } else {
                 reflection = try await submission.submit(.init(
                     id: draftID, bookID: book.id, sessionID: summary.session.id, locator: locator,
-                    originalText: rawTranscript ?? text,
-                    polishedText: showingOptimized ? text : nil,
+                    originalText: draft.originalText,
+                    polishedText: draft.polishedText,
                     linkedHighlightIDs: linkedHighlightIDs
                 ))
+            }
+            if let audioPlan {
+                do {
+                    try audioStore.commitPromotion(audioPlan.promotion)
+                    audioFileName = audioPlan.fileName
+                    audioDraftURLs = []
+                } catch {
+                    audioFileName = audioPlan.fileName
+                    audioDraftURLs = []
+                    audioNotice = "录音已暂存，将在下次启动时完成保存。"
+                }
+            } else if inputKind == .voiceTranscript {
+                audioFileName = nil
             }
             self.reflection = reflection
             conversation = ReflectionConversationModel(
@@ -647,7 +634,8 @@ final class SessionReflectionModel: Identifiable {
     func markVoiceTranscript() {
         guard state == .editing else { return }
         // No voice content left (e.g. an empty transcription) is not a voice reflection.
-        inputKind = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .text : .voiceTranscript
+        inputKind = draft.selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? .text : .voiceTranscript
     }
 
     func requestAgentReply() async {
@@ -666,6 +654,7 @@ final class ReflectionConversationModel: Identifiable {
     private let readerAgent: ReaderAgent
     private let achievements: AchievementModel?
     private let makePolishService: (@MainActor () async -> TranscriptPolishService?)?
+    private let audioStore = AudioFileStore.live()
     private var polishService: TranscriptPolishService?
     /// Persisted each time the user sends a follow-up (FIX-01).
     let recordAgentDiscussion: AgentDiscussionRecorder?
@@ -679,7 +668,7 @@ final class ReflectionConversationModel: Identifiable {
     private(set) var contextDisclosure: ContextDisclosure?
     private(set) var isDeleted = false
     private(set) var pendingUserMessage: PendingReflectionMessage?
-    var draft = ReflectionDraft()
+    var draft = ReflectionTextDraft()
     var followUpText: String {
         get { draft.selectedText }
         set { draft.updateSelectedText(newValue) }
@@ -884,10 +873,7 @@ final class ReflectionConversationModel: Identifiable {
     }
 
     private func deleteAudioFileIfNeeded() {
-        guard let name = reflection.audioFileName else { return }
-        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Reflections", isDirectory: true)
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        audioStore.discardSaved(fileName: reflection.audioFileName)
     }
 
     private static func withoutCitationBlock(_ content: String) -> String {
@@ -970,14 +956,16 @@ struct SessionReflectionSheet: View {
                             get: { model.text },
                             set: { model.text = $0 }
                         ),
-                        audioFileName: Binding(
-                            get: { model.audioFileName },
-                            set: { model.audioFileName = $0 }
+                        audioDraftURLs: Binding(
+                            get: { model.audioDraftURLs },
+                            set: { model.audioDraftURLs = $0 }
                         ),
                         canPolish: model.canPolish,
                         onPolish: { await model.applyOptimization() },
                         onAutoPolish: { await model.autoOptimizeAfterRecording() },
-                        onVoiceTranscript: { model.markVoiceTranscript() }
+                        onRecordingStart: { model.prepareForVoiceRecording() },
+                        onVoiceTranscript: { model.markVoiceTranscript() },
+                        onRecordingStateChange: { model.setVoiceRecording($0) }
                     )
                     .padding(.horizontal, ElsepageTheme.Spacing.page)
                     .padding(.vertical, ElsepageTheme.Spacing.medium)
@@ -1099,6 +1087,11 @@ struct SessionReflectionSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            if let audioNotice = model.audioNotice {
+                Label(audioNotice, systemImage: "waveform.badge.exclamationmark")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if let quote = model.locator.textHighlight, !quote.isEmpty {
                 Text(quote)
                     .font(.system(.body, design: .serif))
@@ -1165,6 +1158,9 @@ struct ReflectionConversationView: View {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
                     if let header { header }
                     userTurn(title: "你的 Reflection", text: model.reflection.displayText, canDelete: model.canDeleteRoot)
+                    if let audioFileName = model.reflection.audioFileName {
+                        ReflectionAudioAttachment(fileName: audioFileName)
+                    }
 
             ForEach(model.messages) { message in
                 Divider()
@@ -1422,7 +1418,7 @@ private struct ReflectionComposer: View {
     @Binding var isFocused: Bool
     @State private var hasMarkedText = false
     @State private var voiceNotice: String?
-    @State private var clearedDraft: ReflectionDraft?
+    @State private var clearedDraft: ReflectionTextDraft?
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
@@ -1431,8 +1427,8 @@ private struct ReflectionComposer: View {
                     get: { model.draft.selectedVersion },
                     set: { model.draft.select($0) }
                 )) {
-                    Text("我的原话").tag(ReflectionDraft.Version.original)
-                    Text("整理版").tag(ReflectionDraft.Version.polished)
+                    Text("我的原话").tag(ReflectionTextDraft.Version.original)
+                    Text("整理版").tag(ReflectionTextDraft.Version.polished)
                 }
                 .pickerStyle(.segmented)
             }
@@ -1466,9 +1462,10 @@ private struct ReflectionComposer: View {
                         get: { model.draft.originalText },
                         set: { model.draft.updateOriginalText($0) }
                     ),
-                    audioFileName: Binding<String?>.constant(nil),
+                    audioDraftURLs: .constant([]),
                     allowsAudioSaving: false,
                     style: .compactComposer,
+                    onRecordingStart: { model.draft.select(.original) },
                     onRecordingStateChange: { active in
                         isVoiceInputActive = active
                         if active { isFocused = false }
@@ -1495,7 +1492,7 @@ private struct ReflectionComposer: View {
                     .disabled(hasMarkedText || model.isPolishing)
                 }
 
-                if model.draft.canSend, !isVoiceInputActive {
+                if model.draft.canSubmit, !isVoiceInputActive {
                     Menu {
                         Button("清空全文", role: .destructive) {
                             clearedDraft = model.draft

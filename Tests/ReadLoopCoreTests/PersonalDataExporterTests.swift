@@ -227,3 +227,42 @@ import Testing
     #expect(archive.brain.relations.isEmpty)
     #expect(archive.exportedAt <= Date())
 }
+
+@Test func exportEmbedsSavedReflectionAudio() async throws {
+    let database = try AppDatabase.inMemory()
+    let books = GRDBBookRepository(database: database)
+    let reading = GRDBReadingRepository(database: database)
+    let sessions = GRDBReadingSessionRepository(database: database)
+    let reflections = GRDBReflectionRepository(database: database)
+    let journal = GRDBJournalRepository(database: database)
+    let brain = GRDBBrainRepository(database: database)
+
+    let book = TestFixtures.book(fingerprint: "export-audio")
+    try await books.insert(book)
+    let voice = Reflection(
+        bookID: book.id,
+        originalText: "带录音的反思",
+        inputKind: .voiceTranscript,
+        audioFileName: "voice.m4a"
+    )
+    try await reflections.insert(voice, linkedHighlightIDs: [], evidence: [])
+
+    let audioBytes = Data("test-audio".utf8)
+    let exporter = PersonalDataExporter(
+        books: books,
+        reading: reading,
+        sessions: sessions,
+        reflections: reflections,
+        journal: journal,
+        brain: brain,
+        audioData: { fileName in fileName == "voice.m4a" ? audioBytes : nil }
+    )
+    let data = try await exporter.export()
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(PersonalDataArchive.self, from: data)
+    let exportedVoice = try #require(archive.books.first?.reflections.first)
+    #expect(exportedVoice.reflection.id == voice.id)
+
+    #expect(exportedVoice.audioBase64 == audioBytes.base64EncodedString())
+}

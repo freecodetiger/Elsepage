@@ -59,6 +59,11 @@ final class AppModel {
             let reading = GRDBReadingRepository(database: database)
             let sessions = GRDBReadingSessionRepository(database: database)
             let reflections = GRDBReflectionRepository(database: database)
+            let audioStore = AudioFileStore.live()
+            let referencedAudioFiles = Set(
+                try await reflections.allReflections().compactMap(\.audioFileName)
+            )
+            _ = try audioStore.recover(referencedFileNames: referencedAudioFiles)
             let journal = GRDBJournalRepository(database: database)
             let brain = GRDBBrainRepository(database: database)
             let brainStore = GRDBBrainEmbeddingStore(database: database)
@@ -148,21 +153,28 @@ final class AppModel {
                 files: files,
                 metadataReader: ReadiumMetadataReader(readium: readium),
                 readium: readium,
-                indexCoordinator: indexCoordinator
+                indexCoordinator: indexCoordinator,
+                audioStore: audioStore
             )
             let chatSettings = ProviderSettingsModel(configurations: providerConfigurations, secrets: secrets)
             let ragSettings = RAGSettingsModel(chat: chatSettings, books: books, indexCoordinator: indexCoordinator)
             let diagnosticsSettings = DiagnosticsModel(traceRepository: routingTraces)
             let dataSettings = DataSettingsModel(
                 books: books,
+                reflections: reflections,
                 files: files,
+                audioStore: audioStore,
                 exporter: PersonalDataExporter(
                     books: books,
                     reading: reading,
                     sessions: sessions,
                     reflections: reflections,
                     journal: journal,
-                    brain: brain
+                    brain: brain,
+                    audioData: { fileName in
+                        guard let url = try? audioStore.url(for: fileName) else { return nil }
+                        return try? Data(contentsOf: url)
+                    }
                 ),
                 indexCoordinator: indexCoordinator,
                 wipeService: LocalDataWipeService(database: database, secrets: secrets),

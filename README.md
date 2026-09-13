@@ -54,7 +54,7 @@ Elsepage is built so both stay rare:
 | **Local-first to the core** | EPUB, highlights, reflections and the SQLite store live on your device. Reading and reflecting work with no network. |
 | **Grounded AI** | Agent replies carry clickable citations that jump back to the exact passage — not "trust me, I read it". |
 | **BYOK, provider-agnostic** | One `ModelClient` interface; swap OpenAI / DeepSeek / Gemini / Anthropic without touching the loop. |
-| **Voice that's actually usable** | Tap-to-talk or hold-to-talk, live editable transcription, optional MP3, and one-tap AI polish that keeps your meaning. |
+| **Voice that's actually usable** | Tap-to-talk or hold-to-talk, live editable transcription, optional AAC/M4A audio, and one-tap AI polish that keeps your meaning. |
 | **Thinking is the product** | Session context, same-book past thoughts, and a structured Journal — the book is evidence, not the end. |
 
 If you want an iOS reader that treats **what you thought** as the deliverable, you're in the right repo.
@@ -73,7 +73,7 @@ If you want an iOS reader that treats **what you thought** as the deliverable, y
 ### Voice
 
 - **Tap-to-talk or hold-to-talk**, with live (partial) transcription you can edit.
-- **Optional audio file** — MP3 on device, AAC fallback on the simulator.
+- **Optional audio file** — AAC/M4A, stored only when explicitly enabled.
 - **One-tap AI polish** — tidies your spoken words without changing meaning; the raw words stay stored.
 
 ### Journal & transparency
@@ -101,7 +101,7 @@ A real product loop, not a demo: read → reflect → save → grounded reply �
 | Reflection loop | ~80% |
 | Book context / Agent | ~90% — citations grounded; **small-to-big** child retrieval (≈350-char retrieval units → parent-anchored evidence windows), hybrid lexical + semantic recall for reflections/memories, cross-encoder rerank gate |
 | Context engineering | planner-grade context plan (dense/lexical split) → source-specific retrieval → candidate ranking/dedup/budget → `ContextBundle`; anti-spoiler enforced at retrieval **and** expansion |
-| Voice reflection | shipped: hold/tap, MP3, AI polish |
+| Voice reflection | shipped: hold/tap, editable transcript, optional AAC/M4A, AI polish |
 | Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall, semantic memory matching |
 | Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
 
@@ -158,7 +158,7 @@ EPUB
 | Context planning | `ContextRouting` — planner-grade plan (dense/lexical split, retrieval knobs), proposed vs validated, deterministic fallback |
 | Context engineering | `ContextEngineering` — candidate ranking/dedup/budget, `ContextBundle`, reflection/memory hybrid retrieval |
 | Agent runtime | `AgentRuntime` / `ReaderAgent` |
-| Voice | `SpeechCore` (system Speech, MP3/AAC) |
+| Voice | `SpeechCore` (system Speech; AAC/M4A persistence) |
 | AI polish | `TranscriptPolishService` (standalone, BYOK) |
 | Providers | `ModelProviders` (one `ModelClient` contract) |
 

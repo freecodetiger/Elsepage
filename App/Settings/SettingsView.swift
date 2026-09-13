@@ -491,6 +491,7 @@ struct DataSettingsView: View {
         "全文与向量索引",
         "阅读位置、高亮与笔记",
         "阅读会话与反思（含思想、提问、引用与依据）",
+        "选择保存的原始录音文件",
         "长期记忆与成就",
         "Provider 配置与 API Key（Keychain）",
         "全部本地偏好设置",

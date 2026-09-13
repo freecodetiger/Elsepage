@@ -17,6 +17,7 @@ final class LibraryModel {
     let sessionRepository: any ReadingSessionRepository
     let sessionService: ReadingSessionService
     let files: BookFileStore
+    private let audioStore: AudioFileStore
     private let importer: BookImporter
     private let metadataReader: ReadiumMetadataReader
     private let readium: ReadiumServices
@@ -47,9 +48,11 @@ final class LibraryModel {
         files: BookFileStore,
         metadataReader: ReadiumMetadataReader,
         readium: ReadiumServices,
-        indexCoordinator: BookIndexCoordinator
+        indexCoordinator: BookIndexCoordinator,
+        audioStore: AudioFileStore = .live()
     ) {
         booksRepository = books; readingRepository = reading; self.files = files
+        self.audioStore = audioStore
         reflectionRepository = reflections
         sessionRepository = sessions
         sessionService = ReadingSessionService(repository: sessions)
@@ -180,7 +183,16 @@ final class LibraryModel {
         deletingBookID = book.id
         defer { deletingBookID = nil }
         do {
-            let trashed = try files.stageDeletion(bookID: book.id)
+            let audioNames = try await reflectionRepository.reflections(for: book.id)
+                .compactMap(\.audioFileName)
+            let stagedAudio = try audioStore.stageDeletion(fileNames: audioNames)
+            let trashed: TrashedBookFile?
+            do {
+                trashed = try files.stageDeletion(bookID: book.id)
+            } catch {
+                audioStore.restoreDeletion(stagedAudio)
+                throw error
+            }
             do {
                 try await booksRepository.delete(book.id)
             } catch {
@@ -188,9 +200,11 @@ final class LibraryModel {
                     do { try files.restore(trashed, for: book.id) }
                     catch { errorMessage = "无法恢复 EPUB 文件：\(error.localizedDescription)" }
                 }
+                audioStore.restoreDeletion(stagedAudio)
                 throw error
             }
             files.commitDeletion(trashed)
+            audioStore.commitDeletion(stagedAudio)
             readium.invalidate(files.url(for: book.id))
             books.removeAll { $0.id == book.id }
             readingProgress[book.id] = nil

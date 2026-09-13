@@ -11,7 +11,9 @@ import ReflectionCore
 @MainActor @Observable
 final class DataSettingsModel {
     private let books: any BookRepository
+    private let reflections: any ReflectionRepository
     private let files: BookFileStore
+    private let audioStore: AudioFileStore
     private let exporter: PersonalDataExporter
     private let indexCoordinator: BookIndexCoordinator?
     private let wipeService: LocalDataWipeService?
@@ -27,7 +29,9 @@ final class DataSettingsModel {
 
     init(
         books: any BookRepository,
+        reflections: any ReflectionRepository,
         files: BookFileStore,
+        audioStore: AudioFileStore = .live(),
         exporter: PersonalDataExporter,
         indexCoordinator: BookIndexCoordinator? = nil,
         wipeService: LocalDataWipeService? = nil,
@@ -40,7 +44,9 @@ final class DataSettingsModel {
         }
     ) {
         self.books = books
+        self.reflections = reflections
         self.files = files
+        self.audioStore = audioStore
         self.exporter = exporter
         self.indexCoordinator = indexCoordinator
         self.wipeService = wipeService
@@ -73,12 +79,23 @@ final class DataSettingsModel {
         do {
             let allBooks = try await books.allBooks()
             for book in allBooks {
-                let trashed = try files.stageDeletion(bookID: book.id)
+                let audioNames = try await reflections.reflections(for: book.id)
+                    .compactMap(\.audioFileName)
+                let stagedAudio = try audioStore.stageDeletion(fileNames: audioNames)
+                let trashed: TrashedBookFile?
+                do {
+                    trashed = try files.stageDeletion(bookID: book.id)
+                } catch {
+                    audioStore.restoreDeletion(stagedAudio)
+                    throw error
+                }
                 do {
                     try await books.delete(book.id)
                     files.commitDeletion(trashed)
+                    audioStore.commitDeletion(stagedAudio)
                 } catch {
                     if let trashed { try? files.restore(trashed, for: book.id) }
+                    audioStore.restoreDeletion(stagedAudio)
                     throw error
                 }
             }
@@ -101,14 +118,28 @@ final class DataSettingsModel {
         defer { isWipingAllData = false }
         indexCoordinator?.cancelAll()
         do {
-            let staged = try await stageAllBookFilesForDeletion()
+            let stagedAudio = try audioStore.stageAllSavedFiles()
+            let staged: [StagedBookDeletion]
+            do {
+                staged = try await stageAllBookFilesForDeletion()
+            } catch {
+                audioStore.restoreDeletion(stagedAudio)
+                throw error
+            }
             do {
                 try await wipeService.wipeAllUserData()
             } catch {
                 restoreStagedBookFiles(staged)
+                audioStore.restoreDeletion(stagedAudio)
                 throw error
             }
             staged.forEach { files.commitDeletion($0.trashed) }
+            audioStore.commitDeletion(stagedAudio)
+            do {
+                try audioStore.removeAllAudio()
+            } catch {
+                errorMessage = "部分录音文件未能清理，重启 App 后会再次尝试。"
+            }
             files.removeAllBookFiles()
             clearUserDefaults()
             exportedDataURL = nil

@@ -51,6 +51,9 @@ public struct PersonalDataArchive: Codable, Sendable {
         public var questions: [AgentQuestion]
         public var citations: [ReflectionCitation]
         public var memoryChanges: [JournalMemoryChange]
+        /// Base64 keeps the single-file JSON export self-contained. Nil means the
+        /// Reflection had no saved audio or the file was unavailable.
+        public var audioBase64: String?
 
         public init(
             reflection: Reflection,
@@ -60,7 +63,8 @@ public struct PersonalDataArchive: Codable, Sendable {
             thoughts: [JournalThought],
             questions: [AgentQuestion],
             citations: [ReflectionCitation],
-            memoryChanges: [JournalMemoryChange]
+            memoryChanges: [JournalMemoryChange],
+            audioBase64: String? = nil
         ) {
             self.reflection = reflection
             self.messages = messages
@@ -70,6 +74,7 @@ public struct PersonalDataArchive: Codable, Sendable {
             self.questions = questions
             self.citations = citations
             self.memoryChanges = memoryChanges
+            self.audioBase64 = audioBase64
         }
     }
 
@@ -153,6 +158,7 @@ public struct PersonalDataExporter: Sendable {
     private let reflections: any ReflectionRepository
     private let journal: any JournalRepository
     private let brain: any BrainRepository
+    private let audioData: @Sendable (String) -> Data?
 
     public init(
         books: any BookRepository,
@@ -160,7 +166,8 @@ public struct PersonalDataExporter: Sendable {
         sessions: any ReadingSessionRepository,
         reflections: any ReflectionRepository,
         journal: any JournalRepository,
-        brain: any BrainRepository
+        brain: any BrainRepository,
+        audioData: @escaping @Sendable (String) -> Data? = { _ in nil }
     ) {
         self.books = books
         self.reading = reading
@@ -168,6 +175,7 @@ public struct PersonalDataExporter: Sendable {
         self.reflections = reflections
         self.journal = journal
         self.brain = brain
+        self.audioData = audioData
     }
 
     public func export() async throws -> Data {
@@ -198,7 +206,8 @@ public struct PersonalDataExporter: Sendable {
                     thoughts: thoughts,
                     questions: questions,
                     citations: citations,
-                    memoryChanges: memoryChanges
+                    memoryChanges: memoryChanges,
+                    audioBase64: reflection.audioFileName.flatMap(audioData)?.base64EncodedString()
                 ))
             }
             entries.append(PersonalDataArchive.BookEntry(

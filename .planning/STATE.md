@@ -88,3 +88,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-12：Phase 3 C 阅读器打开管线代码落地并完成真机性能采样（.planning/quick/260912-i4j-c-reader-resume-position-preferences-pub/SUMMARY.md）；复开缓存命中，性能证据见 docs/testing/interaction-perf/2026-09-12-reader-reopen.json，视觉语义待确认。
 - 2026-09-12：Phase 5 E-P2 冷启动数据库迁移移出主 actor（.planning/quick/260912-je1-e-p2-appdatabase-appmodel-start-local-fi/SUMMARY.md）；AppDatabase.openOffMain 与 AppModel 启动接缝已落地，353 个包测试全绿，真机启动体感待验收。
 - 2026-09-13：客户端交互性能闭环真机验收通过（`.planning/quick/260913-interaction-perf-acceptance/SUMMARY.md`）；A/C/D/E-P2 通过，B 因当前 Provider 非流式延至 v2 SSE；证据见 `docs/testing/interaction-perf/2026-09-13-interaction-acceptance.json`。
+- 2026-09-13：Voice Reflection 交付水准代码完成（`.planning/quick/260913-voice-delivery/SUMMARY.md`）；365 tests 全绿，真机权限/录音/播放/删除/强杀验收待用户，清单见 `docs/testing/voice/2026-09-13-delivery-checklist.md`。

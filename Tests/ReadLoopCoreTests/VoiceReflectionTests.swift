@@ -127,9 +127,9 @@ import Testing
     #expect(state.audioFileName == nil)
 
     state.saveAudio = true
-    state.audioFileName = "abc-123.caf"
+    state.audioFileName = "abc-123.m4a"
     #expect(state.saveAudio)
-    #expect(state.audioFileName == "abc-123.caf")
+    #expect(state.audioFileName == "abc-123.m4a")
 
     state.audioFileName = nil
     #expect(state.audioFileName == nil)
@@ -148,10 +148,10 @@ import Testing
 
     let saved = try await service.submit(.init(
         bookID: book.id, sessionID: nil, locator: locator,
-        editedTranscript: "语音转写", audioFileName: "abc-123.caf", linkedHighlightIDs: [highlight.id]
+        editedTranscript: "语音转写", audioFileName: "abc-123.m4a", linkedHighlightIDs: [highlight.id]
     ))
     #expect(saved.inputKind == .voiceTranscript)
-    #expect(saved.audioFileName == "abc-123.caf")
+    #expect(saved.audioFileName == "abc-123.m4a")
     #expect(try await repository.linkedHighlightIDs(for: saved.id) == [highlight.id])
 }
 
@@ -161,11 +161,11 @@ import Testing
     try await GRDBBookRepository(database: database).insert(book)
     let locator = try TestFixtures.realisticLocator()
     let service = VoiceReflectionSubmissionService(repository: GRDBReflectionRepository(database: database))
-    let draft = VoiceReflectionDraft(bookID: book.id, sessionID: nil, locator: locator, editedTranscript: "保存音频的语音", audioFileName: "voice-1.caf")
+    let draft = VoiceReflectionDraft(bookID: book.id, sessionID: nil, locator: locator, editedTranscript: "保存音频的语音", audioFileName: "voice-1.m4a")
 
     let first = try await service.submit(draft)
     let retried = try await service.submit(draft)
     #expect(first.id == retried.id)
-    #expect(first.audioFileName == "voice-1.caf")
-    #expect(retried.audioFileName == "voice-1.caf")
+    #expect(first.audioFileName == "voice-1.m4a")
+    #expect(retried.audioFileName == "voice-1.m4a")
 }

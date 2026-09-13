@@ -7,8 +7,7 @@ import OSLog
 import Speech
 
 /// Apple system Speech adapter. Streams audio to Speech and, when requested via
-/// `prepareAudioRecording(at:)`, mirrors the input buffers to an encoded audio
-/// file (MP3 on real devices, AAC on the simulator which has no MP3 encoder).
+/// `prepareAudioRecording(at:)`, mirrors the input buffers to an AAC/M4A file.
 @MainActor
 public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider {
     private nonisolated static let defaultLocaleIdentifier = "zh-CN"
@@ -26,9 +25,12 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
 
     private var audioDestination: URL?
     private var extAudioFile: ExtAudioFileRef?
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
 
-    /// Extension the recorder should use for the audio destination file.
-    public var preferredAudioFileExtension: String { Self.canEncodeMP3 ? "mp3" : "m4a" }
+    /// AAC in an M4A container is supported consistently across iOS devices and
+    /// the simulator; MP3 encoding is not a reliable system capability.
+    public var preferredAudioFileExtension: String { "m4a" }
 
     public init() {}
 
@@ -160,7 +162,11 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         }
         engine.prepare()
         if let destination = audioDestination {
-            extAudioFile = makeExtAudioFile(at: destination, inputFormat: format)
+            guard let writer = makeExtAudioFile(at: destination, inputFormat: format) else {
+                finishAudio()
+                throw SpeechProviderError.recordingCouldNotStart("无法创建音频文件，请关闭“保存音频”后重试")
+            }
+            extAudioFile = writer
         }
         inputNode.installTap(
             onBus: 0,
@@ -179,6 +185,7 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
 
         self.recognizer = recognizer
         recognitionRequest = request
+        installAudioObservers()
         let recordingID = UUID()
         activeRecordingID = recordingID
         return AsyncThrowingStream { continuation in
@@ -224,11 +231,43 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
     private func finishAudio() {
         stopAudioEngine()
         finishAudioWriter()
+        removeAudioObservers()
         recognitionTask = nil
         recognitionRequest = nil
         recognizer = nil
         activeRecordingID = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func installAudioObservers() {
+        removeAudioObservers()
+        let center = NotificationCenter.default
+        interruptionObserver = center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw == AVAudioSession.InterruptionType.began.rawValue else { return }
+            Task { @MainActor [weak self] in self?.stop() }
+        }
+        routeChangeObserver = center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            guard raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue else { return }
+            Task { @MainActor [weak self] in self?.stop() }
+        }
+    }
+
+    private func removeAudioObservers() {
+        let center = NotificationCenter.default
+        if let interruptionObserver { center.removeObserver(interruptionObserver) }
+        if let routeChangeObserver { center.removeObserver(routeChangeObserver) }
+        interruptionObserver = nil
+        routeChangeObserver = nil
     }
 
     private func stopAudioEngine() {
@@ -264,13 +303,11 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         self.extAudioFile = nil
     }
 
-    /// Wraps the mic PCM buffers into an encoded file. MP3 on real devices
-    /// (44.1 kHz hardware encoder), AAC (.m4a) on the simulator. ExtAudioFile
-    /// performs the client→file sample-rate/channel conversion.
+    /// Wraps mic PCM buffers into AAC/M4A. ExtAudioFile performs the
+    /// client→file sample-rate/channel conversion.
     private func makeExtAudioFile(at url: URL, inputFormat: AVAudioFormat) -> ExtAudioFileRef? {
-        let isMP3 = url.pathExtension.lowercased() == "mp3"
-        let formatID: AudioFormatID = isMP3 ? kAudioFormatMPEGLayer3 : kAudioFormatMPEG4AAC
-        let fileType: AudioFileTypeID = isMP3 ? kAudioFileMP3Type : kAudioFileM4AType
+        let formatID: AudioFormatID = kAudioFormatMPEG4AAC
+        let fileType: AudioFileTypeID = kAudioFileM4AType
         let clientPtr = inputFormat.streamDescription
         var clientFormat = clientPtr.pointee
         let channels = max(1, min(Int(clientFormat.mChannelsPerFrame), 2))
@@ -299,14 +336,6 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
             return nil
         }
         return ext
-    }
-
-    private static var canEncodeMP3: Bool {
-        #if targetEnvironment(simulator)
-        false
-        #else
-        true
-        #endif
     }
 
     private static func map(_ status: SFSpeechRecognizerAuthorizationStatus) -> SpeechAuthorization {

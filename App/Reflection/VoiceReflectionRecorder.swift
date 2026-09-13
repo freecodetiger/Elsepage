@@ -1,3 +1,6 @@
+import AVFAudio
+import AppInfrastructure
+import Foundation
 import Observation
 import SpeechCore
 import SwiftUI
@@ -6,24 +9,38 @@ import UIKit
 @MainActor @Observable
 final class VoiceReflectionRecorder {
     private let provider: any LiveTranscriptionProvider
+    private let audioStore: AudioFileStore
     private var streamTask: Task<Void, Never>?
+    private var stopFallbackTask: Task<Void, Never>?
     private var pendingStartID: UUID?
 
     private(set) var state = VoiceReflectionState()
+    private(set) var draftAudioURLs: [URL] = []
 
-    init(provider: (any LiveTranscriptionProvider)? = nil) {
+    init(
+        provider: (any LiveTranscriptionProvider)? = nil,
+        audioStore: AudioFileStore = .live()
+    ) {
         self.provider = provider ?? SystemSpeechTranscriptionProvider()
+        self.audioStore = audioStore
     }
 
     var latestTranscript: String { state.transcript }
     var isRecording: Bool { state.phase == .recording || state.phase == .stopping }
     var saveAudio: Bool {
         get { state.saveAudio }
-        set { state.saveAudio = newValue }
+        set {
+            state.saveAudio = newValue
+            if !newValue, !isRecording {
+                discardAudioDrafts()
+            }
+        }
     }
 
     func start() async {
         guard state.phase == .idle || state.phase == .cancelled || state.phase == .failed || state.phase == .transcriptReady else { return }
+        stopFallbackTask?.cancel()
+        stopFallbackTask = nil
         let startID = UUID()
         pendingStartID = startID
         defer {
@@ -44,13 +61,18 @@ final class VoiceReflectionRecorder {
             return
         }
 
+        let previousAudioFileName = state.audioFileName
+        var createdDraft: URL?
         do {
-            if state.saveAudio, let url = audioDestinationURL() {
+            if state.saveAudio {
+                let url = try audioStore.newDraftURL(fileExtension: provider.preferredAudioFileExtension)
+                createdDraft = url
+                draftAudioURLs.append(url)
                 try provider.prepareAudioRecording(at: url)
                 state.audioFileName = url.lastPathComponent
             } else {
+                discardAudioDrafts()
                 try provider.prepareAudioRecording(at: nil)
-                state.audioFileName = nil
             }
             let stream = try provider.start(localeIdentifier: nil)
             state.apply(.recordingStarted)
@@ -60,6 +82,8 @@ final class VoiceReflectionRecorder {
                         guard !Task.isCancelled else { return }
                         self?.state.apply(.transcription(event))
                     }
+                    self?.stopFallbackTask?.cancel()
+                    self?.stopFallbackTask = nil
                     if self?.state.phase == .stopping, self?.state.hasTranscript == true {
                         self?.state.apply(.transcription(.final(self?.state.transcript ?? "")))
                     }
@@ -70,8 +94,12 @@ final class VoiceReflectionRecorder {
                 }
             }
         } catch {
+            if let createdDraft {
+                audioStore.discardDraft(at: createdDraft)
+                draftAudioURLs.removeAll { $0 == createdDraft }
+                state.audioFileName = draftAudioURLs.last?.lastPathComponent ?? previousAudioFileName
+            }
             state.apply(.failed(error.localizedDescription))
-            discardAudioFile()
         }
     }
 
@@ -79,34 +107,35 @@ final class VoiceReflectionRecorder {
         guard state.phase == .recording else { return }
         state.apply(.stopRequested)
         provider.stop()
+        let transcript = state.transcript
+        stopFallbackTask?.cancel()
+        stopFallbackTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, let self, self.state.phase == .stopping else { return }
+            self.state.apply(.transcription(.final(transcript)))
+            self.stopFallbackTask = nil
+        }
     }
 
     func cancel() {
         pendingStartID = nil
+        stopFallbackTask?.cancel()
+        stopFallbackTask = nil
         streamTask?.cancel()
         streamTask = nil
         provider.cancel()
         state.apply(.cancelled)
-        discardAudioFile()
+        discardAudioDrafts()
     }
 
-    /// Deletes the audio file for the current recording and clears the reference.
-    private func discardAudioFile() {
-        guard let name = state.audioFileName else { return }
-        try? FileManager.default.removeItem(at: Self.audioDirectory().appendingPathComponent(name))
+    /// Explicitly drops every unsubmitted take when the user turns audio saving
+    /// off or abandons the draft.
+    func discardAudioDrafts() {
+        for url in draftAudioURLs {
+            audioStore.discardDraft(at: url)
+        }
+        draftAudioURLs.removeAll()
         state.audioFileName = nil
-    }
-
-    private static func audioDirectory() -> URL {
-        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Reflections", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
-    private func audioDestinationURL() -> URL? {
-        let name = "\(UUID().uuidString.lowercased())-\(Int(Date().timeIntervalSince1970)).\(provider.preferredAudioFileExtension)"
-        return Self.audioDirectory().appendingPathComponent(name)
     }
 }
 
@@ -116,8 +145,9 @@ enum VoiceReflectionControlStyle: Equatable {
 }
 
 struct VoiceReflectionControls: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var editableText: String
-    @Binding var audioFileName: String?
+    @Binding var audioDraftURLs: [URL]
     /// Conversation follow-ups use speech as an input method only. They do not
     /// expose or persist a message-level audio file.
     var allowsAudioSaving = true
@@ -128,6 +158,7 @@ struct VoiceReflectionControls: View {
     /// transcript (说得乱没关系,AI 把表达理顺)。The model's own guard makes it
     /// a no-op after the first per-draft optimization.
     var onAutoPolish: (() async -> Void)? = nil
+    var onRecordingStart: () -> Void = {}
     var onVoiceTranscript: () -> Void = {}
     var onRecordingStateChange: (Bool) -> Void = { _ in }
     var onFailureMessageChange: (String?) -> Void = { _ in }
@@ -181,7 +212,11 @@ struct VoiceReflectionControls: View {
                         .disabled(isPolishing)
                     }
                 }
-                .disabled(recorder.state.phase == .requestingPermission)
+                .disabled(
+                    recorder.state.phase == .requestingPermission
+                        || recorder.state.phase == .stopping
+                        || recorder.isRecording
+                )
             }
         }
         .frame(maxWidth: style == .fullDraft ? .infinity : nil)
@@ -192,11 +227,16 @@ struct VoiceReflectionControls: View {
                 onVoiceTranscript()
             }
         }
-        .onChange(of: recorder.state.audioFileName) { _, name in
-            audioFileName = allowsAudioSaving ? name : nil
+        .onChange(of: recorder.draftAudioURLs) { _, urls in
+            audioDraftURLs = allowsAudioSaving ? urls : []
         }
         .onChange(of: recorder.state.failureMessage) { _, message in
             onFailureMessageChange(message)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active, recorder.isRecording {
+                recorder.stop()
+            }
         }
         .onChange(of: recorder.state.phase) { _, phase in
             onRecordingStateChange(
@@ -209,7 +249,7 @@ struct VoiceReflectionControls: View {
         .onAppear {
             if !allowsAudioSaving {
                 recorder.saveAudio = false
-                audioFileName = nil
+                audioDraftURLs = []
             }
         }
         .onDisappear {
@@ -305,9 +345,11 @@ struct VoiceReflectionControls: View {
     }
 
     private func beginRecording() {
+        onRecordingStart()
         if !allowsAudioSaving {
             recorder.saveAudio = false
-            audioFileName = nil
+            recorder.discardAudioDrafts()
+            audioDraftURLs = []
         }
         textBeforeRecording = editableText
         Task { await recorder.start() }
@@ -315,5 +357,68 @@ struct VoiceReflectionControls: View {
 
     private func haptic() {
         Haptics.recordingPress()
+    }
+}
+
+
+/// Compact playback surface for an audio file that belongs to a saved
+/// Reflection. Missing files degrade to text without interrupting the thread.
+struct ReflectionAudioAttachment: View {
+    let fileName: String
+    @State private var player: AVAudioPlayer?
+    @State private var isPlaying = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
+            HStack(spacing: ElsepageTheme.Spacing.small) {
+                Button {
+                    togglePlayback()
+                } label: {
+                    Label(isPlaying ? "停止" : "播放录音", systemImage: isPlaying ? "stop.fill" : "play.fill")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .disabled(errorMessage != nil)
+
+                Text("原始录音")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onDisappear {
+            player?.stop()
+            player = nil
+            isPlaying = false
+        }
+    }
+
+    private func togglePlayback() {
+        if isPlaying {
+            player?.stop()
+            player = nil
+            isPlaying = false
+            return
+        }
+        do {
+            let url = try AudioFileStore.live().url(for: fileName)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                errorMessage = "录音文件暂不可用。"
+                return
+            }
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.prepareToPlay()
+            player.play()
+            self.player = player
+            isPlaying = true
+            errorMessage = nil
+        } catch {
+            errorMessage = "录音暂时无法播放。"
+        }
     }
 }
