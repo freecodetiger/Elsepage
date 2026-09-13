@@ -710,14 +710,21 @@ final class FitTextView: UITextView {
         } else {
             let measuredWidth = CGFloat(widthBucket * 8)
             height = TextMeasureCache.shared.value(for: key) {
-                let rect = Perf.shared.timed(.textMeasure) {
-                    attributedText.boundingRect(
-                        with: CGSize(width: measuredWidth, height: .greatestFiniteMagnitude),
-                        options: [.usesLineFragmentOrigin, .usesFontLeading],
-                        context: nil
+                Perf.shared.timed(.textMeasure) {
+                    // `boundingRect` does not account for inline NSTextAttachment
+                    // geometry reliably. Measure through TextKit so avatar
+                    // attachments and authored prefixes cannot clip the tail.
+                    let storage = NSTextStorage(attributedString: attributedText)
+                    let manager = NSLayoutManager()
+                    let container = NSTextContainer(
+                        size: CGSize(width: measuredWidth, height: .greatestFiniteMagnitude)
                     )
+                    container.lineFragmentPadding = 0
+                    storage.addLayoutManager(manager)
+                    manager.addTextContainer(container)
+                    manager.ensureLayout(for: container)
+                    return ceil(manager.usedRect(for: container).height) + 1
                 }
-                return ceil(rect.height) + 1
             }
             lastMeasureKey = key
             lastMeasuredHeight = height
