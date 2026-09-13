@@ -13,7 +13,15 @@
 - [ ] 旧表与新表内容一致
 - [ ] 清除所有本地数据后 `textAnnotations`、`annotationNotes` 和旧表均为空
 
-## 2. Highlight
+## 2. Range 适配
+
+- [ ] 选中一段文字后，新 Highlight 使用真实 start/end
+- [ ] 同一选区的两次操作合并到同一个 TextAnnotation
+- [ ] 两个真实部分交叉的 Highlight 会被拒绝
+- [ ] 两个真实不相交但文字相同的高亮可以分别创建
+- [ ] JS range 读取失败时仍可完成选区操作并回退到保守判断
+
+## 3. Highlight
 
 - [ ] 高亮只提供换色和删除
 - [ ] 高亮菜单不再出现笔记入口
@@ -21,7 +29,7 @@
 - [ ] 部分交叉的高亮被拒绝并出现温柔提示
 - [ ] 删除高亮不会删除同 Range 的 NoteEntry
 
-## 3. Note
+## 4. Note
 
 - [ ] 同一 Range 可以追加多条 NoteEntry
 - [ ] 多条 NoteEntry 只显示一次 underline
@@ -30,7 +38,7 @@
 - [ ] 删除一条 NoteEntry 不影响 Highlight 和其他 NoteEntry
 - [ ] 不同 Range 的 Note 可以部分交叉且保持不同对象
 
-## 4. 重叠交互
+## 5. 重叠交互
 
 - [ ] 同一 Range 有 Highlight 和 Note 时，点击出现“高亮 / 笔记”选择器
 - [ ] 选择“高亮”进入换色/删除菜单
@@ -38,7 +46,7 @@
 - [ ] 无冲突区域不显示选择器
 - [ ] 旧数据冲突仍可通过 selector 打开目标对象
 
-## 5. 兼容
+## 6. 兼容
 
 - [ ] Reader Help 保存 Note 时追加 NoteEntry
 - [ ] Reflection Citation 跳回原文正常

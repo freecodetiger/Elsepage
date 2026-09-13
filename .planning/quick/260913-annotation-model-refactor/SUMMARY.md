@@ -18,11 +18,9 @@
 - `swift test`：387 tests 全绿。
 - TextAnnotation roundtrip、迁移和交叉高亮测试通过。
 - App Reader 文件纯语法解析通过。
+- 已增加本地 Readium JS range bridge，读取原生 Range 的 start/end progression。
+- 精确范围存在时使用严格区间相交，失败才回退 heuristic。
 - Package.resolved 已恢复。
-
-## 已知残余
-
-- Readium selection 当前只提供单一 Locator；新标注暂以同一 locator 作为 start/end，真实范围编辑仍需后续补充 end locator。
 
 ## 待用户验收
 

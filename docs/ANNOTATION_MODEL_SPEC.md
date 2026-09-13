@@ -566,15 +566,15 @@ Highlighter 保持纯粹；Note 不再依附 Highlight；Range 成为唯一且�
 - App Reader 文件纯语法解析通过。
 
 
+
 ---
 
-## 13. 已知残余
+## 13. Readium Range 适配
 
-- v28 已存储独立的 startLocator/endLocator，但当前 Readium selection 回调仍只提供单一 Locator。
-- 新建高亮和笔记暂时使用同一个 selection locator 作为 start/end。
-- 因此：
-  - 相同 canonical Locator 会稳定合并；
-  - 不同 canonical Locator 会保持不同对象；
-  - 真正的“部分交叉”判断仍依赖 progression + 文本包含的保守 heuristic。
-- 旧数据的 endLocator 同样回填为 startLocator。
-- 要完全满足任意 start/end 的范围模型，需要在 Readium selection 层补充真正的 end locator 或稳定 range key；这不阻塞当前句子级高亮/笔记，但需要在后续范围编辑能力前闭环。
+已在 App 本地通过 Readium 公开的 `evaluateJavaScript` 读取浏览器原生 `Range`，计算 selection 的 start/end progression，并生成真实 `AnnotationRange`。
+
+- 不修改 Readium dependency 或 DerivedData。
+- 读取失败时回退到单 Locator 的保守模式。
+- 新 Highlight / Note 使用精确 start/end。
+- 两层都有精确 progression 时，范围相交使用严格区间判断。
+- Readium selection 仍是单 Locator 的公开 Swift API，但 App 通过 JS bridge 补齐 range。
