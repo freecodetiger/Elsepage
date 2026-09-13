@@ -41,7 +41,7 @@ enum ElsepageTheme {
         static let quick = Animation.easeInOut(duration: 0.18)
 
         /// One-off key-moment animation (PRD §10.3: 阅读完成 / Reflection 完成 /
-        /// 思想沉淀 / Memory 更新 / Streak 延续 / Achievement / 引用回跳). Always
+        /// 看法沉淀 / Memory 更新 / Streak 延续 / Achievement / 引用回跳). Always
         /// brief and quiet; under Reduce Motion it is suppressed entirely
         /// (nil = no animation). Reading content itself never animates (P1).
         static func moment(_ reduceMotion: Bool) -> Animation? {

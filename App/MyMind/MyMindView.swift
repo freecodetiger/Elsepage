@@ -54,7 +54,7 @@ struct MyMindView: View {
         NavigationStack {
             stateView
                 .background(Color.elsepageBackground)
-                // 思想沉淀 (PRD §10.3): the first memories forming (and the empty state
+                // 看法沉淀 (PRD §10.3): the first memories forming (and the empty state
                 // handing over to them) land as a quiet cross-fade.
                 .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.memories.isEmpty)
                 .navigationTitle("我的")
@@ -391,7 +391,7 @@ struct MyMindView: View {
         )
     }
 
-    /// Memories · ElsePage 记住的我(brain.md §14/§17):扁平列表 + 来源性质
+    /// AI 记住的我(brain.md §14/§17):扁平列表 + 来源性质
     /// 与置信度展示;已失效(不准确/忘记)作为审计痕迹保留。Phase 19 起读
     /// brain store——投影形成的记忆即刻可见。
     private var memoriesSection: some View {
