@@ -653,6 +653,7 @@ final class FitTextView: UITextView {
     private var lastMeasuredWidth: CGFloat = -1
     private var lastMeasureKey: TextMeasureCache.Key?
     private var lastMeasuredHeight: CGFloat?
+    private let measurementTextView = UITextView()
     let perfID = UUID().uuidString.prefix(8)
     private var selectionTouchAt: TimeInterval?
 
@@ -711,19 +712,19 @@ final class FitTextView: UITextView {
             let measuredWidth = CGFloat(widthBucket * 8)
             height = TextMeasureCache.shared.value(for: key) {
                 Perf.shared.timed(.textMeasure) {
-                    // `boundingRect` does not account for inline NSTextAttachment
-                    // geometry reliably. Measure through TextKit so avatar
-                    // attachments and authored prefixes cannot clip the tail.
-                    let storage = NSTextStorage(attributedString: attributedText)
-                    let manager = NSLayoutManager()
-                    let container = NSTextContainer(
-                        size: CGSize(width: measuredWidth, height: .greatestFiniteMagnitude)
+                    // Use the same UIKit layout path as the visible text view.
+                    // This accounts for plain text, Markdown paragraphs and
+                    // inline avatar attachments without under-measuring the tail.
+                    measurementTextView.isEditable = false
+                    measurementTextView.isSelectable = false
+                    measurementTextView.isScrollEnabled = false
+                    measurementTextView.textContainerInset = .zero
+                    measurementTextView.textContainer.lineFragmentPadding = 0
+                    measurementTextView.attributedText = attributedText
+                    let size = measurementTextView.sizeThatFits(
+                        CGSize(width: measuredWidth, height: .greatestFiniteMagnitude)
                     )
-                    container.lineFragmentPadding = 0
-                    storage.addLayoutManager(manager)
-                    manager.addTextContainer(container)
-                    manager.ensureLayout(for: container)
-                    return ceil(manager.usedRect(for: container).height) + 1
+                    return ceil(size.height) + 2
                 }
             }
             lastMeasureKey = key
