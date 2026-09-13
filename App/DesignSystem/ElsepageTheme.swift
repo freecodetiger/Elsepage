@@ -1,4 +1,5 @@
 import AppInfrastructure
+import Foundation
 import SwiftUI
 
 enum ElsepageTheme {
@@ -50,6 +51,7 @@ enum ElsepageTheme {
     }
 }
 
+
 extension AnyTransition {
     /// The matching quiet transition for `ElsepageTheme.Motion.moment`; under
     /// Reduce Motion the swap is instant.
@@ -68,6 +70,10 @@ extension ShapeStyle where Self == Color {
 
     static var elsepageSurface: Color {
         color(from: ElsepagePalette.surface)
+    }
+
+    static var elsepageSurfaceSecondary: Color {
+        color(from: ElsepagePalette.surfaceSecondary)
     }
 
     static var elsepageBorder: Color {

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppInfrastructure
 import UIKit
 
 /// Main-actor cache for the expensive part of a read-only text view's intrinsic
@@ -689,7 +690,7 @@ extension View {
                 if !text.hasSuffix("\n") { text += "\n" }
                 let provenance: String
                 if let date {
-                    provenance = "—— \(authorLabel) · \(date.formatted(date: .abbreviated, time: .shortened))"
+                    provenance = "—— \(authorLabel) · \(ElsepageDateFormat.dateTime(date))"
                 } else {
                     provenance = "—— \(authorLabel)"
                 }

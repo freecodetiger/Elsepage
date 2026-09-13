@@ -36,6 +36,7 @@ final class AccessibilitySupportTests: XCTestCase {
             for (tokenName, token) in [
                 ("background", ElsepagePalette.background),
                 ("surface", ElsepagePalette.surface),
+                ("surfaceSecondary", ElsepagePalette.surfaceSecondary),
                 ("border", ElsepagePalette.border),
                 ("contentPrimary", ElsepagePalette.contentPrimary),
                 ("contentSecondary", ElsepagePalette.contentSecondary),
@@ -166,6 +167,27 @@ final class AccessibilitySupportTests: XCTestCase {
 
         let emptyAuthor = LibraryBookAccessibility.label(title: "新地", author: "", statsLine: nil, progress: 0)
         XCTAssertEqual(emptyAuthor, "新地，未知作者，阅读进度 0%")
+    }
+
+    // MARK: - Chinese-first date formatting
+
+    func testChineseDateFormatsNeverUseEnglishMonthNames() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 14,
+            hour: 23,
+            minute: 10
+        )))
+
+        XCTAssertEqual(ElsepageDateFormat.monthTitle(date), "2026年9月")
+        XCTAssertEqual(ElsepageDateFormat.shortDate(date), "9月14日")
+        XCTAssertEqual(ElsepageDateFormat.dateTime(date), "9月14日 23:10")
+        XCTAssertEqual(ElsepageDateFormat.yearMonthDay(date), "2026年9月14日")
+        XCTAssertFalse(ElsepageDateFormat.monthTitle(date).contains("September"))
+        XCTAssertFalse(ElsepageDateFormat.monthTitle(date).contains("Sep"))
     }
 
     // MARK: - A11Y-01: library grid adapts at accessibility sizes

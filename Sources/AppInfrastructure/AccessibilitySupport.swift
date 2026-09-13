@@ -72,37 +72,43 @@ public enum ElsepagePalette {
 
     /// Page background.
     public static let background = ThemePair(
-        light: PaletteRGB(red: 0.980392157, green: 0.980392157, blue: 0.980392157),
+        light: PaletteRGB(red: 0.949019608, green: 0.949019608, blue: 0.949019608),
         dark: PaletteRGB(red: 0.043137255, green: 0.043137255, blue: 0.043137255)
     )
 
     /// Card, form and navigation surface.
     public static let surface = ThemePair(
         light: PaletteRGB(red: 1, green: 1, blue: 1),
-        dark: PaletteRGB(red: 0.082352941, green: 0.082352941, blue: 0.082352941)
+        dark: PaletteRGB(red: 0.094117647, green: 0.094117647, blue: 0.094117647)
+    )
+
+    /// Secondary card and response surfaces nested inside the primary surface.
+    public static let surfaceSecondary = ThemePair(
+        light: PaletteRGB(red: 0.968627451, green: 0.968627451, blue: 0.968627451),
+        dark: PaletteRGB(red: 0.133333333, green: 0.133333333, blue: 0.133333333)
     )
 
     /// Hairlines and outlines.
     public static let border = ThemePair(
-        light: PaletteRGB(red: 0.898039216, green: 0.898039216, blue: 0.898039216),
-        dark: PaletteRGB(red: 0.180392157, green: 0.180392157, blue: 0.180392157)
+        light: PaletteRGB(red: 0.831372549, green: 0.831372549, blue: 0.831372549),
+        dark: PaletteRGB(red: 0.203921569, green: 0.203921569, blue: 0.203921569)
     )
 
     /// Primary reading and UI text.
     public static let contentPrimary = ThemePair(
         light: PaletteRGB(red: 0.066666667, green: 0.066666667, blue: 0.066666667),
-        dark: PaletteRGB(red: 0.960784314, green: 0.960784314, blue: 0.960784314)
+        dark: PaletteRGB(red: 0.956862745, green: 0.956862745, blue: 0.956862745)
     )
 
     /// Secondary text and metadata.
     public static let contentSecondary = ThemePair(
         light: PaletteRGB(red: 0.4, green: 0.4, blue: 0.4),
-        dark: PaletteRGB(red: 0.639215686, green: 0.639215686, blue: 0.639215686)
+        dark: PaletteRGB(red: 0.650980392, green: 0.650980392, blue: 0.650980392)
     )
 
     /// Tertiary text and placeholders.
     public static let contentTertiary = ThemePair(
-        light: PaletteRGB(red: 0.423529412, green: 0.423529412, blue: 0.423529412),
+        light: PaletteRGB(red: 0.431372549, green: 0.431372549, blue: 0.431372549),
         dark: PaletteRGB(red: 0.541176471, green: 0.541176471, blue: 0.541176471)
     )
 

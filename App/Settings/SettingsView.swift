@@ -1,4 +1,5 @@
 import ContextRouting
+import AppInfrastructure
 import ModelProviders
 import SwiftUI
 
@@ -355,7 +356,7 @@ struct DiagnosticsView: View {
     }
 
     private static func timeText(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .standard)
+        ElsepageDateFormat.dateTime(date)
     }
 
     private static func fallbackText(_ trace: ContextPlanTrace) -> String {
@@ -427,7 +428,7 @@ struct DataSettingsView: View {
                     }
                 }
             } footer: {
-                Text("导出包含你的书籍、阅读位置、高亮、笔记、反思、长期记忆、「AI 眼中的我」档案与已保存录音，不含 Provider 配置或 API Key。")
+                Text("导出包含你的书籍、阅读位置、高亮、笔记、反思、长期记忆、「AI 眼中的我」与已保存录音，不含 Provider 配置或 API Key。")
             }
 
             Section {

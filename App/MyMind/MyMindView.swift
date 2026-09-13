@@ -1,4 +1,5 @@
 import AchievementCore
+import AppInfrastructure
 import BrainCore
 import ContextEngineering
 import LibraryCore
@@ -368,7 +369,7 @@ struct MyMindView: View {
             }
             Spacer(minLength: 8)
             if let record = achievements.unlocked.first(where: { $0.id == achievement.id }) {
-                Text(record.unlockedAt, format: .dateTime.month().day())
+                Text(ElsepageDateFormat.shortDate(record.unlockedAt))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -563,7 +564,7 @@ private struct MemoryRow: View {
                     .font(.caption)
                     .foregroundStyle(Color.elsepageInteractive)
             }
-            Text(memory.updatedAt, format: .dateTime.month().day().hour().minute())
+            Text(ElsepageDateFormat.dateTime(memory.updatedAt))
                 .font(.caption)
                 .foregroundStyle(Color.elsepageTextSecondary)
             Spacer(minLength: 4)
@@ -679,7 +680,7 @@ private struct BrainItemRow: View {
                         .padding(.vertical, 3)
                         .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
                         .foregroundStyle(Color.elsepageInteractive)
-                    Text(updatedAt, format: .dateTime.month().day())
+                    Text(ElsepageDateFormat.shortDate(updatedAt))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer(minLength: 4)
@@ -739,7 +740,7 @@ private struct BrainThoughtDetailView: View {
                         .padding(.vertical, 3)
                         .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
                         .foregroundStyle(Color.elsepageInteractive)
-                    Text("更新于 \(thought.updatedAt, format: .dateTime.year().month().day())")
+                    Text("更新于 \(ElsepageDateFormat.yearMonthDay(thought.updatedAt))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -820,7 +821,7 @@ private struct BrainRevisionSection: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(3)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(revision.createdAt, format: .dateTime.year().month())
+                        Text(ElsepageDateFormat.yearMonth(revision.createdAt))
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -872,7 +873,7 @@ private struct BrainQuestionDetailView: View {
                         .padding(.vertical, 3)
                         .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
                         .foregroundStyle(Color.elsepageInteractive)
-                    Text("更新于 \(question.updatedAt, format: .dateTime.year().month().day())")
+                    Text("更新于 \(ElsepageDateFormat.yearMonthDay(question.updatedAt))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -1126,7 +1127,7 @@ private struct BrainItemEditorSheet<Stage: Hashable>: View {
 
 
 /// 继续想想(形态 C,phase 19):用户文字存为新反思,Agent 带着置顶的
-/// brain item 流式回应。原文永远是用户的话(F9);回复沉淀在想法档案里。
+/// brain item 流式回应。原文永远是用户的话(F9);回复沉淀在想法里。
 private struct BrainDiscussionSheet: View {
     let item: BrainItem
     let runner: (String) async throws -> AsyncStream<ReaderAgentEvent>
@@ -1158,7 +1159,7 @@ private struct BrainDiscussionSheet: View {
                         }
                     }
                     if finished {
-                        Label("已存入想法档案", systemImage: "checkmark.circle")
+                        Label("已存入想法", systemImage: "checkmark.circle")
                             .font(.subheadline)
                             .foregroundStyle(Color.elsepageInteractive)
                     }
@@ -1212,7 +1213,7 @@ private struct BrainDiscussionSheet: View {
                     case .completed: finished = true; isReplying = false
                     case .failed(let failure): errorMessage = String(describing: failure); isReplying = false
                     case .cancelled: isReplying = false
-                    case .started, .contextPrepared, .citationsValidated, .contextDisclosed: break
+                    case .started, .contextPrepared, .citationsValidated, .contextDisclosed, .summaryGenerated: break
                     }
                 }
             } catch {

@@ -511,12 +511,12 @@ saveIfAbsent(summary) -> ReflectionSummary
 | Token | Light | Dark |
 |---|---|---|
 | page background | `#F2F2F2` | `#0B0B0B` |
-| primary surface | `#FFFFFF` | `#181817` |
-| secondary surface | `#F7F7F7` | `#222220` |
+| primary surface | `#FFFFFF` | `#181818` |
+| secondary surface | `#F7F7F7` | `#222222` |
 | border | `#D4D4D4` | `#343434` |
-| content primary | `#111111` | `#F4F4EF` |
-| content secondary | `#666666` | `#A6A6A0` |
-| content tertiary | `#828282` | `#777772` |
+| content primary | `#111111` | `#F4F4F4` |
+| content secondary | `#666666` | `#A6A6A6` |
+| content tertiary | `#6E6E6E` | `#8A8A8A` |
 
 要求：
 

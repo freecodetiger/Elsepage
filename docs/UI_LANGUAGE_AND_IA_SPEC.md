@@ -180,6 +180,7 @@
 |---|---|
 | background | 页面底色 |
 | surface | 卡片、表单、导航表面 |
+| surfaceSecondary | 卡片内的次级内容表面 |
 | border | 分隔线和轮廓 |
 | contentPrimary | 主文本 |
 | contentSecondary | 次级文本 |
@@ -197,10 +198,11 @@
 | Token | Light | Dark |
 |---|---|---|
 | background | `#F2F2F2` | `#0B0B0B` |
-| surface | `#FFFFFF` | `#181817` |
+| surface | `#FFFFFF` | `#181818` |
+| surfaceSecondary | `#F7F7F7` | `#222222` |
 | border | `#D4D4D4` | `#343434` |
-| contentPrimary | `#111111` | `#F4F4EF` |
-| contentSecondary | `#666666` | `#A6A6A0` |
+| contentPrimary | `#111111` | `#F4F4F4` |
+| contentSecondary | `#666666` | `#A6A6A6` |
 | brand | `#111111` | `#F5F5F5` |
 | interactive | `#111111` | `#F5F5F5` |
 | onInteractive | `#FFFFFF` | `#111111` |

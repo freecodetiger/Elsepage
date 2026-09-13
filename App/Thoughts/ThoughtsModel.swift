@@ -32,6 +32,7 @@ final class ThoughtsModel {
     private(set) var replyingTo: ReflectionID?
     /// Latest stored trace per reflection, used for archive disclosure.
     private(set) var tracesByReflection: [ReflectionID: ContextPlanTrace] = [:]
+    private var isBackfillingReplies = false
     var errorMessage: String?
 
     init(
@@ -77,6 +78,7 @@ final class ThoughtsModel {
             }
             journalEntries = try await journalService.recentEntries()
             errorMessage = nil
+            scheduleMissingReplyBackfill()
         } catch is CancellationError {
             return
         } catch {
@@ -84,16 +86,47 @@ final class ThoughtsModel {
         }
     }
 
-    func requestAgentReply(for reflection: Reflection) async {
-        guard replyingTo == nil else { return }
+    private enum AutomaticReplyOutcome: Equatable {
+        case completed
+        case providerUnavailable
+        case failed
+    }
+
+    private func scheduleMissingReplyBackfill() {
+        guard !isBackfillingReplies else { return }
+        let missing = entries.filter { entry in
+            entry.derivedAgentResponse == nil || entry.summary == nil
+        }
+        guard !missing.isEmpty else { return }
+
+        isBackfillingReplies = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isBackfillingReplies = false }
+
+            for entry in missing {
+                guard !Task.isCancelled else { return }
+                let outcome = await self.ensureReplyAndSummary(for: entry.reflection)
+                if outcome == .providerUnavailable { return }
+            }
+        }
+    }
+
+    private func ensureReplyAndSummary(for reflection: Reflection) async -> AutomaticReplyOutcome {
+        guard replyingTo == nil else { return .failed }
         replyingTo = reflection.id
         defer { replyingTo = nil }
+
+        var outcome: AutomaticReplyOutcome = .failed
         for await event in readerAgent.respond(to: reflection.id) {
             switch event {
-            case .completed:
+            case .completed, .summaryGenerated:
+                outcome = .completed
                 await reload()
-            case .failed(let failure):
-                errorMessage = Self.message(for: failure)
+            case .failed(.providerNotConfigured):
+                return .providerUnavailable
+            case .failed:
+                return .failed
             case .contextPrepared(let connection):
                 if let connection, let achievements,
                    let connected = try? await reflections.reflection(id: connection.sourceReflectionID) {
@@ -107,6 +140,7 @@ final class ThoughtsModel {
                 break
             }
         }
+        return outcome
     }
 
     func makeConversation(for reflection: Reflection) -> ReflectionConversationModel {

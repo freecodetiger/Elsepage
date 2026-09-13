@@ -2,6 +2,7 @@ name: ReadLoop
 options:
   deploymentTarget:
     iOS: "18.0"
+  developmentLanguage: zh-Hans
   groupSortPosition: top
 settings:
   base:
