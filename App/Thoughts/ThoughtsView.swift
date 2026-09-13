@@ -42,7 +42,7 @@ struct ThoughtsView: View {
                 }
             }
             .background(Color.elsepageBackground)
-            .navigationTitle("思想")
+            .navigationTitle("想法")
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $searchText, prompt: "搜索想法、书名或回应")
             .toolbar {
@@ -129,7 +129,7 @@ struct ThoughtsView: View {
                             ContentUnavailableView(
                                 "日志还没有整理出条目",
                                 systemImage: "book.closed",
-                                description: Text("每次反思后，Agent 整理的想法、提问与记忆变化会安静地沉淀在这里。")
+                                description: Text("每次阅读后留下的记录、看法、问题和记忆变化，会安静地整理在这里。")
                             )
                             .frame(maxWidth: .infinity)
                             .padding(.top, ElsepageTheme.Spacing.xLarge)
@@ -408,7 +408,7 @@ private struct ThoughtEntryCard: View {
         } else {
             Divider()
             Button(action: requestReply) {
-                Label(isReplying ? "正在回应…" : "请 Agent 回应", systemImage: "sparkles")
+                Label(isReplying ? "正在回应…" : "请 AI 回应", systemImage: "sparkles")
             }
             .buttonStyle(.bordered)
             .disabled(isReplying)
@@ -422,7 +422,7 @@ private struct ThoughtEntryCard: View {
                     .foregroundStyle(.secondary)
                     .copyMessageContextMenu(
                         content: message.content,
-                        authorLabel: message.author == .user ? "我" : "Agent",
+                        authorLabel: message.author == .user ? "我" : "AI",
                         date: message.createdAt
                     )
                 if message.author == .agent {

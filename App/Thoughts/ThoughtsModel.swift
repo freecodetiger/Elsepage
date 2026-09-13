@@ -135,20 +135,20 @@ final class ThoughtsModel {
 
     private static func message(for failure: ReaderAgentFailure) -> String {
         switch failure {
-        case .missingReflection: "找不到这条 Reflection。"
-        case .providerNotConfigured: "请先配置并测试 AI Provider。"
-        case .emptyResponse: "Provider 没有返回可显示的内容。"
+        case .missingReflection: "找不到这条阅读记录。"
+        case .providerNotConfigured: "请先配置并测试 AI 服务。"
+        case .emptyResponse: "AI 服务没有返回可显示的内容。"
         case .emptyUserMessage: "请先写下想继续说的内容。"
-        case .persistence: "Agent 回复无法保存到本机。"
+        case .persistence: "AI 回应无法保存到本机。"
         case .runtime(let failure):
             switch failure {
-            case .authentication: "API Key 无效或没有访问权限。"
-            case .rateLimited: "Provider 请求过于频繁，请稍后再试。"
-            case .providerUnavailable: "Provider 暂时不可用。"
+            case .authentication: "API 密钥无效或没有访问权限。"
+            case .rateLimited: "AI 服务请求过于频繁，请稍后再试。"
+            case .providerUnavailable: "AI 服务暂时不可用。"
             case .network: "网络连接失败。"
-            case .malformedProviderResponse: "Provider 返回了无法识别的响应。"
-            case .budgetExceeded: "本次 Agent 请求超出时间或调用预算。"
-            case .unknown: "Agent 暂时无法完成回应。"
+            case .malformedProviderResponse: "AI 服务返回了无法识别的响应。"
+            case .budgetExceeded: "本次 AI 请求超出时间或调用预算。"
+            case .unknown: "页外暂时无法完成回应。"
             }
         }
     }

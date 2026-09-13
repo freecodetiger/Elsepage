@@ -54,7 +54,7 @@ struct MyMindView: View {
                 // 思想沉淀 (PRD §10.3): the first memories forming (and the empty state
                 // handing over to them) land as a quiet cross-fade.
                 .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.memories.isEmpty)
-                .navigationTitle("我的头脑")
+                .navigationTitle("我的")
                 .navigationBarTitleDisplayMode(.large)
                 .task { await model.reload() }
                 .toolbar { toolbarContent }
@@ -79,7 +79,7 @@ struct MyMindView: View {
             Button("清除全部记忆", role: .destructive) { Task { await model.deleteAllMemories() } }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("这会删除 Agent 记住的每一条内容，且无法撤销。")
+            Text("这会删除 AI 记住的每一条内容，且无法撤销。")
         }
     }
 
@@ -380,7 +380,7 @@ struct MyMindView: View {
     private var memoriesSection: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Memories · ElsePage 记住的我")
+                Text("AI 记住的我")
                     .font(.system(.headline, design: .serif, weight: .semibold))
                 Spacer()
                 Text("\(model.activeMemories.count) 条")
@@ -1117,7 +1117,7 @@ private struct BrainDiscussionSheet: View {
                     }
                     if !reply.isEmpty || isReplying {
                         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                            Text("Agent 的回应")
+                            Text("页外的回应")
                                 .font(.system(.headline, design: .serif, weight: .semibold))
                             Text(reply.isEmpty ? "…" : reply)
                                 .font(.body)

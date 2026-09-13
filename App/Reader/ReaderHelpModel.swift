@@ -207,7 +207,7 @@ final class ReaderHelpModel {
             case .user:
                 return content == Self.defaultQuestion ? nil : "问：\(content)"
             case .agent:
-                return "Agent：\(Self.removingCitationMarkers(from: content))"
+                return "AI：\(Self.removingCitationMarkers(from: content))"
             }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n\n")
@@ -350,7 +350,7 @@ final class ReaderHelpModel {
         case .questionTooLong:
             "问题太长，请压缩到 500 字以内。"
         case .runtime(.authentication):
-            "模型认证失败，请检查 Provider 设置。"
+            "模型认证失败，请检查 AI 服务设置。"
         case .runtime(.rateLimited):
             "请求过于频繁，请稍后再试。"
         case .runtime(.network):

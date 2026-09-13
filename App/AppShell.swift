@@ -29,13 +29,13 @@ struct AppShell: View {
             ThoughtsView(model: thoughts, settings: settings) { book, locator in
                 readerDestination = .init(book: book, locator: locator)
             }
-            .tabItem { Label("思想", systemImage: "brain.head.profile") }
+            .tabItem { Label("想法", systemImage: "lightbulb") }
             .tag(AppTab.mind)
 
             MyMindView(model: myMind, settings: settings, achievements: achievements) { book, locator in
                 readerDestination = .init(book: book, locator: locator)
             }
-            .tabItem { Label("我的头脑", systemImage: "person.crop.rectangle") }
+            .tabItem { Label("我的", systemImage: "person.crop.circle") }
             .tag(AppTab.myMind)
         }
         .tint(.elsepageInteractive)

@@ -1268,7 +1268,7 @@ struct ReflectionConversationView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    userTurn(title: "你的 Reflection", text: model.reflection.displayText, canDelete: model.canDeleteRoot)
+                    userTurn(title: "你的想法", text: model.reflection.displayText, canDelete: model.canDeleteRoot)
                     if let audioFileName = model.audioFileName {
                         ReflectionAudioAttachment(
                             fileName: audioFileName,
@@ -1280,7 +1280,7 @@ struct ReflectionConversationView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                     HStack {
-                        Text(message.author == .user ? "你继续说" : "Agent 回应")
+                        Text(message.author == .user ? "你继续说" : "AI 回应")
                             .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         Spacer()
                         if message.author == .user, message.id == model.latestUserMessageID {
@@ -1289,7 +1289,7 @@ struct ReflectionConversationView: View {
                     }
                     .copyMessageContextMenu(
                         content: message.content,
-                        authorLabel: message.author == .user ? "我" : "Agent",
+                        authorLabel: message.author == .user ? "我" : "AI",
                         date: message.createdAt
                     )
                     if message.author == .agent {
@@ -1344,7 +1344,7 @@ struct ReflectionConversationView: View {
             } else if model.isResponding {
                 HStack(spacing: ElsepageTheme.Spacing.small) {
                     ProgressView().controlSize(.small)
-                    Text("Agent 正在理解你的表达…")
+                    Text("页外正在理解你的表达…")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -1402,7 +1402,7 @@ struct ReflectionConversationView: View {
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .task { await model.load() }
-        .alert("删除这次 Reflection？", isPresented: $confirmsDeletion) {
+        .alert("删除这次记录？", isPresented: $confirmsDeletion) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) {
                 Task {
@@ -1411,8 +1411,8 @@ struct ReflectionConversationView: View {
             }
         } message: {
             Text(model.canDeleteRoot
-                 ? "这会删除整个会话及其中的 Agent 回应，且无法撤销。"
-                 : "这会删除最新一条 Reflection，以及它之后的 Agent 回应。")
+                 ? "这会删除整个会话及其中的 AI 回应，且无法撤销。"
+                 : "这会删除最新一条阅读记录，以及它之后的 AI 回应。")
         }
         .alert("暂时无法完成操作", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -1429,7 +1429,7 @@ struct ReflectionConversationView: View {
             }
             .copyMessageContextMenu(
                 content: text,
-                authorLabel: "我的 Reflection",
+                authorLabel: "我的阅读记录",
                 date: model.reflection.createdAt
             )
             SelectableTextBody(content: text)
@@ -1442,7 +1442,7 @@ struct ReflectionConversationView: View {
         }
         .elsepageTapTarget()
         .disabled(model.isResponding || isVoiceInputActive)
-        .accessibilityLabel("删除最新一条 Reflection")
+        .accessibilityLabel("删除最新一条阅读记录")
     }
 
     @ViewBuilder private func provenance(for message: ReflectionMessage) -> some View {
@@ -1568,7 +1568,7 @@ private struct ReflectionComposer: View {
 
             ReflectionTextEditor(
                 text: $model.followUpText,
-                placeholder: isVoiceInputActive ? "正在等待你的表达…" : "继续写下你的 Reflection…",
+                placeholder: isVoiceInputActive ? "正在等待你的表达…" : "继续写下你的想法…",
                 isEditable: !isVoiceInputActive,
                 minimumHeight: ReflectionComposerPolicy.minimumEditorHeight,
                 focus: $isFocused,

@@ -48,7 +48,7 @@ struct ReaderHelpSheet: View {
     private var header: some View {
         HStack(spacing: ElsepageTheme.Spacing.small) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("问 Agent")
+                Text("问 AI")
                     .font(.system(.headline, design: .serif))
                 if let chapter = model.chapterTitle {
                     Text(chapter)
@@ -147,7 +147,7 @@ struct ReaderHelpSheet: View {
             .background(Color.elsepageInteractive.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityHint("向 Agent 解释当前选中的文字")
+        .accessibilityHint("向 AI 解释当前选中的文字")
     }
 
     @ViewBuilder private var completedExtras: some View {
@@ -339,7 +339,7 @@ struct ReaderHelpSheet: View {
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Agent 回答")
+        .accessibilityLabel("AI 回答")
     }
 
     private func sourceTitle(for evidence: AgentResponseEvidence) -> String {

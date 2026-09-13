@@ -98,7 +98,7 @@ struct OnboardingView: View {
         case .configureAI:
             stepHeading(
                 title: "连上你自己的 AI",
-                caption: "填写你的 API Key，页外用它读你的书和想法。Key 只保存在本机，请求只发给你选择的服务商。"
+                caption: "填写你的 API 密钥，页外用它读你的书和想法。密钥只保存在本机，请求只发给你选择的服务商。"
             )
         case .firstRead:
             stepHeading(
@@ -156,7 +156,7 @@ struct OnboardingView: View {
             .pickerStyle(.menu)
 
             if provider.selectedPreset == .custom {
-                TextField("Base URL", text: $provider.baseURL)
+                TextField("接口地址", text: $provider.baseURL)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
@@ -164,14 +164,14 @@ struct OnboardingView: View {
             TextField("模型名称", text: $provider.modelID)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            SecureField(provider.hasSavedKey ? "API Key（已保存）" : "API Key", text: $provider.apiKey)
+            SecureField(provider.hasSavedKey ? "API 密钥（已保存）" : "API 密钥", text: $provider.apiKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .privacySensitive()
 
             providerFeedback
 
-            Text("没有 Key 也可以先跳过，纯本地阅读一样完整；之后随时能在设置中配置。")
+            Text("没有密钥也可以先跳过，纯本地阅读一样完整；之后随时能在设置中配置。")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }

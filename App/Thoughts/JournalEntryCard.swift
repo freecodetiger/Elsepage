@@ -242,7 +242,7 @@ struct JournalEntryCard: View {
                 }
             }
             .accessibilityLabel("想法：\(thought.thought)")
-            .accessibilityHint("轻点修改这条由 Agent 整理的想法")
+            .accessibilityHint("轻点修改这条由页外整理的想法")
 
             if thought.userEdited {
                 Text("已由你编辑")
