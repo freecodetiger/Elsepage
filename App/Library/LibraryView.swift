@@ -120,7 +120,8 @@ struct LibraryView: View {
         }
         .padding(.horizontal, ElsepageTheme.Spacing.medium)
         .padding(.vertical, ElsepageTheme.Spacing.small)
-        .background(ElsepageTheme.MaterialToken.chrome, in: Capsule())
+        .background(Color.elsepageSurface, in: Capsule())
+        .overlay(Capsule().stroke(Color.elsepageBorder))
         .padding(.bottom, ElsepageTheme.Spacing.small)
         .accessibilityElement(children: .combine)
     }

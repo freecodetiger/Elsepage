@@ -17,8 +17,8 @@ struct ElsepageIconButton: View {
             Image(systemName: systemName)
                 .font(.body.weight(.semibold))
                 .frame(width: side, height: side)
-                .background(ElsepageTheme.MaterialToken.control, in: Circle())
-                .overlay(Circle().stroke(.primary.opacity(0.06)))
+                .background(Color.elsepageSurface, in: Circle())
+                .overlay(Circle().stroke(Color.elsepageBorder))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

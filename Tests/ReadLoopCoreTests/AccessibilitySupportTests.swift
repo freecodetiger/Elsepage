@@ -28,6 +28,29 @@ final class AccessibilitySupportTests: XCTestCase {
         XCTAssertEqual(blended.blue, 0.5, accuracy: 0.0001)
     }
 
+    /// App chrome is intentionally neutral. Reader paper themes are excluded
+    /// because reading comfort may still use warm paper/sepia surfaces.
+    func testNeutralChromeTokensStayMonochromeInLightAndDark() {
+        for dark in [false, true] {
+            let scheme = dark ? "dark" : "light"
+            for (tokenName, token) in [
+                ("background", ElsepagePalette.background),
+                ("surface", ElsepagePalette.surface),
+                ("border", ElsepagePalette.border),
+                ("contentPrimary", ElsepagePalette.contentPrimary),
+                ("contentSecondary", ElsepagePalette.contentSecondary),
+                ("contentTertiary", ElsepagePalette.contentTertiary),
+                ("brand", ElsepagePalette.brand),
+                ("interactive", ElsepagePalette.interactive),
+                ("onInteractive", ElsepagePalette.onInteractive),
+            ] {
+                let color = token.resolve(dark: dark)
+                XCTAssertEqual(color.red, color.green, accuracy: 0.0001, "\(tokenName) red/green (\(scheme))")
+                XCTAssertEqual(color.green, color.blue, accuracy: 0.0001, "\(tokenName) green/blue (\(scheme))")
+            }
+        }
+    }
+
     // MARK: - A11Y-03: theme token pairs meet WCAG AA in light AND dark
 
     /// Reading text and interactive text must clear AA on every app surface.

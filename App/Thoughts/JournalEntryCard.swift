@@ -7,6 +7,12 @@ import SwiftUI
 /// The structured Journal card: reading context (duration/chapters), linked
 /// highlights, What I think, open Agent questions, citations that jump back to
 /// the source, and Memory-change snapshots.
+private struct JournalStatusItem: Identifiable {
+    let id: String
+    let title: String
+    let systemImage: String
+}
+
 struct JournalEntryCard: View {
     let entry: JournalEntry
     let openConversation: () -> Void
@@ -24,13 +30,15 @@ struct JournalEntryCard: View {
                 withAnimation(.snappy(duration: 0.24)) { isExpanded.toggle() }
             }) {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    metadata
                     Text(entry.reflection.originalText)
                         .font(.body)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.elsepageTextPrimary)
                         .multilineTextAlignment(.leading)
                         .lineLimit(isExpanded ? nil : 3)
-                    compactStatus
+                    metadata
+                    if !isExpanded, !statusItems.isEmpty {
+                        compactStatus
+                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -38,7 +46,7 @@ struct JournalEntryCard: View {
             // A11Y-02: the whole card reads as one stop (书名、时间、原话、状态)
             // with the expand/collapse state carried by the hint.
             .accessibilityElement(children: .combine)
-            .accessibilityHint(isExpanded ? "轻点收起日志" : "轻点展开完整日志")
+            .accessibilityHint(isExpanded ? "轻点收起档案" : "轻点展开完整档案")
 
             if isExpanded {
                 expandedContent
@@ -46,10 +54,10 @@ struct JournalEntryCard: View {
             }
         }
         .padding(ElsepageTheme.Spacing.medium)
-        .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(.primary.opacity(isExpanded ? 0.10 : 0.05))
+                .stroke(Color.elsepageBorder)
         }
         .sheet(item: $editingThought) { thought in
             JournalThoughtEditor(initialText: thought.thought) { newText in
@@ -68,91 +76,75 @@ struct JournalEntryCard: View {
                 .lineLimit(1)
             Text(entry.reflection.createdAt, format: .dateTime.month().day().hour().minute())
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.elsepageTextTertiary)
             Spacer(minLength: 4)
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.elsepageTextTertiary)
                 .accessibilityHidden(true)
         }
+    }
+
+    private var statusItems: [JournalStatusItem] {
+        var items: [JournalStatusItem] = []
+        if let duration = entry.sessionDuration {
+            items.append(JournalStatusItem(id: "duration", title: durationLabel(duration), systemImage: "clock"))
+        }
+        if !entry.chapters.isEmpty {
+            items.append(JournalStatusItem(id: "chapters", title: "\(entry.chapters.count) 章", systemImage: "list.bullet"))
+        }
+        if !entry.linkedHighlights.isEmpty {
+            items.append(JournalStatusItem(id: "highlights", title: "\(entry.linkedHighlights.count) 高亮", systemImage: "highlighter"))
+        }
+        if !entry.openQuestions.isEmpty {
+            items.append(JournalStatusItem(id: "questions", title: "有提问", systemImage: "questionmark.bubble"))
+        }
+        return Array(items.prefix(3))
     }
 
     private var compactStatus: some View {
         // A11Y-01: status capsules wrap when large type no longer fits a row.
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: ElsepageTheme.Spacing.medium) { statusContent }
-            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { statusContent }
+            HStack(spacing: ElsepageTheme.Spacing.medium) { statusRow }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { statusRow }
         }
         .font(.caption)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.elsepageTextSecondary)
     }
 
-    @ViewBuilder private var statusContent: some View {
-        if let duration = entry.sessionDuration {
-            Label(durationLabel(duration), systemImage: "clock")
+    private var statusRow: some View {
+        ForEach(statusItems) { item in
+            Label(item.title, systemImage: item.systemImage)
         }
-        if !entry.chapters.isEmpty {
-            Label("\(entry.chapters.count) 章", systemImage: "list.bullet")
-        }
-        if !entry.linkedHighlights.isEmpty {
-            Label("\(entry.linkedHighlights.count) 高亮", systemImage: "highlighter")
-        }
-        if !entry.openQuestions.isEmpty {
-            Label("有提问", systemImage: "questionmark.bubble")
-        }
+    }
+
+    private var hasReadingContext: Bool {
+        entry.session?.duration != nil
+            || !entry.chapters.isEmpty
+            || !entry.linkedHighlights.isEmpty
+            || !entry.citations.isEmpty
+            || !entry.memoryChanges.isEmpty
+            || entry.sourceLocator != nil
     }
 
     @ViewBuilder private var expandedContent: some View {
-        Button(action: openConversation) {
-            Label("打开会话", systemImage: "bubble.left.and.bubble.right")
-        }
-        .buttonStyle(.borderedProminent)
-        // A11Y-03: AA label on the accent fill in both color schemes.
-        .foregroundStyle(Color.elsepageOnInteractive)
-
-        if let session = entry.session, session.duration != nil {
-            Divider()
-            row(title: "本次阅读", systemImage: "clock", value: sessionLine(session))
-        }
-        if !entry.chapters.isEmpty {
-            Divider()
-            row(title: "覆盖章节", systemImage: "list.bullet", value: entry.chapters.compactMap(\.title).joined(separator: "、"))
-        }
-        if !entry.linkedHighlights.isEmpty {
-            Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Label("相关高亮", systemImage: "highlighter")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageInteractive)
-                ForEach(entry.linkedHighlights) { highlight in
-                    Button {
-                        openSource(entry.book, highlight.locator)
-                    } label: {
-                        Text(highlight.locator.textHighlight ?? "高亮位置")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.leading)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
         if !entry.whatIThink.isEmpty {
-            Divider()
             VStack(alignment: .leading, spacing: 6) {
-                Label("我想", systemImage: "brain.head.profile")
+                Label("我想", systemImage: "lightbulb")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageInteractive)
+                    .foregroundStyle(Color.elsepageTextSecondary)
                 ForEach(entry.whatIThink, id: \.id) { thought in
                     thoughtRow(thought)
                 }
             }
         }
+
         if !entry.questions.isEmpty {
-            Divider()
+            if !entry.whatIThink.isEmpty { Divider() }
             VStack(alignment: .leading, spacing: 6) {
                 Label("留下问题", systemImage: "questionmark.bubble")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageInteractive)
+                    .foregroundStyle(Color.elsepageTextSecondary)
                 ForEach(entry.questions) { question in
                     HStack(alignment: .top, spacing: 6) {
                         Text("· \(question.text)")
@@ -160,61 +152,116 @@ struct JournalEntryCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                         if question.status == .answered {
-                            Text("已回应").font(.caption2).foregroundStyle(.secondary)
+                            Text("已回应")
+                                .font(.caption2)
+                                .foregroundStyle(Color.elsepageTextSecondary)
                         }
                     }
                 }
             }
         }
-        if !entry.citations.isEmpty {
+
+        if !entry.whatIThink.isEmpty || !entry.questions.isEmpty {
             Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Label("引用", systemImage: "quote.opening")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageInteractive)
-                ForEach(entry.citations) { citation in
-                    Button {
-                        if let locator = citation.locator { openSource(entry.book, locator) }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let title = citation.title {
-                                Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-                            }
-                            if let excerpt = citation.excerpt {
-                                Text(excerpt)
+        }
+        Button(action: openConversation) {
+            Label("打开会话", systemImage: "bubble.left.and.bubble.right")
+        }
+        .buttonStyle(.bordered)
+
+        if hasReadingContext {
+            Divider()
+            readingContextDisclosure
+        }
+    }
+
+    private var readingContextDisclosure: some View {
+        DisclosureGroup("更多阅读脉络") {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+                if let session = entry.session, session.duration != nil {
+                    row(title: "本次阅读", systemImage: "clock", value: sessionLine(session))
+                }
+
+                if !entry.chapters.isEmpty {
+                    row(
+                        title: "覆盖章节",
+                        systemImage: "list.bullet",
+                        value: entry.chapters.compactMap(\.title).joined(separator: "、")
+                    )
+                }
+
+                if !entry.linkedHighlights.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("相关高亮", systemImage: "highlighter")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                        ForEach(entry.linkedHighlights) { highlight in
+                            Button {
+                                openSource(entry.book, highlight.locator)
+                            } label: {
+                                Text(highlight.locator.textHighlight ?? "高亮位置")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.leading)
-                                    .lineLimit(3)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(citation.locator == nil)
+                }
+
+                if !entry.citations.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("引用", systemImage: "quote.opening")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                        ForEach(entry.citations) { citation in
+                            Button {
+                                if let locator = citation.locator { openSource(entry.book, locator) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if let title = citation.title {
+                                        Text(title)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(Color.elsepageTextPrimary)
+                                    }
+                                    if let excerpt = citation.excerpt {
+                                        Text(excerpt)
+                                            .font(.subheadline)
+                                            .foregroundStyle(Color.elsepageTextSecondary)
+                                            .multilineTextAlignment(.leading)
+                                            .lineLimit(3)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(citation.locator == nil)
+                        }
+                    }
+                }
+
+                if !entry.memoryChanges.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("记住的改变", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                        ForEach(entry.memoryChanges, id: \.id) { change in
+                            Text("· \(change.changeType.rawValue)：\(change.summary)")
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+
+                if let locator = entry.sourceLocator {
+                    Button("回到原文") { openSource(entry.book, locator) }
+                        .font(.footnote.weight(.medium))
+                        .frame(minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
             }
+            .padding(.top, ElsepageTheme.Spacing.small)
         }
-        if !entry.memoryChanges.isEmpty {
-            Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Label("记住的改变", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageInteractive)
-                ForEach(entry.memoryChanges, id: \.id) { change in
-                    Text("· \(change.changeType.rawValue)：\(change.summary)")
-                        .font(.subheadline)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-            }
-        }
-        if let locator = entry.sourceLocator {
-            Divider()
-            Button("回到原文") { openSource(entry.book, locator) }
-                .font(.footnote.weight(.medium))
-                .frame(minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-        }
+        .font(.footnote)
     }
 
     /// One "What I think" bullet (JRNL-01). Tapping or long-pressing opens the
@@ -227,7 +274,7 @@ struct JournalEntryCard: View {
             } label: {
                 Text("· \(thought.thought)")
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.elsepageTextPrimary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -247,7 +294,7 @@ struct JournalEntryCard: View {
             if thought.userEdited {
                 Text("已由你编辑")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.elsepageTextTertiary)
             }
         }
     }
@@ -256,7 +303,7 @@ struct JournalEntryCard: View {
         VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: systemImage)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.elsepageTextSecondary)
             Text(value)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
@@ -296,7 +343,7 @@ private struct JournalThoughtEditor: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack {
                 Text("编辑想法")
-                    .font(.system(.headline, design: .serif))
+                    .font(.headline)
                 Spacer()
                 Button("保存") {
                     onSave(trimmedDraft)

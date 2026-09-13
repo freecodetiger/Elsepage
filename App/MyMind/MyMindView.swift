@@ -29,6 +29,9 @@ struct MyMindView: View {
     @State private var discussingItem: BrainItem?
     @State private var editingThought: Thought?
     @State private var editingQuestion: Question?
+    @State private var showsAllThoughts = false
+    @State private var showsAllQuestions = false
+    @State private var showsAllMemories = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isEmpty: Bool {
@@ -176,11 +179,11 @@ struct MyMindView: View {
     }
 
     private var sectionsList: some View {
-        LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-            achievementsSection
+        LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
             thoughtsSection
             questionsSection
             memoriesSection
+            achievementsSection
         }
         .padding(ElsepageTheme.Spacing.page)
     }
@@ -244,8 +247,8 @@ struct MyMindView: View {
     private var thoughtsSection: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Thoughts · 正在形成")
-                    .font(.system(.headline, design: .serif, weight: .semibold))
+                Text("正在形成的看法")
+                    .font(.headline.weight(.semibold))
                 Spacer()
                 Text("\(model.thoughts.count) 个")
                     .font(.caption)
@@ -256,7 +259,7 @@ struct MyMindView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(model.thoughts, id: \.id) { thought in
+                ForEach(showsAllThoughts ? model.thoughts : Array(model.thoughts.prefix(3)), id: \.id) { thought in
                     BrainItemRow(
                         title: thought.title,
                         preview: thought.statement,
@@ -267,6 +270,13 @@ struct MyMindView: View {
                         selectedThought = thought
                     }
                 }
+                if model.thoughts.count > 3 {
+                    Button(showsAllThoughts ? "收起" : "查看全部 \(model.thoughts.count) 条") {
+                        withAnimation(.snappy(duration: 0.24)) { showsAllThoughts.toggle() }
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .tint(Color.elsepageInteractive)
+                }
             }
         }
     }
@@ -274,8 +284,8 @@ struct MyMindView: View {
     private var questionsSection: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Questions · 还没想明白")
-                    .font(.system(.headline, design: .serif, weight: .semibold))
+                Text("还在想的问题")
+                    .font(.headline.weight(.semibold))
                 Spacer()
                 Text("\(model.questions.count) 个")
                     .font(.caption)
@@ -286,7 +296,7 @@ struct MyMindView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(model.questions, id: \.id) { question in
+                ForEach(showsAllQuestions ? model.questions : Array(model.questions.prefix(3)), id: \.id) { question in
                     BrainItemRow(
                         title: question.question,
                         preview: nil,
@@ -296,6 +306,13 @@ struct MyMindView: View {
                         Haptics.cardExpanded()
                         selectedQuestion = question
                     }
+                }
+                if model.questions.count > 3 {
+                    Button(showsAllQuestions ? "收起" : "查看全部 \(model.questions.count) 条") {
+                        withAnimation(.snappy(duration: 0.24)) { showsAllQuestions.toggle() }
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .tint(Color.elsepageInteractive)
                 }
             }
         }
@@ -318,7 +335,7 @@ struct MyMindView: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(alignment: .firstTextBaseline) {
                 Text("成就")
-                    .font(.system(.headline, design: .serif, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                 Spacer()
                 Text("\(achievements.unlocked.count) 枚")
                     .font(.caption)
@@ -357,10 +374,10 @@ struct MyMindView: View {
             }
         }
         .padding(ElsepageTheme.Spacing.medium)
-        .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(.primary.opacity(0.06))
+                .stroke(Color.elsepageBorder)
         }
         // A11Y-02: badge icon, title, blurb and date read as one stop.
         .accessibilityElement(children: .combine)
@@ -368,9 +385,9 @@ struct MyMindView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "这里还没有记忆",
-            systemImage: "brain.head.profile",
-            description: Text("读完并留下想法后，这里会慢慢成形。")
+            "这里还没有长期内容",
+            systemImage: "sparkles",
+            description: Text("读完并留下想法后，你的看法、问题和记忆会慢慢形成。")
         )
     }
 
@@ -381,7 +398,7 @@ struct MyMindView: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(alignment: .firstTextBaseline) {
                 Text("AI 记住的我")
-                    .font(.system(.headline, design: .serif, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                 Spacer()
                 Text("\(model.activeMemories.count) 条")
                     .font(.caption)
@@ -392,19 +409,27 @@ struct MyMindView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(model.activeMemories, id: \.id) { memory in
+                ForEach(showsAllMemories ? model.activeMemories : Array(model.activeMemories.prefix(3)), id: \.id) { memory in
                     row(for: memory)
+                }
+                if model.activeMemories.count > 3 {
+                    Button(showsAllMemories ? "收起" : "查看全部 \(model.activeMemories.count) 条") {
+                        withAnimation(.snappy(duration: 0.24)) { showsAllMemories.toggle() }
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .tint(Color.elsepageInteractive)
                 }
             }
             if !model.retiredMemories.isEmpty {
-                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    Text("已失效")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ForEach(model.retiredMemories, id: \.id) { memory in
-                        row(for: memory)
+                DisclosureGroup("已失效 \(model.retiredMemories.count) 条") {
+                    VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                        ForEach(model.retiredMemories, id: \.id) { memory in
+                            row(for: memory)
+                        }
                     }
+                    .padding(.top, ElsepageTheme.Spacing.small)
                 }
+                .font(.subheadline.weight(.semibold))
             }
         }
     }
@@ -481,36 +506,43 @@ private struct MemoryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(alignment: .top, spacing: ElsepageTheme.Spacing.small) {
-                originBadge
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(memory.content)
-                        .font(.subheadline)
-                        .strikethrough(isRetired, color: .secondary)
-                        .foregroundStyle(isRetired ? .secondary : .primary)
-                        .lineLimit(isExpanded ? nil : 4)
-                        .multilineTextAlignment(.leading)
-                    metadata
+            Button(action: onToggleEvidence) {
+                HStack(alignment: .top, spacing: ElsepageTheme.Spacing.small) {
+                    originBadge
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(memory.content)
+                            .font(.subheadline)
+                            .strikethrough(isRetired, color: Color.elsepageTextSecondary)
+                            .foregroundStyle(isRetired ? Color.elsepageTextSecondary : Color.elsepageTextPrimary)
+                            .lineLimit(isExpanded ? nil : 4)
+                            .multilineTextAlignment(.leading)
+                        metadata
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.elsepageTextTertiary)
+                        .accessibilityHidden(true)
                 }
-                Spacer(minLength: 4)
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                .contentShape(Rectangle())
             }
-            // A11Y-02: 来源性质、内容、时间与置信度读作一条;操作按钮保持独立可达。
+            .buttonStyle(.plain)
+            // A11Y-02: 来源性质、内容、时间与置信度读作一条;操作按需展开。
             .accessibilityElement(children: .combine)
-            actions
+            .accessibilityHint(isExpanded ? "轻点收起来源和操作" : "轻点查看来源和操作")
+
             if isExpanded {
+                Divider()
+                actions
                 evidenceBlock
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(ElsepageTheme.Spacing.medium)
-        .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(.primary.opacity(isRetired ? 0.04 : 0.06))
+                .stroke(Color.elsepageBorder)
         }
     }
 
@@ -533,11 +565,11 @@ private struct MemoryRow: View {
             }
             Text(memory.updatedAt, format: .dateTime.month().day().hour().minute())
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.elsepageTextSecondary)
             Spacer(minLength: 4)
             Text("置信度 \(memory.confidence.displayName)")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.elsepageTextSecondary)
         }
     }
 
@@ -570,7 +602,7 @@ private struct MemoryRow: View {
                     .foregroundStyle(Color.elsepageInteractive)
                 Text(evidence.reflectionText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.elsepageTextSecondary)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
                 if let locator = evidence.locator, let book = evidence.book {
@@ -582,7 +614,7 @@ private struct MemoryRow: View {
         } else {
             Text("没有可展示的来源依据")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.elsepageTextTertiary)
         }
     }
 }
@@ -659,10 +691,10 @@ private struct BrainItemRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(ElsepageTheme.Spacing.medium)
-            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+            .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                    .stroke(.primary.opacity(0.06))
+                    .stroke(Color.elsepageBorder)
             }
             .accessibilityElement(children: .combine)
         }
@@ -694,7 +726,7 @@ private struct BrainThoughtDetailView: View {
             VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                     Text("当前的我")
-                        .font(.system(.headline, design: .serif, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                     Text(thought.statement)
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
@@ -775,7 +807,7 @@ private struct BrainRevisionSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             Text("我的变化")
-                .font(.system(.headline, design: .serif, weight: .semibold))
+                .font(.headline.weight(.semibold))
             if revisions.isEmpty {
                 Text("陈述会随讨论不断重写，旧版本留在这里。")
                     .font(.subheadline)
@@ -794,7 +826,7 @@ private struct BrainRevisionSection: View {
                     }
                     .padding(ElsepageTheme.Spacing.medium)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+                    .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
                     .accessibilityElement(children: .combine)
                 }
             }
@@ -827,7 +859,7 @@ private struct BrainQuestionDetailView: View {
             VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                     Text("问题")
-                        .font(.system(.headline, design: .serif, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                     Text(question.question)
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
@@ -855,7 +887,7 @@ private struct BrainQuestionDetailView: View {
             .padding(ElsepageTheme.Spacing.page)
         }
         .background(Color.elsepageBackground)
-        .navigationTitle("还没想明白")
+        .navigationTitle("问题")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
@@ -916,7 +948,7 @@ private struct BrainEvidenceSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             Text(heading)
-                .font(.system(.headline, design: .serif, weight: .semibold))
+                .font(.headline.weight(.semibold))
             if evidence.isEmpty {
                 Text("来源会随讨论逐渐积累。")
                     .font(.subheadline)
@@ -957,7 +989,7 @@ private struct BrainEvidenceSection: View {
             }
             .padding(ElsepageTheme.Spacing.medium)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+            .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
             .accessibilityElement(children: .combine)
         } else if case .reflection = row.source {
             // Soft-dangling: the reflection was deleted; show nothing for it.
@@ -977,7 +1009,7 @@ private struct BrainEvidenceSection: View {
             }
             .padding(ElsepageTheme.Spacing.medium)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+            .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
             .accessibilityElement(children: .combine)
         }
     }
@@ -1111,14 +1143,14 @@ private struct BrainDiscussionSheet: View {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
                     VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                         Text("正在讨论")
-                            .font(.system(.headline, design: .serif, weight: .semibold))
+                            .font(.headline.weight(.semibold))
                         Text(BrainContextProvider.titleText(of: item))
                             .font(.subheadline.weight(.medium))
                     }
                     if !reply.isEmpty || isReplying {
                         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                             Text("页外的回应")
-                                .font(.system(.headline, design: .serif, weight: .semibold))
+                                .font(.headline.weight(.semibold))
                             Text(reply.isEmpty ? "…" : reply)
                                 .font(.body)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -1160,7 +1192,7 @@ private struct BrainDiscussionSheet: View {
                     .frame(minHeight: 44)
                 }
                 .padding(ElsepageTheme.Spacing.medium)
-                .background(ElsepageTheme.MaterialToken.chrome)
+                .background(Color.elsepageSurface)
             }
         }
     }

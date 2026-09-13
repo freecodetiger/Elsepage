@@ -183,7 +183,11 @@ struct TodayView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ElsepageTheme.Spacing.xLarge)
-        .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
+        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
+                .stroke(Color.elsepageBorder)
+        }
         .transition(.moment(reduceMotion))
     }
 
@@ -207,7 +211,7 @@ struct TodayView: View {
 
     private func streakBadge(label: String, days: Int, emphasized: Bool) -> some View {
         HStack(spacing: ElsepageTheme.Spacing.xSmall) {
-            Image(systemName: emphasized ? "brain.head.profile" : "book")
+            Image(systemName: emphasized ? "lightbulb" : "book")
                 .accessibilityHidden(true)
             Text("\(label) \(days) 天")
                 .font(emphasized ? .subheadline.weight(.semibold) : .footnote)

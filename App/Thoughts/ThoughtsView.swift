@@ -9,7 +9,8 @@ struct ThoughtsView: View {
     @Bindable var settings: SettingsRootModel
     @State private var showsSettings = false
     @State private var searchText = ""
-    @State private var viewMode: ThoughtsViewMode = .timeline
+    @State private var viewMode: ThoughtsViewMode = .records
+    @State private var grouping: ThoughtsGrouping = .timeline
     @State private var filter: ThoughtsArchiveFilter = .all
     @State private var expandedEntryID: ReflectionID?
     @State private var selectedConversation: ReflectionConversationModel?
@@ -46,6 +47,20 @@ struct ThoughtsView: View {
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $searchText, prompt: "搜索想法、书名或回应")
             .toolbar {
+                if viewMode == .records {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Picker("分组", selection: $grouping) {
+                                ForEach(ThoughtsGrouping.allCases) { option in
+                                    Label(option.title, systemImage: option.systemImage).tag(option)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                        .accessibilityLabel("分组方式")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showsSettings = true } label: {
                         Image(systemName: "gearshape")
@@ -95,6 +110,7 @@ struct ThoughtsView: View {
             .onChange(of: searchText) { expandedEntryID = nil }
             .onChange(of: filter) { expandedEntryID = nil }
             .onChange(of: viewMode) { expandedEntryID = nil }
+            .onChange(of: grouping) { expandedEntryID = nil }
         }
     }
 
@@ -127,7 +143,7 @@ struct ThoughtsView: View {
                         } else {
                             // 日志为空：说明这条路径会沉淀什么，不催促。
                             ContentUnavailableView(
-                                "日志还没有整理出条目",
+                                "档案还没有整理出条目",
                                 systemImage: "book.closed",
                                 description: Text("每次阅读后留下的记录、看法、问题和记忆变化，会安静地整理在这里。")
                             )
@@ -150,7 +166,7 @@ struct ThoughtsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, ElsepageTheme.Spacing.xLarge)
                     }
-                } else if viewMode == .timeline {
+                } else if grouping == .timeline {
                     timelineSections
                 } else {
                     bookSections
@@ -163,21 +179,23 @@ struct ThoughtsView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            Picker("查看方式", selection: $viewMode) {
+            Picker("查看内容", selection: $viewMode) {
                 ForEach(ThoughtsViewMode.allCases) { mode in
                     Label(mode.title, systemImage: mode.systemImage).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ElsepageTheme.Spacing.small) {
-                    ForEach(ThoughtsArchiveFilter.allCases, id: \.self) { option in
-                        Button(option.title) { filter = option }
-                            .buttonStyle(.bordered)
-                            .tint(filter == option ? .elsepageInteractive : .secondary)
-                            // A11Y-03: keep the chip reachable at 44pt tall.
-                            .frame(minHeight: 44)
+            if viewMode == .records {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: ElsepageTheme.Spacing.small) {
+                        ForEach(ThoughtsArchiveFilter.allCases, id: \.self) { option in
+                            Button(option.title) { filter = option }
+                                .buttonStyle(.bordered)
+                                .tint(filter == option ? .elsepageInteractive : .secondary)
+                                // A11Y-03: keep the chip reachable at 44pt tall.
+                                .frame(minHeight: 44)
+                        }
                     }
                 }
             }
@@ -208,9 +226,9 @@ struct ThoughtsView: View {
 
     // MARK: - Journal
 
-    /// New structured Journal path. The archive projection above is untouched so
-    /// the concurrent Citation/Router tasks can keep editing it; the final
-    /// "which view is default" toggle is left for the coordinator to decide.
+    /// Structured reading archive: what survived a session, user-confirmed
+    /// thoughts, questions, citations and memory changes. Details stay behind an
+    /// explicit disclosure so the primary record remains easy to scan.
     private var journalSections: some View {
         LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             ForEach(visibleJournalEntries) { entry in
@@ -236,7 +254,7 @@ struct ThoughtsView: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.system(.headline, design: .serif, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                 Spacer()
                 Text(subtitle).font(.caption).foregroundStyle(.tertiary)
             }
@@ -275,23 +293,39 @@ struct ThoughtsView: View {
 }
 
 private enum ThoughtsViewMode: String, CaseIterable, Identifiable {
-    case timeline
-    case books
+    case records
     case journal
 
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .timeline: "时间"
-        case .books: "书籍"
-        case .journal: "日志"
+        case .records: "记录"
+        case .journal: "档案"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .records: "quote.bubble"
+        case .journal: "doc.text"
+        }
+    }
+}
+
+private enum ThoughtsGrouping: String, CaseIterable, Identifiable {
+    case timeline
+    case books
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .timeline: "按时间"
+        case .books: "按书籍"
         }
     }
     var systemImage: String {
         switch self {
         case .timeline: "calendar"
         case .books: "books.vertical"
-        case .journal: "book.closed"
         }
     }
 }
@@ -301,7 +335,7 @@ private extension ThoughtsArchiveFilter {
         switch self {
         case .all: "全部"
         case .hasAgentResponse: "有回应"
-        case .hasConnection: "有连接"
+        case .hasConnection: "有关联"
         }
     }
 }
@@ -317,24 +351,48 @@ private struct ThoughtEntryCard: View {
     let openConversation: () -> Void
     let openSource: (Book, BookLocator) -> Void
 
+    private var statusItems: [ThoughtStatus] {
+        var items: [ThoughtStatus] = []
+        if entry.derivedAgentResponse != nil {
+            items.append(ThoughtStatus(title: "有回应", systemImage: "sparkles"))
+        }
+        if !entry.connections.isEmpty {
+            items.append(ThoughtStatus(title: "连接过去", systemImage: "link"))
+        }
+        let discussionCount = entry.messages.filter { $0.author == .user }.count
+        if discussionCount > 0 {
+            items.append(ThoughtStatus(title: "\(discussionCount) 次讨论", systemImage: "bubble.left.and.bubble.right"))
+        }
+        return Array(items.prefix(2))
+    }
+
+    private var hasMoreEvidence: Bool {
+        contextDisclosureLine(contextTrace) != nil
+            || entry.derivedAgentResponse.flatMap { entry.responseProvenance[$0.id] }?.evidence.isEmpty == false
+            || !entry.connections.isEmpty
+            || entry.sourceLocator != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             Button(action: toggleExpanded) {
                 VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    metadata
                     Text(entry.reflection.displayText)
                         .font(.body)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.elsepageTextPrimary)
                         .multilineTextAlignment(.leading)
                         .lineLimit(isExpanded ? nil : 3)
-                    if !isExpanded { compactStatus }
+                    metadata
+                    if !isExpanded, !statusItems.isEmpty {
+                        compactStatus
+                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            // A11Y-02: 书名、时间、想法与状态读作一条，展开状态由 hint 表达。
+            // A11Y-02: 原话、书名、时间与状态读作一条，展开状态由 hint 表达。
             .accessibilityElement(children: .combine)
-            .accessibilityHint(isExpanded ? "轻点收起想法" : "轻点展开回应与连接")
+            .accessibilityHint(isExpanded ? "轻点收起记录" : "轻点展开回应与依据")
 
             if isExpanded {
                 expandedContent
@@ -342,10 +400,10 @@ private struct ThoughtEntryCard: View {
             }
         }
         .padding(ElsepageTheme.Spacing.medium)
-        .background(ElsepageTheme.MaterialToken.chrome, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
+        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(.primary.opacity(isExpanded ? 0.10 : 0.05))
+                .stroke(Color.elsepageBorder)
         }
     }
 
@@ -353,16 +411,17 @@ private struct ThoughtEntryCard: View {
         HStack(alignment: .firstTextBaseline, spacing: ElsepageTheme.Spacing.small) {
             if showsBook {
                 Text(entry.book.title)
-                    .font(.system(.subheadline, design: .serif, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.elsepageTextSecondary)
                     .lineLimit(1)
             }
             Text(entry.reflection.createdAt, format: .dateTime.month().day().hour().minute())
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.elsepageTextTertiary)
             Spacer(minLength: 4)
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.elsepageTextTertiary)
                 .accessibilityHidden(true)
         }
     }
@@ -370,41 +429,23 @@ private struct ThoughtEntryCard: View {
     private var compactStatus: some View {
         // A11Y-01: status capsules wrap when large type no longer fits a row.
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: ElsepageTheme.Spacing.medium) { statusContent }
-            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { statusContent }
+            HStack(spacing: ElsepageTheme.Spacing.medium) { statusRow }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) { statusRow }
         }
         .font(.caption)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.elsepageTextSecondary)
     }
 
-    @ViewBuilder private var statusContent: some View {
-        if entry.derivedAgentResponse != nil {
-            Label("有回应", systemImage: "sparkles")
-        }
-        if !entry.connections.isEmpty {
-            Label("连接过去", systemImage: "link")
-        }
-        let discussionCount = entry.messages.filter { $0.author == .user }.count
-        if discussionCount > 0 {
-            Label("\(discussionCount) 次讨论", systemImage: "bubble.left.and.bubble.right")
+    private var statusRow: some View {
+        ForEach(statusItems) { item in
+            Label(item.title, systemImage: item.systemImage)
         }
     }
 
     @ViewBuilder private var expandedContent: some View {
-        Button(action: openConversation) {
-            Label("打开会话", systemImage: "bubble.left.and.bubble.right")
-        }
-        .buttonStyle(.borderedProminent)
-
         if let response = entry.derivedAgentResponse {
             Divider()
-            responseBlock(title: "回应", message: response)
-            if let line = contextDisclosureLine(contextTrace) {
-                Divider()
-                Label(line, systemImage: "doc.text.magnifyingglass")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
+            responseBlock(title: "AI 回应", message: response)
         } else {
             Divider()
             Button(action: requestReply) {
@@ -417,9 +458,9 @@ private struct ThoughtEntryCard: View {
         ForEach(entry.messages.filter { $0.id != entry.derivedAgentResponse?.id }) { message in
             Divider()
             VStack(alignment: .leading, spacing: 6) {
-                Text(message.author == .user ? "继续说" : "回应")
+                Text(message.author == .user ? "继续说" : "AI 回应")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.elsepageTextSecondary)
                     .copyMessageContextMenu(
                         content: message.content,
                         authorLabel: message.author == .user ? "我" : "AI",
@@ -438,36 +479,89 @@ private struct ThoughtEntryCard: View {
             }
         }
 
-        if let connection = entry.connections.first {
+        if entry.derivedAgentResponse != nil || !entry.messages.isEmpty {
             Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Label("过去的你", systemImage: "link")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.elsepageInteractive)
-                Text(connection.sourceReflection.originalText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(4)
-                    .textSelection(.enabled)
-                if let locator = connection.sourceLocator {
-                    Button("回到《\(connection.sourceBook.title)》") {
-                        openSource(connection.sourceBook, locator)
-                    }
-                    .font(.footnote.weight(.medium))
-                }
+            Button(action: openConversation) {
+                Label("继续对话", systemImage: "bubble.left.and.bubble.right")
             }
+            .buttonStyle(.bordered)
         }
 
-        if let locator = entry.sourceLocator {
+        if hasMoreEvidence {
             Divider()
-            Button("回到原文") { openSource(entry.book, locator) }
-                .font(.footnote.weight(.medium))
+            moreEvidence
         }
+    }
+
+    private var moreEvidence: some View {
+        DisclosureGroup("更多依据") {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+                if let line = contextDisclosureLine(contextTrace) {
+                    Label(line, systemImage: "doc.text.magnifyingglass")
+                        .foregroundStyle(Color.elsepageTextSecondary)
+                }
+
+                if let response = entry.derivedAgentResponse,
+                   let provenance = entry.responseProvenance[response.id],
+                   !provenance.evidence.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("本次使用的上下文")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                        ForEach(provenance.evidence) { evidence in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(evidence.title ?? "阅读证据")
+                                    .font(.caption.weight(.semibold))
+                                Text(evidence.excerpt)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.elsepageTextSecondary)
+                                    .lineLimit(4)
+                                if evidence.locator != nil {
+                                    Button("回到原文") { openEvidence(evidence) }
+                                        .font(.caption)
+                                }
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+
+                if let connection = entry.connections.first {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("过去的你", systemImage: "link")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                        Text(connection.sourceReflection.originalText)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                            .lineLimit(4)
+                            .textSelection(.enabled)
+                        if let locator = connection.sourceLocator {
+                            Button("回到《\(connection.sourceBook.title)》") {
+                                openSource(connection.sourceBook, locator)
+                            }
+                            .font(.footnote.weight(.medium))
+                        }
+                    }
+                }
+
+                if let locator = entry.sourceLocator {
+                    Button("回到原文") { openSource(entry.book, locator) }
+                        .font(.footnote.weight(.medium))
+                        .frame(minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+            }
+            .padding(.top, ElsepageTheme.Spacing.small)
+        }
+        .font(.footnote)
     }
 
     private func responseBlock(title: String, message: ReflectionMessage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.elsepageTextSecondary)
             AgentMarkdownText(
                 content: message.content,
                 provenance: entry.responseProvenance[message.id] ?? .init(evidence: [], citations: []),
@@ -475,19 +569,6 @@ private struct ThoughtEntryCard: View {
                 textStyle: .subheadline,
                 isSecondary: true
             )
-            if let provenance = entry.responseProvenance[message.id], !provenance.evidence.isEmpty {
-                DisclosureGroup("查看本次使用的上下文") {
-                    ForEach(provenance.evidence) { evidence in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(evidence.title ?? "阅读证据").font(.caption.weight(.semibold))
-                            Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
-                            if evidence.locator != nil {
-                                Button("回到原文") { openEvidence(evidence) }.font(.caption)
-                            }
-                        }.padding(.vertical, 3)
-                    }
-                }.font(.footnote)
-            }
         }
     }
 
@@ -507,4 +588,11 @@ private struct ThoughtEntryCard: View {
         }
         return parts.isEmpty ? nil : parts.joined(separator: "，")
     }
+}
+
+private struct ThoughtStatus: Identifiable {
+    let title: String
+    let systemImage: String
+
+    var id: String { title }
 }

@@ -178,9 +178,13 @@ struct OnboardingView: View {
         .padding(ElsepageTheme.Spacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ElsepageTheme.MaterialToken.chrome,
+            Color.elsepageSurface,
             in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
+                .stroke(Color.elsepageBorder)
+        }
     }
 
     @ViewBuilder private var providerFeedback: some View {
