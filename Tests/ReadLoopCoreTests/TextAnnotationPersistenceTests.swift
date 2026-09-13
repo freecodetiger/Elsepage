@@ -15,6 +15,13 @@ import Testing
     let rhs = AnnotationRange(bookID: lhsBook, resourceHref: rhsStart.href, startLocator: rhsStart, endLocator: rhsEnd)
     #expect(lhs.appearsToOverlapText(with: rhs))
 
+    let containedStart = try annotationLocator(progression: 0.3, text: "结构")
+    let containedEnd = try annotationLocator(progression: 0.5, text: "结构")
+    let contained = AnnotationRange(bookID: lhsBook, resourceHref: containedStart.href, startLocator: containedStart, endLocator: containedEnd)
+    #expect(lhs.appearsToOverlapText(with: contained))
+    #expect(contained.appearsToOverlapText(with: lhs))
+    #expect(lhs.renderLocator.canonicalKey != contained.renderLocator.canonicalKey)
+
     let disjointStart = try annotationLocator(progression: 0.7, text: "结构")
     let disjointEnd = try annotationLocator(progression: 0.9, text: "结构")
     let disjoint = AnnotationRange(bookID: lhsBook, resourceHref: disjointStart.href, startLocator: disjointStart, endLocator: disjointEnd)

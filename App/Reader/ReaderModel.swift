@@ -513,8 +513,10 @@ final class ReaderModel {
 
     func handleHighlightActivation(for id: UUID, anchor: CGRect?) {
         guard let annotation = annotation(forHighlightID: id) else { return }
-        if let note = annotation.notes.first {
-            showAnnotationConflict(noteID: note.id, highlightID: id, anchor: anchor)
+        let noteID = annotation.notes.last?.id ?? overlappingNoteID(for: annotation.range)
+        AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) conflictNote=\(noteID.map { AnnotationLog.id($0) } ?? "nil")")
+        if let noteID {
+            showAnnotationConflict(noteID: noteID, highlightID: id, anchor: anchor)
         } else {
             showHighlightMenu(for: id, anchor: anchor)
         }
@@ -523,16 +525,26 @@ final class ReaderModel {
     func handleNoteActivation(for id: UUID, anchor: CGRect?) {
         guard let annotation = annotation(forNoteID: id) else { return }
         if annotation.highlight != nil {
+            AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(annotation.id)) sameRange=true")
             showAnnotationConflict(noteID: id, highlightID: annotation.id, anchor: anchor)
             return
         }
         if let overlappingHighlight = textAnnotations.first(where: {
             $0.highlight != nil && $0.range.appearsToOverlapText(with: annotation.range)
         }) {
+            AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(overlappingHighlight.id)) sameRange=false")
             showAnnotationConflict(noteID: id, highlightID: overlappingHighlight.id, anchor: anchor)
             return
         }
+        AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=nil")
         openNoteEditor(.note(id))
+    }
+
+    private func overlappingNoteID(for range: AnnotationRange) -> UUID? {
+        let candidates = textAnnotations
+            .filter { !$0.notes.isEmpty && $0.range.appearsToOverlapText(with: range) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        return candidates.first?.notes.last?.id
     }
 
     func chooseNoteFromConflict(_ conflict: ReaderAnnotationConflict) {
