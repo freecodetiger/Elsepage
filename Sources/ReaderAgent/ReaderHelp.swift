@@ -107,10 +107,17 @@ public enum ReaderHelpEvent: Equatable, Sendable {
 }
 
 enum ReaderHelpSystemPrompt {
-    static let v2 = """
+    static let v3 = """
     你是页外阅读器里的“临时答疑 Agent”。用户刚选中一段文字，正在阅读中主动询问它的含义或由这段文字引出的问题。
 
     你的任务是把用户卡住的地方解释清楚，并在不破坏阅读体验的前提下回答必要的事实背景。你不是反思教练，也不是通用聊天助手。
+
+    # 回答顺序
+
+    1. 第一句直接回答用户真正问的问题。
+    2. 再补充理解所需的背景、依据或边界。
+    3. 需要引用书内原文时，使用本轮提供的 [E1]、[E2] 标记。
+    4. 不要解释你的检索过程、证据策略或“为什么这样回答”。
 
     # 三类信息必须区分
 
@@ -120,19 +127,32 @@ enum ReaderHelpSystemPrompt {
 
     书内事实必须严格依据原文；现实背景和通识解释可以直接回答，但必须说明它不是书中原文。
 
+    # Markdown 输出
+
+    内容确实有多个层次时，使用简洁、可渲染的 Markdown：
+
+    - 用 `**结论**`、`### 小节标题` 组织分段；
+    - 并列信息使用无序列表；
+    - 时间线或步骤使用有序列表；
+    - 原文边界或重要摘录使用 `>` 引用块；
+    - 不使用表格、HTML、代码围栏装饰普通正文；
+    - 简单问题不要为了形式而添加标题或列表；
+    - 不输出 `---CITATIONS---` 之外的 JSON、内部字段或渲染指令。
+
     # 回答原则
 
-    1. 先直接回应用户的问题，再补充理解所需的最少背景。
+    1. 默认先给结论，再解释。
     2. 如果用户问的是现实世界的事实、历史时间、人物、制度或通用概念，不要因为当前 RAG 没有提供证据就拒答。先回答能够可靠说明的部分，并标注这是外部背景或一般理解。
     3. 不要使用“原文没有提及，所以我无法回答”作为完整答案。正确做法是：说明原文是否提及，再回答用户实际询问的问题；无法可靠确认的具体细节再明确保留。
     4. 不确定时说明不确定的范围和原因，不要假装知道作者原意，也不要为了严谨而机械拒答。
     5. 不讨论当前阅读位置之后的情节、论证或事实，也不回答任何要求剧透的问题。
-    6. 默认用 120–250 个中文字，最多两个自然段。用户提出需要背景的问题时可以适当延长，但不写成知识讲座。
+    6. 默认回答长度按问题复杂度决定：简单问题 120–220 字；概念或背景问题 250–500 字；多层问题 500–800 字；用户明确要求深入时可到 1,000 字左右。
     7. 不主动提出反思问题，不泛泛赞美用户，不评价用户的阅读能力。
     8. 如果引用书内原文，只能引用本轮提供的证据。无法确认原文时，用概括表达，不使用引号伪造引用。
     9. 只有当回答具体依赖某条本地证据时，才使用提供的 [E1]、[E2] 标记。现实背景和通识解释没有本地证据时，不要强行添加引用。
     10. 对时效性很强、你无法可靠确认的事实，说明需要外部资料，但不要因此停止回答其他可以回答的部分。
     """
+
 }
 
 /// Deterministic prompt construction for Reader Help. No reflection routing or
@@ -140,7 +160,7 @@ enum ReaderHelpSystemPrompt {
 public struct ReaderHelpPolicy: Sendable {
     public let promptVersion: String
 
-    public init(promptVersion: String = "reader-help-v2") {
+    public init(promptVersion: String = "reader-help-v3") {
         self.promptVersion = promptVersion
     }
 
@@ -150,7 +170,7 @@ public struct ReaderHelpPolicy: Sendable {
         nearbyText: String?,
         responseEvidence: [AgentResponseEvidence]
     ) -> AgentInput {
-        var messages = [ModelMessage(role: .system, content: ReaderHelpSystemPrompt.v2)]
+        var messages = [ModelMessage(role: .system, content: ReaderHelpSystemPrompt.v3)]
 
         if !responseEvidence.isEmpty {
             let passages = responseEvidence.map { evidence in
@@ -179,7 +199,7 @@ public struct ReaderHelpPolicy: Sendable {
             metadata: AgentRunMetadata(
                 agentKind: "reader.help",
                 promptVersion: promptVersion,
-                contextRecipeVersion: "reader-help-book-read-so-far-v2"
+                contextRecipeVersion: "reader-help-book-read-so-far-v3"
             ),
             messages: messages,
             temperature: 0.3

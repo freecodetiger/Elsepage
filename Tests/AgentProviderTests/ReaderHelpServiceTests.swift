@@ -46,7 +46,7 @@ import Testing
     #expect(prompt.contains("a page"))
     #expect(prompt.contains("A reader begins with"))
     #expect(!prompt.contains("returns with a thought"))
-    #expect(modelRequest.maxOutputTokens == 600)
+    #expect(modelRequest.maxOutputTokens == 1_200)
 }
 
 @Test func readerHelpAllowsGeneralBackgroundWithoutLocalEvidence() throws {
@@ -58,11 +58,13 @@ import Testing
     )
     let system = try #require(input.messages.first?.content)
 
-    #expect(input.metadata.promptVersion == "reader-help-v2")
+    #expect(input.metadata.promptVersion == "reader-help-v3")
     #expect(system.contains("现实背景和通识解释可以直接回答"))
     #expect(system.contains("不要因为当前 RAG 没有提供证据就拒答"))
     #expect(system.contains("书内事实必须严格依据原文"))
-    #expect(!system.contains("除非确实必要"))
+    #expect(system.contains("第一句直接回答"))
+    #expect(system.contains("不使用表格"))
+    #expect(system.contains("简单问题 120–220 字"))
 }
 
 @Test func readerHelpRejectsInvalidSelectionsAndQuestionsBeforeCallingModel() async throws {

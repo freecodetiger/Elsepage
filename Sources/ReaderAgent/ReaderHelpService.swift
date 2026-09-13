@@ -29,8 +29,8 @@ public struct ReaderHelpService: Sendable {
         self.policy = policy
         self.budget = budget ?? ExecutionBudget(
             maxModelCalls: 1,
-            maxWallTime: .seconds(30),
-            maxOutputTokens: 600
+            maxWallTime: .seconds(45),
+            maxOutputTokens: 1_200
         )
     }
 
