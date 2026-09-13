@@ -100,3 +100,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Note 重叠命中与预览/编辑双态完成（`.planning/quick/260913-note-overlap-and-preview/SUMMARY.md`）；重叠时提供“笔记 / 高亮”选择器，Note editor 默认 Markdown 预览。
 - 2026-09-13：Note / Highlight 冲突选择器完成（`.planning/quick/260913-annotation-conflict-picker/SUMMARY.md`）；仅真实重叠时二次选择笔记或高亮。
 - 2026-09-13：Annotation Model Refactor Spec 完成（`.planning/quick/260913-annotation-model-spec/SUMMARY.md`）；Range 成为唯一身份，Highlight/Note 完全解耦，Note 允许交叉并追加数组，旧交叉高亮保留较新者。
+- 2026-09-13：Annotation Model Refactor 落地完成（`.planning/quick/260913-annotation-model-refactor/SUMMARY.md`）；v28 迁移、TextAnnotation 聚合、NoteEntry 数组和冲突 selector 已实现，387 tests 全绿。

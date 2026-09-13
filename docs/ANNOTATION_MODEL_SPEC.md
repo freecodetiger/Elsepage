@@ -1,6 +1,6 @@
 # ReadLoop Annotation Model Refactor Spec
 
-> 状态：Decisions Locked（2026-09-13）
+> 状态：Implemented（代码完成，2026-09-13；App 构建与真机验收待用户）
 > 分支：`codex/reader-help-spec`
 > 适用范围：阅读器 Highlight、Note、下划线、TextAnnotation 的领域模型、交互、迁移和验收
 > 核心结论：**Range 是唯一身份；Highlight 和 Note 是彼此独立的标注层。**
@@ -114,10 +114,10 @@ Highlighter 不再拥有笔记附属语义。高亮只负责背景色和删除�
 
 ## 4. 目标领域模型
 
-### 4.1 TextRange
+### 4.1 AnnotationRange
 
 ```swift
-public struct TextRange: Hashable, Codable, Sendable {
+public struct AnnotationRange: Hashable, Codable, Sendable {
     public let bookID: BookID
     public let resourceHref: String
     public let startLocator: BookLocator
@@ -137,7 +137,7 @@ public struct TextRange: Hashable, Codable, Sendable {
 ```swift
 public struct TextAnnotation: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
-    public let range: TextRange
+    public let range: AnnotationRange
     public var highlight: HighlightLayer?
     public var notes: [NoteEntry]
     public let createdAt: Date
@@ -454,7 +454,7 @@ Note 允许交叉，因此：
 
 ### Phase 1：Domain
 
-- 新增 `TextRange`、`TextAnnotation`、`HighlightLayer`、`NoteEntry`。
+- 新增 `AnnotationRange`、`TextAnnotation`、`HighlightLayer`、`NoteEntry`。
 - 实现 RangeKey canonicalization。
 - 实现 highlight intersection / note overlap 判定。
 - 增加纯单元测试。
@@ -522,3 +522,45 @@ Note 允许交叉，因此：
 ```
 
 Highlighter 保持纯粹；Note 不再依附 Highlight；Range 成为唯一且稳定的身份锚点。
+
+
+---
+
+## 12. 实现记录（2026-09-13）
+
+### Domain
+
+- 新增 `AnnotationRange`、`TextAnnotation`、`HighlightLayer`、`NoteEntry`。
+- 新增 `TextAnnotationRepository`。
+- `AnnotationRange.rangeKey` 使用 canonical locator identity。
+- 同一 Range 合并，不同 Range 分对象。
+- NoteEntry 支持数组追加。
+
+### Persistence
+
+- 新增 migration `v28_text_annotations`。
+- 新增 `textAnnotations` 和 `annotationNotes`。
+- 旧 Highlight / Note 自动迁移：
+  - 同 Range 的依附 Note 合并为 NoteEntry。
+  - 独立 Note 保持独立 Range。
+  - 历史交叉 Highlight 按较新者保留，旧表同步清理。
+- 新 repository 写入时镜像旧表，保证 Session / Journal / Export / Stats 兼容。
+- 旧表保留用于回滚和审计。
+
+### Reader
+
+- ReaderModel 以 TextAnnotation 为中心。
+- `highlights` / `notes` 变为兼容投影。
+- Highlighter 菜单只保留换色和删除。
+- NoteEntry 支持追加和切换。
+- 同一 Range 同时有 Highlight 和 Note 时显示“高亮 / 笔记”选择器。
+- 不同 Range 的 Note 交叉仍保留为不同对象。
+- Readium notes group 每个 Range 只渲染一次 underline。
+
+### Verification
+
+- `swift test`：387 tests 全绿。
+- 新增 TextAnnotation repository roundtrip 测试。
+- 新增 v27→v28 迁移测试。
+- 新增历史交叉 Highlight 保留较新者测试。
+- App Reader 文件纯语法解析通过。
