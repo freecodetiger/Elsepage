@@ -9,6 +9,7 @@ struct ReaderHelpSheet: View {
     let openCitation: (AgentResponseEvidence) -> Void
 
     @FocusState private var composerFocused: Bool
+    @State private var selectedDetent: PresentationDetent = .medium
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +31,7 @@ struct ReaderHelpSheet: View {
             composer
         }
         .background(Color.elsepageBackground)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(184), .medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(true)
         .onDisappear { model.cancel() }
@@ -280,7 +281,9 @@ struct ReaderHelpSheet: View {
     }
 
     private func handleCitation(_ evidence: AgentResponseEvidence) {
-        dismiss()
+        // Keep the temporary thread alive. Collapsing the sheet reveals the
+        // source while preserving the answer and its follow-up context.
+        selectedDetent = .height(184)
         openCitation(evidence)
     }
 

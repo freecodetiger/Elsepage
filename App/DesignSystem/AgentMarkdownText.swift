@@ -44,8 +44,19 @@ struct AgentMarkdownText: View {
         provenance.citations.reduce(content) { result, citation in
             result.replacingOccurrences(
                 of: "[\(citation.marker)]",
-                with: "[\(citation.marker)](elsepage-citation://\(citation.evidenceID))"
+                with: "[\(citationLabel(for: citation))](elsepage-citation://\(citation.evidenceID))"
             )
+        }
+    }
+
+    private func citationLabel(for citation: AgentCitation) -> String {
+        guard let evidence = provenance.evidence.first(where: { $0.id == citation.evidenceID }) else {
+            return citation.marker
+        }
+        return switch evidence.kind {
+        case .nearbyPassage: "原文"
+        case .bookPassage: "书中"
+        case .pastReflection: "过去"
         }
     }
 }
