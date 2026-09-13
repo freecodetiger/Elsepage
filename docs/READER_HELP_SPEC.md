@@ -176,6 +176,10 @@ Agent：<最终完整回答>
 - 流式未完成时禁用“存为笔记”。
 - 同一 help thread 的同一回答只能保存一次；保存后按钮显示“已保存”。
 - 保存失败必须可见，不静默丢弃。
+- 保存成功后 help sheet 自动收起到 compact detent。
+- 无 Highlight 的独立 Note 在正文中使用轻量 underline decoration。
+- 已有 Highlight 的 Note 继续使用 Highlight，不重复添加下划线。
+- 点击正文中的 note decoration 可打开对应 Note。
 - v1 不自动保存 Agent 引用，也不创建 Reflection 或 Memory。
 
 ### 4.7 视觉与无障碍
