@@ -73,7 +73,7 @@ If you want an iOS reader that treats **what you thought** as the deliverable, y
 ### Voice
 
 - **Tap-to-talk or hold-to-talk**, with live (partial) transcription you can edit.
-- **Optional audio file** — AAC/M4A, stored only when explicitly enabled.
+- **Audio file** — AAC/M4A saved by default when you start a voice recording; you can turn it off before or after recording. Opening the page never starts the microphone.
 - **One-tap AI polish** — tidies your spoken words without changing meaning; the raw words stay stored.
 
 ### Journal & transparency
@@ -101,7 +101,7 @@ A real product loop, not a demo: read → reflect → save → grounded reply �
 | Reflection loop | ~80% |
 | Book context / Agent | ~90% — citations grounded; **small-to-big** child retrieval (≈350-char retrieval units → parent-anchored evidence windows), hybrid lexical + semantic recall for reflections/memories, cross-encoder rerank gate |
 | Context engineering | planner-grade context plan (dense/lexical split) → source-specific retrieval → candidate ranking/dedup/budget → `ContextBundle`; anti-spoiler enforced at retrieval **and** expansion |
-| Voice reflection | shipped: hold/tap, editable transcript, optional AAC/M4A, AI polish |
+| Voice reflection | shipped: hold/tap, editable transcript, default AAC/M4A with opt-out, seekable playback, AI polish |
 | Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall, semantic memory matching |
 | Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
 

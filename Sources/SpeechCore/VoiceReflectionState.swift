@@ -40,7 +40,7 @@ public struct VoiceReflectionState: Equatable, Sendable {
     public private(set) var transcript = ""
     public private(set) var failureMessage: String?
     /// Whether a voice reflection should also persist the raw audio file (default: off per PRD "可选").
-    public var saveAudio = false
+    public var saveAudio = true
     /// Name of the written audio file inside the Reflections directory, or nil when not saving audio.
     public var audioFileName: String?
 

@@ -35,7 +35,7 @@
 | 声明 | 证据 |
 |---|---|
 | 仅使用 Apple SFSpeechRecognizer,无云端 ASR Provider | `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift`;PRD §21.1 偏差记录(云端 ASR 移至 v2) |
-| 原始音频仅由用户显式开启保存,并按 Reflection/书籍/全清生命周期删除 | `App/Reflection/VoiceReflectionRecorder.swift`、`Sources/AppInfrastructure/AudioFileStore.swift`;PRD §21.8 |
+| 用户主动开始录音后默认保存原始音频,可提前关闭,并按 Reflection/书籍/全清生命周期删除 | `App/Reflection/VoiceReflectionRecorder.swift`、`Sources/AppInfrastructure/AudioFileStore.swift`;PRD §21.8 |
 | 权限用途文案 | `App/Info.plist`:`NSMicrophoneUsageDescription`、`NSSpeechRecognitionUsageDescription`(均为本机转写表述) |
 
 ## 5. 「服务商预设列表」

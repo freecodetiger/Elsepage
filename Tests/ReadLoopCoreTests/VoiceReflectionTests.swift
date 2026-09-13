@@ -123,8 +123,11 @@ import Testing
 
 @Test func voiceStateExposesAudioSaveToggleAndFileName() {
     var state = VoiceReflectionState()
-    #expect(state.saveAudio == false)
+    #expect(state.saveAudio == true)
     #expect(state.audioFileName == nil)
+
+    state.saveAudio = false
+    #expect(state.saveAudio == false)
 
     state.saveAudio = true
     state.audioFileName = "abc-123.m4a"
