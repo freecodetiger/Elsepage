@@ -180,8 +180,8 @@ Agent：<最终完整回答>
 - 无 Highlight 的独立 Note 在正文中使用轻量 underline decoration。
 - 已有 Highlight 的 Note 继续使用 Highlight，不重复添加下划线。
 - 点击正文中的 note decoration 可打开对应 Note。
-- Highlight 是重叠区域的主命中目标，先展示高亮菜单。
-- Highlight 菜单检测重叠的独立 Note，并提供显式“笔记”入口。
+- 独立 Note 与 Highlight 重叠时，不依赖 decoration group 顺序，统一展示“笔记 / 高亮”二次选择器。
+- 选择后分别打开 Note editor 或 Highlight menu。
 - Note underline 在非重叠区域仍直接打开对应 Note。
 - Note editor 默认显示 Markdown 预览，用户主动切换到编辑态后才显示裸文本和键盘。
 - Reader Help 保存 Note 时移除内部 `[E1]` citation marker。

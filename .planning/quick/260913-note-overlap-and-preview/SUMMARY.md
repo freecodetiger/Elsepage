@@ -2,8 +2,8 @@
 
 ## 已完成
 
-- Highlight 保持重叠区域的主命中优先级，不再让 Note 永久盖住高亮菜单。
-- Highlight 菜单检测与其重叠的独立 Note，并显示“笔记”入口。
+- 独立 Note 与 Highlight 重叠时统一显示“笔记 / 高亮”二次选择器。
+- 选择后分别打开 Note editor 或 Highlight menu。
 - Note underline 的非重叠区域仍直接打开对应 Note。
 - Note editor 默认进入 Markdown 预览态，不自动弹出键盘。
 - 增加“预览 / 编辑”分段控件。

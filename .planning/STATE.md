@@ -97,4 +97,5 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Agent Markdown v3 渲染完成（`.planning/quick/260913-agent-markdown-v3/SUMMARY.md`）；标题/列表/引用/代码块可渲染，Reader Help Prompt v3 支持更长结构化回答。
 - 2026-09-13：选区工具栏“聊聊”删除完成（`.planning/quick/260913-remove-reader-reflect-action/SUMMARY.md`）；保留笔记、问和复制入口。
 - 2026-09-13：Reader Help 保存笔记反馈完成（`.planning/quick/260913-reader-help-note-feedback/SUMMARY.md`、`.planning/quick/260913-reader-help-note-decoration/SUMMARY.md`）；保存后正文显示 note underline，并可点击打开。
-- 2026-09-13：Note 重叠命中与预览/编辑双态完成（`.planning/quick/260913-note-overlap-and-preview/SUMMARY.md`）；Highlight 保留重叠主命中，菜单提供 Note 入口，Note editor 默认 Markdown 预览。
+- 2026-09-13：Note 重叠命中与预览/编辑双态完成（`.planning/quick/260913-note-overlap-and-preview/SUMMARY.md`）；重叠时提供“笔记 / 高亮”选择器，Note editor 默认 Markdown 预览。
+- 2026-09-13：Note / Highlight 冲突选择器完成（`.planning/quick/260913-annotation-conflict-picker/SUMMARY.md`）；仅真实重叠时二次选择笔记或高亮。
