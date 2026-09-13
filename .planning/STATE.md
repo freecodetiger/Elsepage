@@ -102,4 +102,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-13：Annotation Model Refactor Spec 完成（`.planning/quick/260913-annotation-model-spec/SUMMARY.md`）；Range 成为唯一身份，Highlight/Note 完全解耦，Note 允许交叉并追加数组，旧交叉高亮保留较新者。
 - 2026-09-13：Annotation Model Refactor 落地完成（`.planning/quick/260913-annotation-model-refactor/SUMMARY.md`）；v28 迁移、TextAnnotation 聚合、NoteEntry 数组和冲突 selector 已实现，387 tests 全绿。
 - 2026-09-13：Readium Selection Range Bridge 完成（`.planning/quick/260913-readium-range-bridge/SUMMARY.md`）；通过 evaluateJavaScript 获取真实 start/end，388 tests 全绿。
-- 2026-09-13：Annotation 点击坐标冲突消歧完成（`.planning/quick/260913-annotation-overlap-hit-fix/SUMMARY.md`）；只有点击点同时命中 Note 和 Highlight 才显示选择器。
+- 2026-09-13：Annotation 点击坐标冲突消歧完成（`.planning/quick/260913-annotation-overlap-hit-fix/SUMMARY.md`）；按 decoration clickableElements 的 hit rect 判定，只有点击点同时命中 Note 和 Highlight 才显示选择器。
