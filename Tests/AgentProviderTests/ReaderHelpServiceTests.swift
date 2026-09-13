@@ -49,6 +49,22 @@ import Testing
     #expect(modelRequest.maxOutputTokens == 600)
 }
 
+@Test func readerHelpAllowsGeneralBackgroundWithoutLocalEvidence() throws {
+    let input = ReaderHelpPolicy().input(
+        for: try request(),
+        selectedText: "a page",
+        nearbyText: nil,
+        responseEvidence: []
+    )
+    let system = try #require(input.messages.first?.content)
+
+    #expect(input.metadata.promptVersion == "reader-help-v2")
+    #expect(system.contains("现实背景和通识解释可以直接回答"))
+    #expect(system.contains("不要因为当前 RAG 没有提供证据就拒答"))
+    #expect(system.contains("书内事实必须严格依据原文"))
+    #expect(!system.contains("除非确实必要"))
+}
+
 @Test func readerHelpRejectsInvalidSelectionsAndQuestionsBeforeCallingModel() async throws {
     let factory = CountingModelFactory(client: FakeModelClient(events: [.completed(.init(content: "不会调用"))]))
     let service = ReaderHelpService(models: factory)
