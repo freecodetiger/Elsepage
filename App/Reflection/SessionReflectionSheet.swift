@@ -1471,19 +1471,44 @@ struct ReflectionConversationView: View {
             let cited = provenance.evidence.filter { citedIDs.contains($0.id) }
             let shown = cited.isEmpty ? provenance.evidence : cited
             if !shown.isEmpty {
-                DisclosureGroup("本次使用了 \(shown.count) 处阅读数据") {
-                    ForEach(shown) { evidence in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(evidence.title ?? evidence.kind.title).font(.caption.weight(.semibold))
-                            Text(evidence.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(4)
-                            if evidence.locator != nil {
-                                Button("回到原文") { openCitation?(evidence) }.font(.caption)
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(shown) { evidence in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(evidence.title ?? evidence.kind.title)
+                                    .font(.caption.weight(.semibold))
+                                Text(evidence.excerpt)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                                if evidence.locator != nil {
+                                    Button("回到原文") { openCitation?(evidence) }
+                                        .font(.caption)
+                                }
                             }
-                        }.padding(.vertical, 3)
+                        }
                     }
-                }.font(.footnote)
+                    .padding(.top, 4)
+                } label: {
+                    Label(evidenceSummary(shown), systemImage: "link")
+                        .font(.caption)
+                        .foregroundStyle(Color.elsepageTextTertiary)
+                }
+                .tint(Color.elsepageTextSecondary)
             }
         }
+    }
+
+    private func evidenceSummary(_ evidence: [AgentResponseEvidence]) -> String {
+        let bookCount = evidence.filter {
+            $0.kind == .bookPassage || $0.kind == .nearbyPassage
+        }.count
+        let pastCount = evidence.filter { $0.kind == .pastReflection }.count
+        var parts: [String] = []
+        if bookCount > 0 { parts.append("\(bookCount) 段原文") }
+        if pastCount > 0 { parts.append("\(pastCount) 条过往记录") }
+        let detail = parts.isEmpty ? "\(evidence.count) 条来源" : parts.joined(separator: " · ")
+        return "依据 · \(detail)"
     }
 
     private func disclosureLine(_ disclosure: ContextDisclosure) -> String {

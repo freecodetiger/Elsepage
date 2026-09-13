@@ -24,7 +24,7 @@
   - all cards share identical resting styling
   - tapping a card pushes a dedicated record world instead of expanding inline
   - the record world shows 概要 / 我的原话 / AI 回应 / 这次留下 / 对话输入 / 依据
-  - evidence is a normal section, not another required disclosure
+  - evidence is a compact footnote attached to its AI response, not a global section
   - compact width uses NavigationStack; regular width is specified for split view
   - record detail hides the system navigation bar and uses only a floating glass back button
 - Added Chinese date formatting through `ElsepageDateFormat`.

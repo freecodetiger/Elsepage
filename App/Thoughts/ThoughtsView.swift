@@ -260,6 +260,14 @@ private struct ThoughtRecordDetailView: View {
     @State private var conversation: ReflectionConversationModel?
     @Environment(\.dismiss) private var dismiss
 
+    private var recordExtras: AnyView? {
+        guard let journal,
+              !journal.whatIThink.isEmpty || !journal.questions.isEmpty else {
+            return nil
+        }
+        return AnyView(ThoughtRecordExtras(journal: journal))
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             Group {
@@ -270,16 +278,10 @@ private struct ThoughtRecordDetailView: View {
                             ThoughtRecordHeader(entry: entry)
                                 .padding(.top, 48)
                         ),
-                        recordExtras: AnyView(
-                            ThoughtRecordExtras(
-                                entry: entry,
-                                journal: journal,
-                                openSource: openSource
-                            )
-                        ),
+                        recordExtras: recordExtras,
                         rootTitle: "我的原话",
                         rootTextOverride: entry.reflection.originalText,
-                        showsInlineProvenance: false,
+                        showsInlineProvenance: true,
                         openCitation: { evidence in
                             guard evidence.bookID == entry.book.id,
                                   let locator = evidence.locator else { return }
@@ -362,49 +364,21 @@ private struct ThoughtRecordHeader: View {
 }
 
 private struct ThoughtRecordExtras: View {
-    let entry: ReflectionArchiveEntry
     let journal: JournalEntry?
-    let openSource: (Book, BookLocator) -> Void
-
-    private var hasStructuredLeftovers: Bool {
-        journal?.whatIThink.isEmpty == false || journal?.questions.isEmpty == false
-    }
-
-    private var hasEvidence: Bool {
-        !entry.connections.isEmpty
-            || entry.sourceLocator != nil
-            || journal?.citations.isEmpty == false
-            || journal?.session != nil
-            || journal?.chapters.isEmpty == false
-            || entry.derivedAgentResponse.flatMap { entry.responseProvenance[$0.id] }?.evidence.isEmpty == false
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-            if hasStructuredLeftovers {
-                leftoversSection
-            }
-
-            if hasEvidence {
-                Divider()
-                evidenceSection
-            }
-        }
-    }
-
-    private var leftoversSection: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             Text("这次留下")
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.7)
                 .foregroundStyle(Color.elsepageTextTertiary)
 
-            if let thoughts = journal?.whatIThink, !thoughts.isEmpty {
+            if !journal.whatIThink.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("看法")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
-                    ForEach(thoughts.prefix(3), id: \.id) { thought in
+                    ForEach(journal.whatIThink.prefix(3), id: \.id) { thought in
                         Text("· \(thought.thought)")
                             .font(.system(size: 15))
                             .foregroundStyle(Color.elsepageTextPrimary)
@@ -413,12 +387,12 @@ private struct ThoughtRecordExtras: View {
                 }
             }
 
-            if let questions = journal?.questions, !questions.isEmpty {
+            if !journal.questions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("问题")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
-                    ForEach(questions.prefix(2)) { question in
+                    ForEach(journal.questions.prefix(2)) { question in
                         Text("· \(question.text)")
                             .font(.system(size: 15))
                             .foregroundStyle(Color.elsepageTextPrimary)
@@ -427,106 +401,5 @@ private struct ThoughtRecordExtras: View {
                 }
             }
         }
-    }
-
-    private var evidenceSection: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-            Text("依据")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.7)
-                .foregroundStyle(Color.elsepageTextTertiary)
-
-            if let session = journal?.session, let duration = session.duration {
-                evidenceRow(title: "本次阅读", value: durationLabel(duration))
-            }
-
-            if let chapters = journal?.chapters, !chapters.isEmpty {
-                evidenceRow(
-                    title: "覆盖章节",
-                    value: chapters.compactMap(\.title).joined(separator: "、")
-                )
-            }
-
-            if let response = entry.derivedAgentResponse,
-               let provenance = entry.responseProvenance[response.id],
-               !provenance.evidence.isEmpty {
-                evidenceList(title: "本次使用的上下文", items: provenance.evidence.map {
-                    ($0.title ?? "阅读证据", $0.excerpt, $0.locator)
-                })
-            }
-
-            if let citations = journal?.citations, !citations.isEmpty {
-                evidenceList(title: "引用", items: citations.map {
-                    ($0.title ?? "原文引用", $0.excerpt ?? "", $0.locator)
-                })
-            }
-
-            if let connection = entry.connections.first {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("过去的你")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.elsepageTextSecondary)
-                    Text(connection.sourceReflection.originalText)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.elsepageTextSecondary)
-                        .lineLimit(4)
-                    if let locator = connection.sourceLocator {
-                        Button("回到《\(connection.sourceBook.title)》") {
-                            openSource(connection.sourceBook, locator)
-                        }
-                        .font(.system(size: 13, weight: .medium))
-                    }
-                }
-            }
-
-            if let locator = entry.sourceLocator {
-                Button("回到原文") { openSource(entry.book, locator) }
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func evidenceList(
-        title: String,
-        items: [(String, String, BookLocator?)]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.elsepageTextSecondary)
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.0)
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(item.1)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.elsepageTextSecondary)
-                        .lineLimit(4)
-                    if let locator = item.2 {
-                        Button("回到原文") { openSource(entry.book, locator) }
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                }
-            }
-        }
-    }
-
-    private func evidenceRow(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.elsepageTextSecondary)
-            Text(value)
-                .font(.system(size: 14))
-                .foregroundStyle(Color.elsepageTextPrimary)
-        }
-    }
-
-    private func durationLabel(_ duration: TimeInterval) -> String {
-        let minutes = Int((duration / 60).rounded(.down))
-        return minutes > 0 ? "\(minutes) 分钟" : "不足 1 分钟"
     }
 }
