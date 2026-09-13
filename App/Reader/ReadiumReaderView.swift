@@ -107,10 +107,11 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         let anchor = Self.menuAnchor(for: event)
                         Task { [weak self] in
                             let noteIDs = await Self.decorationIDsAtLastPoint(in: "notes", navigator: navigator)
-                            AnnotationLog.event("highlight.hit id=\(AnnotationLog.id(id)) overlapNotes=\(noteIDs.map { AnnotationLog.id($0) }.joined(separator: ","))")
+                            AnnotationLog.event("highlight.hit id=\(AnnotationLog.id(id)) resolved=\(noteIDs != nil) overlapNotes=\(noteIDs?.map { AnnotationLog.id($0) }.joined(separator: ",") ?? "unresolved")")
                             self?.model.handleHighlightActivation(
                                 for: id,
-                                confirmedNoteID: noteIDs.first,
+                                confirmedNoteID: noteIDs?.first,
+                                resolvedPointOverlap: noteIDs != nil,
                                 anchor: anchor
                             )
                         }
@@ -120,10 +121,11 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                         let anchor = Self.menuAnchor(for: event)
                         Task { [weak self] in
                             let highlightIDs = await Self.decorationIDsAtLastPoint(in: "highlights", navigator: navigator)
-                            AnnotationLog.event("note.hit id=\(AnnotationLog.id(id)) overlapHighlights=\(highlightIDs.map { AnnotationLog.id($0) }.joined(separator: ","))")
+                            AnnotationLog.event("note.hit id=\(AnnotationLog.id(id)) resolved=\(highlightIDs != nil) overlapHighlights=\(highlightIDs?.map { AnnotationLog.id($0) }.joined(separator: ",") ?? "unresolved")")
                             self?.model.handleNoteActivation(
                                 for: id,
-                                confirmedHighlightID: highlightIDs.first,
+                                confirmedHighlightID: highlightIDs?.first,
+                                resolvedPointOverlap: highlightIDs != nil,
                                 anchor: anchor
                             )
                         }
@@ -345,7 +347,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         private static func decorationIDsAtLastPoint(
             in group: String,
             navigator: EPUBNavigatorViewController
-        ) async -> [UUID] {
+        ) async -> [UUID]? {
             let script = """
             (function() {
               const point = window.__readiumLastDecorationPoint;
@@ -372,10 +374,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             """
             guard case .success(let value) = await navigator.evaluateJavaScript(script),
                   let payload = value as? [String: Any],
-                  let ids = payload["ids"] as? [String] else { return [] }
-            let x = (payload["x"] as? NSNumber)?.doubleValue
-            let y = (payload["y"] as? NSNumber)?.doubleValue
-            let pointDescription = x.flatMap { x in y.map { y in String(format: "(%.1f,%.1f)", x, y) } } ?? "nil"
+                  let ids = payload["ids"] as? [String],
+                  let x = (payload["x"] as? NSNumber)?.doubleValue,
+                  let y = (payload["y"] as? NSNumber)?.doubleValue else { return nil }
+            let pointDescription = String(format: "(%.1f,%.1f)", x, y)
             AnnotationLog.event("decoration.point group=\(group) point=\(pointDescription) ids=\(ids.joined(separator: ","))")
             Perf.shared.event("annotation.point group=\(group) point=\(pointDescription) ids=\(ids.joined(separator: ","))")
             return ids.compactMap(UUID.init(uuidString:))

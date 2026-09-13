@@ -511,14 +511,26 @@ final class ReaderModel {
         return .closed
     }
 
-    func handleHighlightActivation(for id: UUID, confirmedNoteID: UUID? = nil, anchor: CGRect?) {
+    func handleHighlightActivation(
+        for id: UUID,
+        confirmedNoteID: UUID? = nil,
+        resolvedPointOverlap: Bool = false,
+        anchor: CGRect?
+    ) {
         guard let annotation = annotation(forHighlightID: id) else { return }
         let validatedConfirmedNoteID = confirmedNoteID.flatMap { candidate in
             self.annotation(forNoteID: candidate) == nil ? nil : candidate
         }
-        let noteID = validatedConfirmedNoteID ?? annotation.notes.last?.id ?? overlappingNoteID(for: annotation.range)
+        let noteID: UUID?
+        if let ownNote = annotation.notes.last {
+            noteID = ownNote.id
+        } else if resolvedPointOverlap {
+            noteID = validatedConfirmedNoteID
+        } else {
+            noteID = overlappingNoteID(for: annotation.range)
+        }
         let noteDescription = noteID.map { AnnotationLog.id($0) } ?? "nil"
-        AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) conflictNote=\(noteDescription)")
+        AnnotationLog.event("highlight.activate id=\(AnnotationLog.id(id)) ownNotes=\(annotation.notes.count) resolved=\(resolvedPointOverlap) conflictNote=\(noteDescription)")
         Perf.shared.event("annotation.activate kind=highlight id=\(AnnotationLog.id(id)) overlapNote=\(noteDescription)")
         if let noteID {
             showAnnotationConflict(noteID: noteID, highlightID: id, anchor: anchor)
@@ -527,7 +539,12 @@ final class ReaderModel {
         }
     }
 
-    func handleNoteActivation(for id: UUID, confirmedHighlightID: UUID? = nil, anchor: CGRect?) {
+    func handleNoteActivation(
+        for id: UUID,
+        confirmedHighlightID: UUID? = nil,
+        resolvedPointOverlap: Bool = false,
+        anchor: CGRect?
+    ) {
         guard let annotation = annotation(forNoteID: id) else { return }
         let validatedConfirmedHighlightID = confirmedHighlightID.flatMap { candidate in
             self.annotation(forHighlightID: candidate) == nil ? nil : candidate
@@ -542,6 +559,12 @@ final class ReaderModel {
             AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=\(AnnotationLog.id(annotation.id)) sameRange=true")
             Perf.shared.event("annotation.activate kind=note id=\(AnnotationLog.id(id)) overlapHighlight=\(AnnotationLog.id(annotation.id)) sameRange=true")
             showAnnotationConflict(noteID: id, highlightID: annotation.id, anchor: anchor)
+            return
+        }
+        if resolvedPointOverlap {
+            AnnotationLog.event("note.activate id=\(AnnotationLog.id(id)) conflictHighlight=nil resolved=true")
+            Perf.shared.event("annotation.activate kind=note id=\(AnnotationLog.id(id)) overlapHighlight=nil resolved=true")
+            openNoteEditor(.note(id))
             return
         }
         if let overlappingHighlight = textAnnotations.first(where: {
