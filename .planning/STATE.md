@@ -123,3 +123,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：想法页搜索入口调整完成（`.planning/quick/260914-xa0-ui/SUMMARY.md`）；移除标题下方常驻搜索框，改用右上角系统工具栏搜索按钮，点击后展开，其他卡片/分组/详情保持不变；391 包测试全绿，Xcode 真机位置验收待用户。
 - 2026-09-14：想法页显式搜索按钮完成（`.planning/quick/260914-xbg-thoughts-search-button/SUMMARY.md`）；右上角固定加入 magnifyingglass 按钮，与更多菜单并列，点击后展开 searchable 抽屉，卡片/分组/详情不变；391 包测试全绿，Xcode 真机按钮位置验收待用户。
 - 2026-09-15：想法页自定义搜索抽屉完成（`.planning/quick/260915-00w-thoughts-search-drawer/SUMMARY.md`）；移除系统 searchable 和常驻搜索条，右上角按钮触发从右侧展开的玻璃胶囊搜索框，关闭清空搜索；391 包测试全绿，Xcode 真机展开效果验收待用户。
+- 2026-09-15：想法页搜索改为系统 toolbar morphing（`.planning/quick/260915-037-toolbar-morphing/SUMMARY.md`）；删除内容区 safeAreaInset 搜索抽屉，使用 searchable(placement:.toolbar) 让搜索按钮向左展开并保留右侧更多按钮；391 包测试全绿，Xcode 真机展开方向验收待用户。
