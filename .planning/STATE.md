@@ -109,3 +109,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：想法页 UI 重构代码落地（`.planning/quick/260914-thoughts-ui-implementation/SUMMARY.md`）；新增 v29 不可变概要、自动首次回应与后台补齐，删除档案入口/筛选/状态/手动回应，卡片收敛为书名+中文日期+概要，点击进入独立记录世界，详情隐藏系统标题栏并保留左上角玻璃悬浮返回，含概要、用户/AI inline 头像署名正文、每条回应的轻量依据脚注、这次留下和对话输入；391 包测试全绿，Xcode 真机验收待用户。
 - 2026-09-14：对话身份设置完成（`.planning/quick/260914-conversation-identity-settings/SUMMARY.md`）；设置新增用户名/AI名称、头像符号选择、实时预览和恢复默认，偏好通过 AppStorage 即时作用于对话消息；391 包测试全绿。
 - 2026-09-14：删除 Today 独立 Tab（`.planning/quick/260914-remove-today-tab/SUMMARY.md`）；主导航改为书架/想法/我的，默认进入书架；补写 Reflection 降为书架顶部 Next Action，连续阅读/连续思考迁入我的；391 包测试全绿。
+- 2026-09-14：书架第一轮重构落地（`.planning/quick/260914-bookshelf-first-pass/SUMMARY.md`）；当前阅读桌面、彩色书脊书架、书脊/封面切换、按压缩放与抽出动画已实现；Today 已从主导航移除，补写动作附着当前书，Streak 迁入我的；391 包测试全绿。

@@ -9,6 +9,7 @@ struct LibraryView: View {
     @Bindable var settings: SettingsRootModel
     let achievements: AchievementModel?
     @State private var nextActionModel: LibraryNextActionModel
+    @State private var displayMode: LibraryDisplayMode = .spines
     @State private var importing = false
     @State private var showsSettings = false
     @State private var selectedBook: Book?
@@ -42,6 +43,12 @@ struct LibraryView: View {
                         Picker("排序", selection: $model.sortOrder) {
                             ForEach(LibrarySortOrder.allCases) { order in
                                 Text(order.title).tag(order)
+                            }
+                        }
+                        Divider()
+                        Picker("显示", selection: $displayMode) {
+                            ForEach(LibraryDisplayMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
                             }
                         }
                     } label: {
@@ -148,107 +155,44 @@ struct LibraryView: View {
     }
 
     private func bookList(_ model: LibraryModel) -> some View {
-        GeometryReader { geometry in
-            let columnCount = LibraryGridLayout.columnCount(isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
-            let columnWidth = LibraryGridLayout.columnWidth(
-                containerWidth: geometry.size.width,
-                horizontalPadding: ElsepageTheme.Spacing.page,
-                columnSpacing: ElsepageTheme.Spacing.medium,
-                columnCount: columnCount
-            )
-
-            if model.visibleBooks.isEmpty {
-                // 书架搜索无结果：明确但不责备。
-                ContentUnavailableView.search(text: model.searchQuery)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
-                        if case .offerReflection = nextActionModel.state {
-                            LibraryNextActionView(
-                                model: nextActionModel,
-                                achievements: achievements,
-                                onSaved: {
-                                    Task {
-                                        await model.reload()
-                                        await nextActionModel.reload()
-                                    }
-                                }
-                            )
-                        }
-
-                        // Fixed columns prevent SwiftUI from using a cover's ideal width
-                        // during grid measurement. Every cell gets the same finite width.
-                        LazyVGrid(
-                            columns: Array(
-                                repeating: GridItem(.fixed(columnWidth), spacing: ElsepageTheme.Spacing.medium),
-                                count: columnCount
-                            ),
-                            spacing: ElsepageTheme.Spacing.xLarge
-                        ) {
-                            ForEach(model.visibleBooks) { book in
-                                Button { selectedBook = book } label: {
-                                    VStack(alignment: .leading, spacing: 10) {
-                                        // Keep geometry independent from the source image's
-                                        // aspect ratio. Wide EPUB covers are cropped inside this
-                                        // fixed 2:3 portrait frame instead of expanding the cell.
-                                        ZStack {
-                                            Color.clear
-                                            ElsepageBookCover(
-                                                image: model.cover(for: book),
-                                                title: book.title,
-                                                author: book.author,
-                                                seed: Int(book.id.rawValue.uuid.0)
-                                            )
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        }
-                                        .frame(
-                                            width: columnWidth,
-                                            height: columnWidth / LibraryGridLayout.coverAspectRatio
-                                        )
-                                        .aspectRatio(LibraryGridLayout.coverAspectRatio, contentMode: .fit)
-                                        .task(id: book.id) { await model.loadCover(for: book) }
-                                        Text(book.title)
-                                            .font(ElsepageTheme.Typography.itemTitle)
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(2)
-                                        Text(metadata(for: book))
-                                            .font(ElsepageTheme.Typography.metadata)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                        if let statsLine = model.statsLine(for: book) {
-                                            Text(statsLine)
-                                                .font(ElsepageTheme.Typography.metadata)
-                                                .foregroundStyle(.tertiary)
-                                                .lineLimit(1)
-                                        }
-                                        if let progress = model.progress(for: book) {
-                                            ProgressView(value: progress)
-                                                .tint(.elsepageInteractive)
-                                                .accessibilityLabel("阅读进度")
-                                                .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
-                                        }
-                                    }
-                                    .frame(width: columnWidth, alignment: .leading)
-                                    .clipped()
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(accessibilityLabel(for: book))
-                                .accessibilityHint("打开并继续阅读")
-                                .contextMenu {
-                                    Button(role: .destructive) { deletingBook = book } label: {
-                                        Label("从书架移除", systemImage: "trash")
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .frame(width: columnWidth, alignment: .leading)
+        ScrollView {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
+                if model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let currentBook = model.currentBook {
+                    LibraryCurrentReadingDeskView(
+                        model: nextActionModel,
+                        book: currentBook,
+                        progress: model.progress(for: currentBook),
+                        cover: model.cover(for: currentBook),
+                        achievements: achievements,
+                        openBook: { selectedBook = currentBook },
+                        onSaved: {
+                            Task {
+                                await model.reload()
+                                await nextActionModel.reload()
                             }
                         }
+                    )
+                    .task(id: currentBook.id) {
+                        await model.loadCover(for: currentBook)
                     }
-                    .padding(ElsepageTheme.Spacing.page)
+                }
+
+                if model.visibleBooks.isEmpty {
+                    ContentUnavailableView.search(text: model.searchQuery)
+                        .frame(maxWidth: .infinity, minHeight: 260)
+                } else {
+                    LibraryShelfView(
+                        books: model.visibleBooks,
+                        mode: displayMode,
+                        cover: { model.cover(for: $0) },
+                        progress: { model.progress(for: $0) },
+                        openBook: { selectedBook = $0 },
+                        loadCover: { await model.loadCover(for: $0) }
+                    )
                 }
             }
+            .padding(ElsepageTheme.Spacing.page)
         }
     }
 

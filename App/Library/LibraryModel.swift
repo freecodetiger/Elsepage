@@ -139,6 +139,14 @@ final class LibraryModel {
         )
     }
 
+    var currentBook: Book? {
+        books.max { lhs, rhs in
+            let lhsDate = lhs.lastOpenedAt ?? lhs.importedAt
+            let rhsDate = rhs.lastOpenedAt ?? rhs.importedAt
+            return lhsDate < rhsDate
+        }
+    }
+
     var visibleBooks: [Book] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches = books.filter { book in
