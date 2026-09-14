@@ -119,3 +119,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：书架木质拟物撤回完成（`.planning/quick/260914-wxe-revert-wood/SUMMARY.md`）；恢复低噪中性书架，删除木质桌面/承托板和书本页芯、底板与额外投影，桌面书本外框与封面统一为 100×150pt，保留固定几何、同级操作与 zoom transition；391 包测试全绿，Xcode 真机视觉验收待用户。
 - 2026-09-14：Reader 返回书架封面闪烁修复完成（`.planning/quick/260914-x0a-reader/SUMMARY.md`）；根因是封面外部阴影不属于 matched transition source frame，源视图与 Reader 占位改为共享 100×150pt 无阴影几何并显式裁切 zoom snapshot；391 包测试全绿，Xcode 真机返回动画验收待用户。
 - 2026-09-14：书架 zoom transition 阴影一致性修复完成（`.planning/quick/260914-x2m-zoom-transition/SUMMARY.md`）；恢复封面层次，将封面尺寸、圆角与阴影参数集中管理，并同步写入当前封面/书脊/封面模式的 matched transition configuration；391 包测试全绿，Xcode 真机开合动画验收待用户。
+- 2026-09-14：想法页编辑式 HTML 原型完成（`.planning/quick/260914-x71-html/SUMMARY.md`）；新增 `docs/prototypes/thoughts-editorial.html`，去掉重复卡片/数量/箭头，改为月份分组与细分隔线的编辑式记录流，搜索默认收起，支持时间/书籍分组和明暗预览；HTML/JS 静态检查通过，最终视觉审阅待用户。
