@@ -82,24 +82,18 @@ struct LibraryCurrentReadingDeskView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-            Text(pendingSession == nil ? "正在阅读" : "下一步")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.elsepageTextTertiary)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: ElsepageTheme.Spacing.large) {
-                    coverView
-                    metadata
-                }
-                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
-                    coverView
-                    metadata
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: ElsepageTheme.Spacing.medium) {
+                coverView
+                metadata
+            }
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+                coverView
+                metadata
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ElsepageTheme.Spacing.large)
+        .padding(ElsepageTheme.Spacing.medium)
         .background(
             Color.elsepageSurface,
             in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.large, style: .continuous)
@@ -135,7 +129,7 @@ struct LibraryCurrentReadingDeskView: View {
                 author: book.author,
                 seed: Int(book.id.rawValue.uuid.0)
             )
-            .frame(width: 112, height: 168)
+            .frame(width: 84, height: 126)
 
             if let progress {
                 GeometryReader { geometry in
@@ -143,44 +137,46 @@ struct LibraryCurrentReadingDeskView: View {
                         .fill(accentColor)
                         .frame(width: 5, height: max(10, geometry.size.height * progress))
                         .frame(maxHeight: .infinity, alignment: .top)
-                        .padding(.top, 8)
+                        .padding(.top, 7)
                         .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
                 }
-                .frame(width: 5, height: 152)
+                .frame(width: 5, height: 110)
                 .padding(.trailing, 8)
             }
         }
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 7)
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 5)
         .accessibilityHidden(true)
     }
 
     private var metadata: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
             Text(book.title)
-                .font(.system(.title3, design: .serif, weight: .semibold))
+                .font(.system(.headline, design: .serif, weight: .semibold))
                 .foregroundStyle(Color.elsepageTextPrimary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
 
             if let author = book.author, !author.isEmpty {
                 Text(author)
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(Color.elsepageTextSecondary)
+                    .lineLimit(1)
             }
 
-            if let progress {
-                HStack(spacing: ElsepageTheme.Spacing.small) {
+            HStack(spacing: ElsepageTheme.Spacing.xSmall) {
+                if let progress {
                     ProgressView(value: progress)
                         .tint(accentColor)
+                        .frame(maxWidth: 82)
                     Text(progress, format: .percent.precision(.fractionLength(0)))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(Color.elsepageTextSecondary)
                 }
-            }
-
-            if let lastOpenedAt = book.lastOpenedAt {
-                Text("上次阅读 \(ElsepageDateFormat.shortDate(lastOpenedAt))")
-                    .font(.caption)
-                    .foregroundStyle(Color.elsepageTextTertiary)
+                if let lastOpenedAt = book.lastOpenedAt {
+                    if progress != nil { Text("·").foregroundStyle(Color.elsepageTextTertiary) }
+                    Text(ElsepageDateFormat.shortDate(lastOpenedAt))
+                        .font(.caption)
+                        .foregroundStyle(Color.elsepageTextTertiary)
+                }
             }
 
             if let session = pendingSession {
@@ -188,6 +184,7 @@ struct LibraryCurrentReadingDeskView: View {
             } else {
                 Button("继续阅读", action: openBook)
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                     .tint(.elsepageInteractive)
                     .foregroundStyle(Color.elsepageOnInteractive)
             }
@@ -196,11 +193,12 @@ struct LibraryCurrentReadingDeskView: View {
     }
 
     private func reflectionNote(session: ReadingSession) -> some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            Text("刚才读的，还没有留下想法。")
-                .font(.subheadline.weight(.semibold))
+        HStack(alignment: .center, spacing: ElsepageTheme.Spacing.small) {
+            Text("还没有留下想法")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.elsepageTextPrimary)
-            Button("补写想法") {
+            Spacer(minLength: 4)
+            Button("补写") {
                 guard let locator = session.endLocator else { return }
                 didSaveReflectionInSheet = false
                 presentedReflectionSessionID = session.id
@@ -218,12 +216,14 @@ struct LibraryCurrentReadingDeskView: View {
                 )
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.small)
             .tint(.elsepageInteractive)
             .foregroundStyle(Color.elsepageOnInteractive)
         }
-        .padding(ElsepageTheme.Spacing.medium)
+        .padding(.horizontal, ElsepageTheme.Spacing.small)
+        .padding(.vertical, 7)
         .background(
-            colorWithAlpha(accentColor, 0.10),
+            accentColor.opacity(0.10),
             in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
         )
         .overlay {
@@ -232,7 +232,4 @@ struct LibraryCurrentReadingDeskView: View {
         }
     }
 
-    private func colorWithAlpha(_ color: Color, _ alpha: Double) -> Color {
-        color.opacity(alpha)
-    }
 }
