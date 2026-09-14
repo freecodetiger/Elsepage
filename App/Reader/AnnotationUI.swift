@@ -487,7 +487,7 @@ struct NoteEditorSheet: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             HStack {
                 Text("笔记")
-                    .font(.system(.headline, design: .serif))
+                    .font(.headline.weight(.semibold))
                 Spacer()
                 if case .note = effectiveTarget {
                     if relatedNotes.count > 1, let index = currentNoteIndex {
@@ -535,7 +535,7 @@ struct NoteEditorSheet: View {
             if let excerpt {
                 ScrollView {
                     Text(excerpt)
-                        .font(.system(.subheadline, design: .serif))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

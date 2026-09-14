@@ -18,8 +18,10 @@ enum ElsepageTheme {
     }
 
     enum Typography {
-        static let emptyStateTitle = Font.system(.title2, design: .serif, weight: .semibold)
-        static let bookTitle = Font.system(.title3, design: .serif, weight: .semibold)
+        // App UI is Apple system-semantic typography only. Do not add custom
+        // families or serif roles here; reading content owns its own settings.
+        static let emptyStateTitle = Font.title2.weight(.semibold)
+        static let bookTitle = Font.title3.weight(.semibold)
         static let itemTitle = Font.subheadline.weight(.semibold)
         static let metadata = Font.caption
     }

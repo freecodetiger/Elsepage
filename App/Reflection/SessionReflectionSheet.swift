@@ -1184,7 +1184,7 @@ struct SessionReflectionSheet: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Text(durationLine)
-                .font(.system(.title2, design: .serif, weight: .semibold))
+                .font(.title2.weight(.semibold))
             if let progress = model.summary.progressDelta, progress > 0 {
                 Text("这次前进了 \(progress, format: .percent.precision(.fractionLength(0)))。")
                     .font(.subheadline)
@@ -1202,7 +1202,7 @@ struct SessionReflectionSheet: View {
             }
             if let quote = model.locator.textHighlight, !quote.isEmpty {
                 Text(quote)
-                    .font(.system(.body, design: .serif))
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .lineLimit(4)
             }
