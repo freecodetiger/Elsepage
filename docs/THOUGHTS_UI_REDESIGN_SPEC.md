@@ -161,7 +161,7 @@ AI 回应
   - 按书籍
   - 设置
 
-搜索使用系统 `searchable(isPresented:placement: .toolbar)`；点击右上角搜索按钮后展开，不显示常驻搜索框。
+右上角显式提供 `magnifyingglass` 工具栏按钮；点击后通过 `searchable(isPresented:)` 展开导航栏搜索抽屉，不显示常驻搜索框。
 
 ### 5.2 分组标题
 

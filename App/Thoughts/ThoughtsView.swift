@@ -36,11 +36,18 @@ struct ThoughtsView: View {
             .searchable(
                 text: $searchText,
                 isPresented: $isSearchPresented,
-                placement: .toolbar,
+                placement: .navigationBarDrawer(displayMode: .automatic),
                 prompt: "搜索记录、书名或回应"
             )
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        isSearchPresented = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("搜索记录")
+
                     Menu {
                         Picker("分组", selection: $grouping) {
                             ForEach(ThoughtsGrouping.allCases) { option in
