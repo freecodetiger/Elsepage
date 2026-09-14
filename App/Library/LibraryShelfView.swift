@@ -20,8 +20,7 @@ enum LibraryBookMetrics {
     /// A cover and a spine are different faces of the same physical object.
     /// Keeping one shared height prevents the desk hero from looking like a
     /// differently scaled copy of the books below it.
-    static let objectHeight: CGFloat = 150
-    static let currentCoverWidth: CGFloat = 100
+    static let objectHeight = ElsepageBookCoverMetrics.height
     static let spineWidth: CGFloat = 36
     static let spineTapTarget: CGFloat = 44
 }

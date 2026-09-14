@@ -206,6 +206,7 @@
 - 使用 iOS 18 原生 `matchedTransitionSource` + `navigationTransition(.zoom)`，让被打开的书成为连续移动的视觉主体。
 - 书脊模式允许系统 zoom 从窄书脊开始；封面模式和当前阅读桌面从完整封面开始。
 - Reader 准备期间显示纸张底色与书封占位，EPUB ready 后与正文交叉淡入，不跳回空白加载页。
+- zoom source 与 Reader 占位使用同一个 `100 × 150pt` 封面 frame；transition snapshot 不包含边界外阴影，返回书架时不得出现尺寸跳变或阴影晚出现。
 - 总感知时长控制在 280–360ms；EPUB 解析不得阻塞转场开始。
 - Reduce Motion 下不执行 zoom，直接进入 Reader。
 
@@ -402,6 +403,7 @@
 - [ ] 其他书籍默认以书脊呈现，密度高于当前封面网格。
 - [ ] 轻点书籍有按压和 Haptic 反馈，并以连续 zoom 进入阅读器。
 - [ ] Reader 准备期间不出现空白加载页或内容闪跳。
+- [ ] Reader 返回书架时封面不改变尺寸，也不出现延迟阴影。
 - [ ] Reduce Motion 下不丢功能。
 - [ ] accessibility Dynamic Type 使用可读列表。
 - [ ] 不再要求应用壳层所有 token 为中性色。
