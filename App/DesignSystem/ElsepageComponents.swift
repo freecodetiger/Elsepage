@@ -44,21 +44,6 @@ struct ElsepageBookCover: View {
     let title: String
     let author: String?
     let seed: Int
-    let showsShadow: Bool
-
-    init(
-        image: UIImage?,
-        title: String,
-        author: String?,
-        seed: Int,
-        showsShadow: Bool = true
-    ) {
-        self.image = image
-        self.title = title
-        self.author = author
-        self.seed = seed
-        self.showsShadow = showsShadow
-    }
 
     private var palette: [Color] {
         let palettes: [[Color]] = [
@@ -108,9 +93,9 @@ struct ElsepageBookCover: View {
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
         .shadow(
-            color: showsShadow ? ElsepageTheme.Shadow.coverColor : .clear,
-            radius: showsShadow ? ElsepageTheme.Shadow.coverRadius : 0,
-            y: showsShadow ? ElsepageTheme.Shadow.coverY : 0
+            color: ElsepageTheme.Shadow.coverColor,
+            radius: ElsepageTheme.Shadow.coverRadius,
+            y: ElsepageTheme.Shadow.coverY
         )
         .accessibilityHidden(true)
     }

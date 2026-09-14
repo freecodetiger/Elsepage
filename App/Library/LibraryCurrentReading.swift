@@ -56,12 +56,10 @@ final class LibraryNextActionModel {
 }
 
 private enum ReadingDeskMetrics {
-    static let sceneWidth: CGFloat = 112
-    static let sceneHeight: CGFloat = 164
-    static let metadataWidth: CGFloat = 172
-    static let horizontalSpacing = ElsepageTheme.Spacing.medium
-    static let padding = ElsepageTheme.Spacing.large
-    static let cornerRadius: CGFloat = 22
+    static let sceneWidth: CGFloat = 140
+    static let sceneHeight: CGFloat = 182
+    static let metadataWidth: CGFloat = 180
+    static let horizontalSpacing = ElsepageTheme.Spacing.large
     static let minimumHorizontalWidth = sceneWidth + horizontalSpacing + metadataWidth
 }
 
@@ -93,20 +91,8 @@ struct LibraryCurrentReadingDeskView: View {
         return session
     }
 
-    private var deskPrimaryText: Color {
-        .white.opacity(0.96)
-    }
-
-    private var deskSecondaryText: Color {
-        .white.opacity(0.86)
-    }
-
-    private var deskTertiaryText: Color {
-        .white.opacity(0.80)
-    }
-
-    private var deskAccentColor: Color {
-        Color(red: 0.98, green: 0.87, blue: 0.66)
+    private var accentColor: Color {
+        LibraryShelfPalette.color(for: book.id)
     }
 
     var body: some View {
@@ -120,14 +106,7 @@ struct LibraryCurrentReadingDeskView: View {
                 }
             }
         }
-        .padding(ReadingDeskMetrics.padding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            LibraryWoodSurface(
-                kind: .desk,
-                cornerRadius: ReadingDeskMetrics.cornerRadius
-            )
-        }
         .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.state)
         .sheet(item: $reflection) { reflection in
             SessionReflectionSheet(model: reflection) { _ in
@@ -165,53 +144,25 @@ struct LibraryCurrentReadingDeskView: View {
         }
     }
 
-    /// The book is the only object on the desk. The desk itself is the shared
-    /// wood surface behind this fixed stage.
+    /// The fixed book stage. There is no extra desk or page-edge layer: the
+    /// visible book frame is exactly the cover frame used by zoom and shelf.
     private var readingScene: some View {
-        ZStack {
-            Ellipse()
-                .fill(.black.opacity(0.24))
-                .frame(width: 94, height: 12)
-                .blur(radius: 4)
-                .offset(y: 12)
-                .accessibilityHidden(true)
-
-            coverView
-        }
-        .frame(width: ReadingDeskMetrics.sceneWidth, height: ReadingDeskMetrics.sceneHeight)
+        coverView
+            .frame(width: ReadingDeskMetrics.sceneWidth, height: ReadingDeskMetrics.sceneHeight)
     }
 
     private var coverView: some View {
         Button(action: openBook) {
-            ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                    .fill(Color(red: 0.91, green: 0.86, blue: 0.76))
-                    .frame(
-                        width: LibraryBookMetrics.currentCoverWidth,
-                        height: LibraryBookMetrics.objectHeight
-                    )
-                    .offset(x: 4, y: 4)
-                    .overlay(alignment: .bottom) {
-                        VStack(spacing: 2) {
-                            Rectangle().fill(.black.opacity(0.10)).frame(height: 0.7)
-                            Rectangle().fill(.black.opacity(0.07)).frame(height: 0.7)
-                        }
-                        .padding(.horizontal, 4)
-                        .padding(.bottom, 3)
-                    }
-
-                ElsepageBookCover(
-                    image: cover,
-                    title: book.title,
-                    author: book.author,
-                    seed: Int(book.id.rawValue.uuid.0),
-                    showsShadow: false
-                )
-                .frame(
-                    width: LibraryBookMetrics.currentCoverWidth,
-                    height: LibraryBookMetrics.objectHeight
-                )
-            }
+            ElsepageBookCover(
+                image: cover,
+                title: book.title,
+                author: book.author,
+                seed: Int(book.id.rawValue.uuid.0)
+            )
+            .frame(
+                width: LibraryBookMetrics.currentCoverWidth,
+                height: LibraryBookMetrics.objectHeight
+            )
         }
         .buttonStyle(.plain)
         .matchedTransitionSource(id: book.id, in: transitionNamespace)
@@ -223,7 +174,7 @@ struct LibraryCurrentReadingDeskView: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             Text(book.title)
                 .font(.system(.headline, design: .serif, weight: .semibold))
-                .foregroundStyle(deskPrimaryText)
+                .foregroundStyle(Color.elsepageTextPrimary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .allowsTightening(true)
@@ -231,7 +182,7 @@ struct LibraryCurrentReadingDeskView: View {
 
             Text(displayAuthor)
                 .font(.caption)
-                .foregroundStyle(deskSecondaryText)
+                .foregroundStyle(Color.elsepageTextSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(height: supportingSlotHeight, alignment: .topLeading)
@@ -255,17 +206,17 @@ struct LibraryCurrentReadingDeskView: View {
         HStack(spacing: ElsepageTheme.Spacing.xSmall) {
             if let progress {
                 ProgressView(value: progress)
-                    .tint(deskAccentColor)
+                    .tint(accentColor)
                     .frame(maxWidth: 82)
                 Text(progress, format: .percent.precision(.fractionLength(0)))
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(deskSecondaryText)
+                    .foregroundStyle(Color.elsepageTextSecondary)
             }
             if let lastOpenedAt = book.lastOpenedAt {
-                if progress != nil { Text("·").foregroundStyle(deskTertiaryText) }
+                if progress != nil { Text("·").foregroundStyle(Color.elsepageTextTertiary) }
                 Text(ElsepageDateFormat.shortDate(lastOpenedAt))
                     .font(.caption)
-                    .foregroundStyle(deskTertiaryText)
+                    .foregroundStyle(Color.elsepageTextTertiary)
             }
         }
     }
@@ -305,7 +256,9 @@ struct LibraryCurrentReadingDeskView: View {
 
     private func deskActionButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            .buttonStyle(DeskActionButtonStyle())
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.elsepageInteractive)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
             .frame(maxWidth: .infinity)
@@ -327,31 +280,5 @@ struct LibraryCurrentReadingDeskView: View {
                 try? await model.library.sessionService.recordAgentDiscussion(id: sessionID)
             }
         )
-    }
-}
-
-private struct DeskActionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(Color(red: 0.20, green: 0.12, blue: 0.07))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(
-                Color(red: 0.96, green: 0.90, blue: 0.78)
-                    .opacity(configuration.isPressed ? 0.82 : 1),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.white.opacity(configuration.isPressed ? 0.10 : 0.24))
-            }
-            .shadow(
-                color: .black.opacity(configuration.isPressed ? 0.08 : 0.16),
-                radius: configuration.isPressed ? 1 : 3,
-                y: configuration.isPressed ? 1 : 2
-            )
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.spring(response: 0.20, dampingFraction: 0.78), value: configuration.isPressed)
     }
 }
