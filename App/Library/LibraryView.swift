@@ -178,12 +178,20 @@ struct LibraryView: View {
                     }
                 }
 
-                if model.visibleBooks.isEmpty {
-                    ContentUnavailableView.search(text: model.searchQuery)
-                        .frame(maxWidth: .infinity, minHeight: 260)
+                let shelfBooks = model.visibleBooks.filter { candidate in
+                    guard model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          let currentBook = model.currentBook else { return true }
+                    return candidate.id != currentBook.id
+                }
+
+                if shelfBooks.isEmpty {
+                    if model.visibleBooks.isEmpty {
+                        ContentUnavailableView.search(text: model.searchQuery)
+                            .frame(maxWidth: .infinity, minHeight: 260)
+                    }
                 } else {
                     LibraryShelfView(
-                        books: model.visibleBooks,
+                        books: shelfBooks,
                         mode: displayMode,
                         cover: { model.cover(for: $0) },
                         progress: { model.progress(for: $0) },

@@ -16,6 +16,16 @@ enum LibraryDisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum LibraryBookMetrics {
+    /// A cover and a spine are different faces of the same physical object.
+    /// Keeping one shared height prevents the desk hero from looking like a
+    /// differently scaled copy of the books below it.
+    static let objectHeight: CGFloat = 150
+    static let currentCoverWidth: CGFloat = 100
+    static let spineWidth: CGFloat = 36
+    static let spineTapTarget: CGFloat = 44
+}
+
 enum LibraryShelfPalette {
     private static let colors: [Color] = [
         Color(red: 0.66, green: 0.36, blue: 0.27),
@@ -69,12 +79,17 @@ private struct LibrarySpineShelf: View {
     let progress: (Book) -> Double?
     let openBook: (Book) -> Void
 
-    private let spineWidth: CGFloat = 38
-    private let spineHeight: CGFloat = 154
-
     var body: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: spineWidth, maximum: 48), spacing: 18)],
+            columns: [
+                GridItem(
+                    .adaptive(
+                        minimum: LibraryBookMetrics.spineTapTarget,
+                        maximum: 52
+                    ),
+                    spacing: 18
+                )
+            ],
             spacing: 28
         ) {
             ForEach(books) { book in
@@ -85,13 +100,17 @@ private struct LibrarySpineShelf: View {
                         progress: progress(book),
                         openBook: { openBook(book) }
                     )
-                    .frame(width: spineWidth, height: spineHeight)
+                    .frame(
+                        width: LibraryBookMetrics.spineTapTarget,
+                        height: LibraryBookMetrics.objectHeight
+                    )
 
                     Rectangle()
                         .fill(Color.elsepageBorder)
-                        .frame(height: 1)
+                        .frame(width: LibraryBookMetrics.spineTapTarget, height: 1)
                         .shadow(color: .black.opacity(0.08), radius: 2, y: 2)
                 }
+                .frame(minWidth: LibraryBookMetrics.spineTapTarget)
                 .accessibilityElement(children: .combine)
             }
         }
@@ -162,15 +181,20 @@ private struct BookSpineView: View {
                 if let progress, progress > 0 {
                     Capsule()
                         .fill(.white.opacity(0.85))
-                        .frame(width: 3, height: max(8, 112 * progress))
+                        .frame(width: 3, height: max(8, 108 * progress))
                         .padding(.leading, 7)
                         .padding(.bottom, 8)
                 }
             }
+            .frame(
+                width: LibraryBookMetrics.spineWidth,
+                height: LibraryBookMetrics.objectHeight
+            )
             .shadow(color: .black.opacity(0.16), radius: isPulled ? 12 : 5, y: isPulled ? 9 : 3)
             .offset(y: isPulled ? -9 : 0)
         }
         .buttonStyle(BookPressButtonStyle())
+        .contentShape(Rectangle())
         .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
         .accessibilityHint("打开并继续阅读")
     }
