@@ -112,3 +112,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：书架第一轮重构落地（`.planning/quick/260914-bookshelf-first-pass/SUMMARY.md`）；当前阅读桌面、彩色书脊书架、书脊/封面切换、按压缩放与抽出动画已实现；Today 已从主导航移除，补写动作附着当前书，Streak 迁入我的；391 包测试全绿。
 - 2026-09-14：书架桌面视觉与比例修正完成（`.planning/quick/260914-wgk-bookshelf-desk-polish/SUMMARY.md`）；当前书不再在桌面和书架重复出现，封面与书脊统一为同一对象高度，圆角卡片改为浅桌面承托，补写入口收成封面便签；391 包测试全绿，Xcode 真机视觉验收待用户。
 - 2026-09-14：书架桌面动作层级修正完成（`.planning/quick/260914-wjk-bookshelf-action-parity/SUMMARY.md`）；移除封面补写便签，将“补写想法”与“继续阅读”改为同级同样式操作，并在窄宽度下自动纵向排列；391 包测试全绿，Xcode 真机视觉验收待用户。
+- 2026-09-14：书架打开阅读器连续过渡完成（`.planning/quick/260914-wlx-zoom-transition/SUMMARY.md`）；当前封面/书脊/封面模式接入 iOS 18 原生 zoom transition，移除书脊 140ms 固定等待，Reader 准备态改为封面占位并交叉淡入正文，Reduce Motion 回退保留；391 包测试全绿，Xcode 真机转场验收待用户。
