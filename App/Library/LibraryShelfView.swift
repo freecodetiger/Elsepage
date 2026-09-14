@@ -26,6 +26,111 @@ enum LibraryBookMetrics {
     static let spineTapTarget: CGFloat = 44
 }
 
+enum LibraryWoodSurfaceKind {
+    case desk
+    case shelf
+}
+
+/// Low-contrast procedural walnut. It keeps the furniture feeling physical
+/// without shipping texture images or turning the whole app into skeuomorphism.
+struct LibraryWoodSurface: View {
+    let kind: LibraryWoodSurfaceKind
+    let cornerRadius: CGFloat
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let colors = woodColors
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [colors.top, colors.bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                Canvas { context, size in
+                    let lineCount = max(kind == .desk ? 10 : 4, Int(size.height / 13))
+                    for index in 0..<lineCount {
+                        let ratio = (CGFloat(index) + 0.5) / CGFloat(lineCount)
+                        let y = size.height * ratio
+                        let bend = CGFloat((index % 5) - 2) * 0.7
+                        var grain = Path()
+                        grain.move(to: CGPoint(x: -12, y: y))
+                        grain.addCurve(
+                            to: CGPoint(x: size.width + 12, y: y - bend),
+                            control1: CGPoint(x: size.width * 0.24, y: y + bend - 1.5),
+                            control2: CGPoint(x: size.width * 0.76, y: y - bend + 1.5)
+                        )
+                        context.stroke(
+                            grain,
+                            with: .color(colors.grain.opacity(index.isMultiple(of: 4) ? 0.9 : 0.55)),
+                            lineWidth: index.isMultiple(of: 4) ? 0.8 : 0.45
+                        )
+                    }
+                }
+                .allowsHitTesting(false)
+            }
+            .overlay {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(kind == .desk ? 0.10 : 0.08),
+                        .clear,
+                        Color.black.opacity(kind == .desk ? 0.12 : 0.18)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .overlay {
+                shape.stroke(colors.highlight, lineWidth: 0.7)
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [.clear, colors.edge],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: kind == .desk ? 12 : 6)
+            }
+            .clipShape(shape)
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.34 : (kind == .desk ? 0.22 : 0.17)),
+                radius: kind == .desk ? 14 : 5,
+                y: kind == .desk ? 8 : 3
+            )
+    }
+
+    private var woodColors: (
+        top: Color,
+        bottom: Color,
+        grain: Color,
+        edge: Color,
+        highlight: Color
+    ) {
+        if colorScheme == .dark {
+            return (
+                Color(red: 0.27, green: 0.15, blue: 0.085),
+                Color(red: 0.14, green: 0.075, blue: 0.04),
+                .black.opacity(0.34),
+                .black.opacity(0.42),
+                .white.opacity(0.09)
+            )
+        }
+
+        return (
+            Color(red: 0.51, green: 0.32, blue: 0.18),
+            Color(red: 0.34, green: 0.19, blue: 0.10),
+            .black.opacity(0.20),
+            .black.opacity(0.28),
+            .white.opacity(0.20)
+        )
+    }
+}
+
 enum LibraryShelfPalette {
     private static let colors: [Color] = [
         Color(red: 0.66, green: 0.36, blue: 0.27),
@@ -84,41 +189,52 @@ private struct LibrarySpineShelf: View {
     let openBook: (Book) -> Void
 
     var body: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(
-                    .adaptive(
-                        minimum: LibraryBookMetrics.spineTapTarget,
-                        maximum: 52
-                    ),
-                    spacing: 18
-                )
-            ],
-            spacing: 28
-        ) {
-            ForEach(books) { book in
-                VStack(spacing: 0) {
-                    BookSpineView(
-                        book: book,
-                        color: LibraryShelfPalette.color(for: book.id),
-                        progress: progress(book),
-                        transitionNamespace: transitionNamespace,
-                        openBook: { openBook(book) }
-                    )
-                    .frame(
-                        width: LibraryBookMetrics.spineTapTarget,
-                        height: LibraryBookMetrics.objectHeight
-                    )
+        ViewThatFits(in: .horizontal) {
+            shelfRows(columns: 6)
+            shelfRows(columns: 5)
+            shelfRows(columns: 4)
+            shelfRows(columns: 3)
+            shelfRows(columns: 2)
+            shelfRows(columns: 1)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
 
-                    Rectangle()
-                        .fill(Color.elsepageBorder)
-                        .frame(width: LibraryBookMetrics.spineTapTarget, height: 1)
-                        .shadow(color: .black.opacity(0.08), radius: 2, y: 2)
+    private func shelfRows(columns: Int) -> some View {
+        let spacing: CGFloat = 14
+        let rowWidth = CGFloat(columns) * LibraryBookMetrics.spineTapTarget
+            + CGFloat(max(columns - 1, 0)) * spacing
+
+        return VStack(alignment: .leading, spacing: 24) {
+            ForEach(Array(stride(from: 0, to: books.count, by: columns)), id: \.self) { start in
+                let rowBooks = Array(books[start..<min(start + columns, books.count)])
+
+                VStack(spacing: 0) {
+                    HStack(alignment: .bottom, spacing: spacing) {
+                        ForEach(rowBooks) { book in
+                            BookSpineView(
+                                book: book,
+                                color: LibraryShelfPalette.color(for: book.id),
+                                progress: progress(book),
+                                transitionNamespace: transitionNamespace,
+                                openBook: { openBook(book) }
+                            )
+                            .frame(
+                                width: LibraryBookMetrics.spineTapTarget,
+                                height: LibraryBookMetrics.objectHeight
+                            )
+                        }
+                    }
+                    .frame(width: rowWidth, alignment: .leading)
+
+                    LibraryWoodSurface(kind: .shelf, cornerRadius: 4)
+                        .frame(width: rowWidth, height: 16)
                 }
-                .frame(minWidth: LibraryBookMetrics.spineTapTarget)
-                .accessibilityElement(children: .combine)
+                .frame(width: rowWidth, alignment: .leading)
+                .accessibilityElement(children: .contain)
             }
         }
+        .frame(width: rowWidth, alignment: .leading)
     }
 }
 
