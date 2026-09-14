@@ -49,7 +49,7 @@ struct ReaderHelpSheet: View {
         HStack(spacing: ElsepageTheme.Spacing.small) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("问 AI")
-                    .font(.headline.weight(.semibold))
+                    .font(.system(.headline, design: .serif))
                 if let chapter = model.chapterTitle {
                     Text(chapter)
                         .font(.caption)
@@ -81,7 +81,7 @@ struct ReaderHelpSheet: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(model.selectedText)
-                .font(.subheadline)
+                .font(.system(.subheadline, design: .serif))
                 .foregroundStyle(.primary)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)

@@ -192,7 +192,7 @@ private struct ThoughtCard: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
             metadata
             Text(summaryText)
-                .font(.headline)
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.elsepageTextPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
@@ -216,15 +216,15 @@ private struct ThoughtCard: View {
         HStack(alignment: .firstTextBaseline, spacing: ElsepageTheme.Spacing.xSmall) {
             if showsBook {
                 Text(entry.book.title)
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.elsepageTextSecondary)
                     .lineLimit(1)
                 Text("·")
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(Color.elsepageTextTertiary)
             }
             Text(ElsepageDateFormat.shortDate(entry.reflection.createdAt))
-                .font(.caption)
+                .font(.system(size: 12))
                 .foregroundStyle(Color.elsepageTextTertiary)
             Spacer(minLength: 4)
             Image(systemName: "chevron.right")
@@ -322,12 +322,12 @@ private struct ThoughtRecordHeader: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             HStack(alignment: .firstTextBaseline, spacing: ElsepageTheme.Spacing.xSmall) {
                 Text(entry.book.title)
-                    .font(.footnote.weight(.semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.elsepageTextSecondary)
                 Text("·")
                     .foregroundStyle(Color.elsepageTextTertiary)
                 Text(ElsepageDateFormat.shortDate(entry.reflection.createdAt))
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(Color.elsepageTextTertiary)
             }
 
@@ -337,11 +337,11 @@ private struct ThoughtRecordHeader: View {
                         .fill(Color.elsepageTextPrimary)
                         .frame(width: 36, height: 36)
                     Text("概")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color.elsepageBackground)
                 }
                 Text(summaryText)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(Color.elsepageTextPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -368,18 +368,18 @@ private struct ThoughtRecordExtras: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             Text("这次留下")
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .tracking(0.7)
                 .foregroundStyle(Color.elsepageTextTertiary)
 
             if !journal.whatIThink.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("看法")
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
                     ForEach(journal.whatIThink.prefix(3), id: \.id) { thought in
                         Text("· \(thought.thought)")
-                            .font(.subheadline)
+                            .font(.system(size: 15))
                             .foregroundStyle(Color.elsepageTextPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -389,11 +389,11 @@ private struct ThoughtRecordExtras: View {
             if !journal.questions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("问题")
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
                     ForEach(journal.questions.prefix(2)) { question in
                         Text("· \(question.text)")
-                            .font(.subheadline)
+                            .font(.system(size: 15))
                             .foregroundStyle(Color.elsepageTextPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

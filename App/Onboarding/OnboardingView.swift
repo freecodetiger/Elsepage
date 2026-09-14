@@ -298,7 +298,7 @@ struct OnboardingView: View {
     private func stepHeading(title: String, caption: String) -> some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             Text(title)
-                .font(.title.weight(.semibold))
+                .font(.system(.title, design: .serif, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
             Text(caption)
                 .font(.body)

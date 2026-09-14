@@ -141,7 +141,7 @@ struct ReaderScreen: View {
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.book.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(.subheadline, design: .serif, weight: .semibold))
                         .lineLimit(1)
                     if let chapter = model.currentChapterTitle {
                         Text(chapter).font(.caption).foregroundStyle(.secondary).lineLimit(1)
