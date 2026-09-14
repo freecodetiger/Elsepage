@@ -148,45 +148,38 @@ struct LibraryCurrentReadingDeskView: View {
     }
 
     private var coverView: some View {
-        ZStack(alignment: .topTrailing) {
-            Button(action: openBook) {
-                ZStack(alignment: .topTrailing) {
-                    ElsepageBookCover(
-                        image: cover,
-                        title: book.title,
-                        author: book.author,
-                        seed: Int(book.id.rawValue.uuid.0)
-                    )
-                    .frame(
-                        width: LibraryBookMetrics.currentCoverWidth,
-                        height: LibraryBookMetrics.objectHeight
-                    )
+        Button(action: openBook) {
+            ZStack(alignment: .topTrailing) {
+                ElsepageBookCover(
+                    image: cover,
+                    title: book.title,
+                    author: book.author,
+                    seed: Int(book.id.rawValue.uuid.0)
+                )
+                .frame(
+                    width: LibraryBookMetrics.currentCoverWidth,
+                    height: LibraryBookMetrics.objectHeight
+                )
 
-                    if let progress {
-                        GeometryReader { geometry in
-                            Capsule()
-                                .fill(accentColor)
-                                .frame(width: 5, height: max(10, geometry.size.height * progress))
-                                .frame(maxHeight: .infinity, alignment: .top)
-                                .padding(.top, 8)
-                                .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
-                        }
-                        .frame(width: 5, height: LibraryBookMetrics.objectHeight - 16)
-                        .padding(.trailing, 8)
-                        .accessibilityHidden(true)
+                if let progress {
+                    GeometryReader { geometry in
+                        Capsule()
+                            .fill(accentColor)
+                            .frame(width: 5, height: max(10, geometry.size.height * progress))
+                            .frame(maxHeight: .infinity, alignment: .top)
+                            .padding(.top, 8)
+                            .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
                     }
+                    .frame(width: 5, height: LibraryBookMetrics.objectHeight - 16)
+                    .padding(.trailing, 8)
+                    .accessibilityHidden(true)
                 }
             }
-            .buttonStyle(.plain)
-            .shadow(color: .black.opacity(0.16), radius: 10, y: 6)
-            .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
-            .accessibilityHint("打开并继续阅读")
-
-            if let session = pendingSession {
-                reflectionTab(session: session)
-                    .offset(x: 5, y: -11)
-            }
         }
+        .buttonStyle(.plain)
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 6)
+        .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
+        .accessibilityHint("打开并继续阅读")
     }
 
     private var metadata: some View {
@@ -220,42 +213,44 @@ struct LibraryCurrentReadingDeskView: View {
                 }
             }
 
-            Button("继续阅读", action: openBook)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(.elsepageInteractive)
-                .foregroundStyle(Color.elsepageOnInteractive)
+            deskActions
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func reflectionTab(session: ReadingSession) -> some View {
-        Button {
-            presentReflection(for: session)
-        } label: {
-            Text("补写想法")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(Color.elsepageTextPrimary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 5)
-                .background(
-                    Color(red: 0.96, green: 0.91, blue: 0.79),
-                    in: RoundedRectangle(cornerRadius: 3, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .stroke(Color(red: 0.76, green: 0.67, blue: 0.47).opacity(0.55))
+    private var deskActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ElsepageTheme.Spacing.small) {
+                continueReadingButton
+                if let session = pendingSession {
+                    reflectionButton(session: session)
                 }
-                .rotationEffect(.degrees(2))
-                .shadow(color: .black.opacity(0.13), radius: 3, y: 2)
+            }
+
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                continueReadingButton
+                if let session = pendingSession {
+                    reflectionButton(session: session)
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .frame(width: AccessibilityMetrics.minimumTapTargetSide,
-               height: AccessibilityMetrics.minimumTapTargetSide,
-               alignment: .topTrailing)
-        .contentShape(Rectangle())
-        .accessibilityLabel("补写刚才阅读的想法")
-        .accessibilityHint("打开 Reflection 补写")
+    }
+
+    private var continueReadingButton: some View {
+        deskActionButton("继续阅读", action: openBook)
+    }
+
+    private func reflectionButton(session: ReadingSession) -> some View {
+        deskActionButton("补写想法") {
+            presentReflection(for: session)
+        }
+    }
+
+    private func deskActionButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.elsepageInteractive)
     }
 
     private func presentReflection(for session: ReadingSession) {
