@@ -179,14 +179,16 @@ struct LibraryCurrentReadingDeskView: View {
                 }
             }
 
-            if let session = pendingSession {
-                reflectionNote(session: session)
-            } else {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
                 Button("继续阅读", action: openBook)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(.elsepageInteractive)
                     .foregroundStyle(Color.elsepageOnInteractive)
+
+                if let session = pendingSession {
+                    reflectionNote(session: session)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,8 +197,8 @@ struct LibraryCurrentReadingDeskView: View {
     private func reflectionNote(session: ReadingSession) -> some View {
         HStack(alignment: .center, spacing: ElsepageTheme.Spacing.small) {
             Text("还没有留下想法")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.elsepageTextPrimary)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.elsepageTextSecondary)
             Spacer(minLength: 4)
             Button("补写") {
                 guard let locator = session.endLocator else { return }
@@ -215,21 +217,16 @@ struct LibraryCurrentReadingDeskView: View {
                     }
                 )
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .tint(.elsepageInteractive)
-            .foregroundStyle(Color.elsepageOnInteractive)
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .tint(accentColor)
         }
         .padding(.horizontal, ElsepageTheme.Spacing.small)
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
         .background(
-            accentColor.opacity(0.10),
+            accentColor.opacity(0.08),
             in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(accentColor.opacity(0.28))
-        }
     }
 
 }
