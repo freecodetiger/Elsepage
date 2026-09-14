@@ -2,24 +2,29 @@ import Foundation
 import ReaderCore
 import ReflectionCore
 import SwiftUI
+import UIKit
 
 struct ReaderScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State var model: ReaderModel
     @State private var presentedSheet: ReaderSheet?
     @State private var reflectionPrompt: SessionReflectionModel?
     @State private var dismissAfterReflection = false
+    let openingCover: UIImage?
     let onReflectionSaved: () -> Void
 
     init(
         model: ReaderModel,
         achievements: AchievementModel? = nil,
+        openingCover: UIImage? = nil,
         onReflectionSaved: @escaping () -> Void = {}
     ) {
         _model = State(initialValue: model)
         model.achievements = achievements
+        self.openingCover = openingCover
         self.onReflectionSaved = onReflectionSaved
     }
 
@@ -36,9 +41,11 @@ struct ReaderScreen: View {
                     jumpTargetJSON: model.jumpTargetJSON,
                     colorScheme: colorScheme
                 )
-                    .ignoresSafeArea()
+                .ignoresSafeArea()
+                .transition(reduceMotion ? .identity : .opacity)
             } else {
-                ProgressView("正在打开…").controlSize(.large)
+                readerOpeningPlaceholder
+                    .transition(reduceMotion ? .identity : .opacity)
             }
 
             if model.isPrepared, model.showsControls {
@@ -50,6 +57,7 @@ struct ReaderScreen: View {
             }
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
+        .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.isPrepared)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model.isPrepared && !model.showsControls)
@@ -126,6 +134,28 @@ struct ReaderScreen: View {
                 await model.flushPreferences()
             }
         }
+    }
+
+    /// Keeps the zoom destination visually related to the book after the
+    /// transition finishes. The EPUB remains free to prepare asynchronously;
+    /// only this placeholder is replaced once the reader is ready.
+    private var readerOpeningPlaceholder: some View {
+        VStack(spacing: ElsepageTheme.Spacing.large) {
+            ElsepageBookCover(
+                image: openingCover,
+                title: model.book.title,
+                author: model.book.author,
+                seed: Int(model.book.id.rawValue.uuid.0)
+            )
+            .frame(width: 156, height: 234)
+
+            ProgressView()
+                .controlSize(.small)
+                .tint(.elsepageInteractive)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("正在打开《\(model.book.title)》")
     }
 
     private var readerChrome: some View {

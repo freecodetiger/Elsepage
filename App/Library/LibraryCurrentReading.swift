@@ -63,6 +63,7 @@ struct LibraryCurrentReadingDeskView: View {
     let progress: Double?
     let cover: UIImage?
     let achievements: AchievementModel?
+    let transitionNamespace: Namespace.ID
     let openBook: () -> Void
     let onSaved: () -> Void
 
@@ -178,6 +179,7 @@ struct LibraryCurrentReadingDeskView: View {
         }
         .buttonStyle(.plain)
         .shadow(color: .black.opacity(0.16), radius: 10, y: 6)
+        .matchedTransitionSource(id: book.id, in: transitionNamespace)
         .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
         .accessibilityHint("打开并继续阅读")
     }

@@ -49,6 +49,7 @@ struct LibraryShelfView: View {
     let mode: LibraryDisplayMode
     let cover: (Book) -> UIImage?
     let progress: (Book) -> Double?
+    let transitionNamespace: Namespace.ID
     let openBook: (Book) -> Void
     let loadCover: (Book) async -> Void
 
@@ -59,6 +60,7 @@ struct LibraryShelfView: View {
             LibrarySpineShelf(
                 books: books,
                 progress: progress,
+                transitionNamespace: transitionNamespace,
                 openBook: openBook
             )
         } else {
@@ -66,6 +68,7 @@ struct LibraryShelfView: View {
                 books: books,
                 cover: cover,
                 progress: progress,
+                transitionNamespace: transitionNamespace,
                 openBook: openBook,
                 loadCover: loadCover,
                 singleColumn: dynamicTypeSize.isAccessibilitySize
@@ -77,6 +80,7 @@ struct LibraryShelfView: View {
 private struct LibrarySpineShelf: View {
     let books: [Book]
     let progress: (Book) -> Double?
+    let transitionNamespace: Namespace.ID
     let openBook: (Book) -> Void
 
     var body: some View {
@@ -98,6 +102,7 @@ private struct LibrarySpineShelf: View {
                         book: book,
                         color: LibraryShelfPalette.color(for: book.id),
                         progress: progress(book),
+                        transitionNamespace: transitionNamespace,
                         openBook: { openBook(book) }
                     )
                     .frame(
@@ -121,9 +126,8 @@ private struct BookSpineView: View {
     let book: Book
     let color: Color
     let progress: Double?
+    let transitionNamespace: Namespace.ID
     let openBook: () -> Void
-
-    @State private var isPulled = false
 
     private var verticalTitle: [String] {
         let characters = Array(book.title.prefix(7))
@@ -137,13 +141,7 @@ private struct BookSpineView: View {
     var body: some View {
         Button {
             Haptics.bookPulled()
-            withAnimation(.spring(response: 0.26, dampingFraction: 0.72)) {
-                isPulled = true
-            }
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(140))
-                openBook()
-            }
+            openBook()
         } label: {
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -190,11 +188,11 @@ private struct BookSpineView: View {
                 width: LibraryBookMetrics.spineWidth,
                 height: LibraryBookMetrics.objectHeight
             )
-            .shadow(color: .black.opacity(0.16), radius: isPulled ? 12 : 5, y: isPulled ? 9 : 3)
-            .offset(y: isPulled ? -9 : 0)
+            .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
         }
         .buttonStyle(BookPressButtonStyle())
         .contentShape(Rectangle())
+        .matchedTransitionSource(id: book.id, in: transitionNamespace)
         .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
         .accessibilityHint("打开并继续阅读")
     }
@@ -204,6 +202,7 @@ private struct LibraryCoverShelf: View {
     let books: [Book]
     let cover: (Book) -> UIImage?
     let progress: (Book) -> Double?
+    let transitionNamespace: Namespace.ID
     let openBook: (Book) -> Void
     let loadCover: (Book) async -> Void
     let singleColumn: Bool
@@ -231,6 +230,7 @@ private struct LibraryCoverShelf: View {
                         )
                         .aspectRatio(2 / 3, contentMode: .fit)
                         .frame(maxWidth: .infinity)
+                        .matchedTransitionSource(id: book.id, in: transitionNamespace)
                         .task(id: book.id) { await loadCover(book) }
                         Text(book.title)
                             .font(ElsepageTheme.Typography.itemTitle)

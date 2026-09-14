@@ -14,6 +14,7 @@ struct LibraryView: View {
     @State private var showsSettings = false
     @State private var selectedBook: Book?
     @State private var deletingBook: Book?
+    @Namespace private var bookTransitionNamespace
     /// A11Y-01: the grid collapses to one readable column at accessibility
     /// Dynamic Type sizes instead of squeezing titles into half-width cells.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -84,12 +85,21 @@ struct LibraryView: View {
                 SettingsView(model: settings)
             }
             .navigationDestination(item: $selectedBook) { book in
-                ReaderScreen(model: model.readerModel(for: book)) {
+                ReaderScreen(
+                    model: model.readerModel(for: book),
+                    openingCover: model.cover(for: book)
+                ) {
                     Task {
                         await model.reload()
                         await nextActionModel.reload()
                     }
                 }
+                .modifier(
+                    BookZoomNavigationTransition(
+                        sourceID: book.id,
+                        namespace: bookTransitionNamespace
+                    )
+                )
             }
             .searchable(text: $model.searchQuery, prompt: "搜索书名或作者")
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
@@ -165,6 +175,7 @@ struct LibraryView: View {
                         progress: model.progress(for: currentBook),
                         cover: model.cover(for: currentBook),
                         achievements: achievements,
+                        transitionNamespace: bookTransitionNamespace,
                         openBook: { selectedBook = currentBook },
                         onSaved: {
                             Task {
@@ -195,6 +206,7 @@ struct LibraryView: View {
                         mode: displayMode,
                         cover: { model.cover(for: $0) },
                         progress: { model.progress(for: $0) },
+                        transitionNamespace: bookTransitionNamespace,
                         openBook: { selectedBook = $0 },
                         loadCover: { await model.loadCover(for: $0) }
                     )
@@ -216,5 +228,23 @@ struct LibraryView: View {
             statsLine: model.statsLine(for: book),
             progress: model.progress(for: book)
         )
+    }
+}
+
+/// Applies the native iOS 18 zoom transition to the Reader destination.
+/// Reduce Motion keeps the normal navigation transition instead.
+private struct BookZoomNavigationTransition<ID: Hashable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let sourceID: ID
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        }
     }
 }
