@@ -191,7 +191,11 @@ private struct BookSpineView: View {
         }
         .buttonStyle(BookPressButtonStyle())
         .contentShape(Rectangle())
-        .matchedTransitionSource(id: book.id, in: transitionNamespace)
+        .matchedTransitionSource(id: book.id, in: transitionNamespace) { source in
+            source
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
+        }
         .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
         .accessibilityHint("打开并继续阅读")
     }
@@ -229,7 +233,20 @@ private struct LibraryCoverShelf: View {
                         )
                         .aspectRatio(2 / 3, contentMode: .fit)
                         .frame(maxWidth: .infinity)
-                        .matchedTransitionSource(id: book.id, in: transitionNamespace)
+                        .matchedTransitionSource(id: book.id, in: transitionNamespace) { source in
+                            source
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: ElsepageBookCoverMetrics.cornerRadius,
+                                        style: .continuous
+                                    )
+                                )
+                                .shadow(
+                                    color: ElsepageBookCoverMetrics.shadowColor,
+                                    radius: ElsepageBookCoverMetrics.shadowRadius,
+                                    y: ElsepageBookCoverMetrics.shadowY
+                                )
+                        }
                         .task(id: book.id) { await loadCover(book) }
                         Text(book.title)
                             .font(ElsepageTheme.Typography.itemTitle)

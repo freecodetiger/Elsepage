@@ -157,8 +157,7 @@ struct LibraryCurrentReadingDeskView: View {
                 image: cover,
                 title: book.title,
                 author: book.author,
-                seed: Int(book.id.rawValue.uuid.0),
-                showsShadow: false
+                seed: Int(book.id.rawValue.uuid.0)
             )
             .frame(
                 width: ElsepageBookCoverMetrics.width,
@@ -167,12 +166,18 @@ struct LibraryCurrentReadingDeskView: View {
         }
         .buttonStyle(.plain)
         .matchedTransitionSource(id: book.id, in: transitionNamespace) { source in
-            source.clipShape(
-                RoundedRectangle(
-                    cornerRadius: ElsepageBookCoverMetrics.cornerRadius,
-                    style: .continuous
+            source
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: ElsepageBookCoverMetrics.cornerRadius,
+                        style: .continuous
+                    )
                 )
-            )
+                .shadow(
+                    color: ElsepageBookCoverMetrics.shadowColor,
+                    radius: ElsepageBookCoverMetrics.shadowRadius,
+                    y: ElsepageBookCoverMetrics.shadowY
+                )
         }
         .accessibilityLabel("《\(book.title)》，\(book.author ?? "未知作者")")
         .accessibilityHint("打开并继续阅读")

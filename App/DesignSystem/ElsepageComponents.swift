@@ -43,6 +43,9 @@ enum ElsepageBookCoverMetrics {
     static let width: CGFloat = 100
     static let height: CGFloat = 150
     static let cornerRadius = ElsepageTheme.Radius.small
+    static let shadowColor = ElsepageTheme.Shadow.coverColor
+    static let shadowRadius = ElsepageTheme.Shadow.coverRadius
+    static let shadowY = ElsepageTheme.Shadow.coverY
 }
 
 struct ElsepageBookCover: View {
@@ -116,9 +119,9 @@ struct ElsepageBookCover: View {
             RoundedRectangle(cornerRadius: ElsepageBookCoverMetrics.cornerRadius, style: .continuous)
         )
         .shadow(
-            color: showsShadow ? ElsepageTheme.Shadow.coverColor : .clear,
-            radius: showsShadow ? ElsepageTheme.Shadow.coverRadius : 0,
-            y: showsShadow ? ElsepageTheme.Shadow.coverY : 0
+            color: showsShadow ? ElsepageBookCoverMetrics.shadowColor : .clear,
+            radius: showsShadow ? ElsepageBookCoverMetrics.shadowRadius : 0,
+            y: showsShadow ? ElsepageBookCoverMetrics.shadowY : 0
         )
         .accessibilityHidden(true)
     }
