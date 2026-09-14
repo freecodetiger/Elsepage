@@ -55,8 +55,17 @@ final class LibraryNextActionModel {
     }
 }
 
+private enum ReadingDeskMetrics {
+    static let sceneWidth: CGFloat = 140
+    static let sceneHeight: CGFloat = 182
+    static let metadataWidth: CGFloat = 180
+    static let horizontalSpacing = ElsepageTheme.Spacing.large
+    static let minimumHorizontalWidth = sceneWidth + horizontalSpacing + metadataWidth
+}
+
 /// The reading desk above the physical shelf. It always presents the current
-/// book; when a Reflection is waiting, a paper note becomes the primary action.
+/// book. The desk is a fixed stage: changing books may replace text, but never
+/// moves the cover, metadata slots or actions.
 struct LibraryCurrentReadingDeskView: View {
     @Bindable var model: LibraryNextActionModel
     let book: Book
@@ -71,6 +80,10 @@ struct LibraryCurrentReadingDeskView: View {
     @State private var presentedReflectionSessionID: ReadingSessionID?
     @State private var didSaveReflectionInSheet = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .headline) private var titleSlotHeight: CGFloat = 44
+    @ScaledMetric(relativeTo: .caption) private var supportingSlotHeight: CGFloat = 18
+    @ScaledMetric(relativeTo: .body) private var actionSlotHeight: CGFloat = 30
 
     private var pendingSession: ReadingSession? {
         guard case .offerReflection(let stateBook, let session) = model.state,
@@ -83,15 +96,14 @@ struct LibraryCurrentReadingDeskView: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: ElsepageTheme.Spacing.large) {
-                readingScene
-                metadata
-            }
-            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
-                readingScene
-                    .frame(maxWidth: .infinity, alignment: .center)
-                metadata
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                verticalDesk
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    horizontalDesk
+                    verticalDesk
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +126,24 @@ struct LibraryCurrentReadingDeskView: View {
         }
     }
 
+    private var horizontalDesk: some View {
+        HStack(alignment: .center, spacing: ReadingDeskMetrics.horizontalSpacing) {
+            readingScene
+            metadata
+                .frame(width: ReadingDeskMetrics.metadataWidth, alignment: .leading)
+        }
+        .frame(minWidth: ReadingDeskMetrics.minimumHorizontalWidth, alignment: .leading)
+    }
+
+    private var verticalDesk: some View {
+        VStack(alignment: .leading, spacing: ReadingDeskMetrics.horizontalSpacing) {
+            readingScene
+                .frame(maxWidth: .infinity, alignment: .center)
+            metadata
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     /// A reading scene, not a card: the cover stands on a shallow, neutral
     /// surface with a single contact shadow. The metadata stays on the page.
     private var readingScene: some View {
@@ -124,7 +154,7 @@ struct LibraryCurrentReadingDeskView: View {
             coverView
                 .padding(.bottom, 22)
         }
-        .frame(width: 140, height: 182)
+        .frame(width: ReadingDeskMetrics.sceneWidth, height: ReadingDeskMetrics.sceneHeight)
     }
 
     private var deskSurface: some View {
@@ -142,7 +172,7 @@ struct LibraryCurrentReadingDeskView: View {
                 .fill(Color.elsepageBorder.opacity(0.9))
                 .frame(height: 1)
         }
-        .frame(width: 140, height: 34)
+        .frame(width: ReadingDeskMetrics.sceneWidth, height: 34)
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .shadow(color: .black.opacity(0.07), radius: 8, y: 6)
         .accessibilityHidden(true)
@@ -190,49 +220,69 @@ struct LibraryCurrentReadingDeskView: View {
                 .font(.system(.headline, design: .serif, weight: .semibold))
                 .foregroundStyle(Color.elsepageTextPrimary)
                 .lineLimit(2)
+                .truncationMode(.tail)
+                .allowsTightening(true)
+                .frame(height: titleSlotHeight, alignment: .topLeading)
 
-            if let author = book.author, !author.isEmpty {
-                Text(author)
-                    .font(.caption)
-                    .foregroundStyle(Color.elsepageTextSecondary)
-                    .lineLimit(1)
-            }
+            Text(displayAuthor)
+                .font(.caption)
+                .foregroundStyle(Color.elsepageTextSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(height: supportingSlotHeight, alignment: .topLeading)
 
-            HStack(spacing: ElsepageTheme.Spacing.xSmall) {
-                if let progress {
-                    ProgressView(value: progress)
-                        .tint(accentColor)
-                        .frame(maxWidth: 82)
-                    Text(progress, format: .percent.precision(.fractionLength(0)))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(Color.elsepageTextSecondary)
-                }
-                if let lastOpenedAt = book.lastOpenedAt {
-                    if progress != nil { Text("·").foregroundStyle(Color.elsepageTextTertiary) }
-                    Text(ElsepageDateFormat.shortDate(lastOpenedAt))
-                        .font(.caption)
-                        .foregroundStyle(Color.elsepageTextTertiary)
-                }
-            }
+            progressAndDate
+                .frame(height: supportingSlotHeight, alignment: .leading)
 
             deskActions
+                .frame(height: actionSlotHeight, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var displayAuthor: String {
+        guard let author = book.author?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !author.isEmpty else { return "未知作者" }
+        return author
+    }
+
+    private var progressAndDate: some View {
+        HStack(spacing: ElsepageTheme.Spacing.xSmall) {
+            if let progress {
+                ProgressView(value: progress)
+                    .tint(accentColor)
+                    .frame(maxWidth: 82)
+                Text(progress, format: .percent.precision(.fractionLength(0)))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Color.elsepageTextSecondary)
+            }
+            if let lastOpenedAt = book.lastOpenedAt {
+                if progress != nil { Text("·").foregroundStyle(Color.elsepageTextTertiary) }
+                Text(ElsepageDateFormat.shortDate(lastOpenedAt))
+                    .font(.caption)
+                    .foregroundStyle(Color.elsepageTextTertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var deskActions: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: ElsepageTheme.Spacing.small) {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
                 continueReadingButton
                 if let session = pendingSession {
                     reflectionButton(session: session)
                 }
             }
-
-            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+        } else {
+            HStack(spacing: ElsepageTheme.Spacing.small) {
                 continueReadingButton
                 if let session = pendingSession {
                     reflectionButton(session: session)
+                } else {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -253,6 +303,9 @@ struct LibraryCurrentReadingDeskView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .tint(.elsepageInteractive)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity)
     }
 
     private func presentReflection(for session: ReadingSession) {
