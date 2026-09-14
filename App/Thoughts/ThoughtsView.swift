@@ -10,11 +10,8 @@ struct ThoughtsView: View {
     @Bindable var settings: SettingsRootModel
     @State private var showsSettings = false
     @State private var searchText = ""
-    @State private var isSearchExpanded = false
     @State private var grouping: ThoughtsGrouping = .timeline
     @State private var selectedEntry: ReflectionArchiveEntry?
-    @FocusState private var isSearchFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let openSource: (Book, BookLocator) -> Void
 
     private var visibleEntries: [ReflectionArchiveEntry] {
@@ -35,10 +32,9 @@ struct ThoughtsView: View {
             .background(Color.elsepageBackground)
             .navigationTitle("想法")
             .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $searchText, prompt: "搜索记录、书名或回应")
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    searchToolbarControl
-
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("分组", selection: $grouping) {
                             ForEach(ThoughtsGrouping.allCases) { option in
@@ -80,87 +76,6 @@ struct ThoughtsView: View {
             }
             .onChange(of: searchText) { selectedEntry = nil }
             .onChange(of: grouping) { selectedEntry = nil }
-        }
-    }
-
-    private var searchToolbarControl: some View {
-        HStack(spacing: ElsepageTheme.Spacing.small) {
-            if isSearchExpanded {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.elsepageTextSecondary)
-                    .accessibilityHidden(true)
-
-                TextField("搜索记录、书名或回应", text: $searchText)
-                    .focused($isSearchFocused)
-                    .textFieldStyle(.plain)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                    .foregroundStyle(Color.elsepageTextPrimary)
-                    .tint(.elsepageInteractive)
-                    .frame(minWidth: 0, maxWidth: .infinity)
-
-                Button {
-                    collapseSearch()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.elsepageTextSecondary)
-                        .frame(width: 32, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("关闭搜索")
-            } else {
-                Button {
-                    expandSearch()
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.elsepageTextPrimary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("搜索记录")
-            }
-        }
-        .padding(.leading, isSearchExpanded ? 14 : 0)
-        .padding(.trailing, isSearchExpanded ? 7 : 0)
-        .frame(
-            minWidth: isSearchExpanded ? 220 : 44,
-            maxWidth: isSearchExpanded ? .infinity : 44,
-            minHeight: 44,
-            maxHeight: 44
-        )
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay {
-            Capsule().stroke(Color.elsepageBorder.opacity(0.88))
-        }
-        .shadow(color: .black.opacity(0.07), radius: 9, y: 4)
-        .animation(searchAnimation, value: isSearchExpanded)
-    }
-
-    private var searchAnimation: Animation? {
-        reduceMotion ? nil : .snappy(duration: 0.26, extraBounce: 0)
-    }
-
-    private func expandSearch() {
-        withAnimation(searchAnimation) {
-            isSearchExpanded = true
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(90))
-            isSearchFocused = true
-        }
-    }
-
-    private func collapseSearch() {
-        isSearchFocused = false
-        searchText = ""
-        withAnimation(searchAnimation) {
-            isSearchExpanded = false
         }
     }
 
