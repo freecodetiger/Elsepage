@@ -118,3 +118,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：书架现代拟物重构完成（`.planning/quick/260914-wt4-prd-spec/SUMMARY.md`）；PRD/Spec 改为允许低对比现代家具感材质，阅读区使用铺满宽度的程序化胡桃木桌面，书封增加页芯与接触阴影，书脊模式改为每排共享木质承托板并支持 6–1 列宽度回退；391 包测试全绿，Xcode 真机材质与对比度验收待用户。
 - 2026-09-14：书架木质拟物撤回完成（`.planning/quick/260914-wxe-revert-wood/SUMMARY.md`）；恢复低噪中性书架，删除木质桌面/承托板和书本页芯、底板与额外投影，桌面书本外框与封面统一为 100×150pt，保留固定几何、同级操作与 zoom transition；391 包测试全绿，Xcode 真机视觉验收待用户。
 - 2026-09-14：Reader 返回书架封面闪烁修复完成（`.planning/quick/260914-x0a-reader/SUMMARY.md`）；根因是封面外部阴影不属于 matched transition source frame，源视图与 Reader 占位改为共享 100×150pt 无阴影几何并显式裁切 zoom snapshot；391 包测试全绿，Xcode 真机返回动画验收待用户。
+- 2026-09-14：书架 zoom transition 阴影一致性修复完成（`.planning/quick/260914-x2m-zoom-transition/SUMMARY.md`）；恢复封面层次，将封面尺寸、圆角与阴影参数集中管理，并同步写入当前封面/书脊/封面模式的 matched transition configuration；391 包测试全绿，Xcode 真机开合动画验收待用户。
