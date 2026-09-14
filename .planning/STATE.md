@@ -116,3 +116,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：书架阅读桌面固定排布完成（`.planning/quick/260914-wpb-fixed-reading-desk/SUMMARY.md`）；书籍舞台、标题/作者/进度槽位和动作位置不再随书名长度变化，普通字号动作等宽，设备宽度与 Accessibility 字号才触发确定性回退；391 包测试全绿，Xcode 真机视觉验收待用户。
 - 2026-09-14：书架封面抽象书签删除完成（`.planning/quick/260914-wqp-remove-cover-bookmark/SUMMARY.md`）；移除封面右侧仅露出一点的进度 Capsule，进度只保留信息区进度条与百分比，并清理 Spec 中旧便签/书签语义；391 包测试全绿，Xcode 真机视觉验收待用户。
 - 2026-09-14：书架现代拟物重构完成（`.planning/quick/260914-wt4-prd-spec/SUMMARY.md`）；PRD/Spec 改为允许低对比现代家具感材质，阅读区使用铺满宽度的程序化胡桃木桌面，书封增加页芯与接触阴影，书脊模式改为每排共享木质承托板并支持 6–1 列宽度回退；391 包测试全绿，Xcode 真机材质与对比度验收待用户。
+- 2026-09-14：书架木质拟物撤回完成（`.planning/quick/260914-wxe-revert-wood/SUMMARY.md`）；恢复低噪中性书架，删除木质桌面/承托板和书本页芯、底板与额外投影，桌面书本外框与封面统一为 100×150pt，保留固定几何、同级操作与 zoom transition；391 包测试全绿，Xcode 真机视觉验收待用户。
