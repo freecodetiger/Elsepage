@@ -125,3 +125,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-15：想法页自定义搜索抽屉完成（`.planning/quick/260915-00w-thoughts-search-drawer/SUMMARY.md`）；移除系统 searchable 和常驻搜索条，右上角按钮触发从右侧展开的玻璃胶囊搜索框，关闭清空搜索；391 包测试全绿，Xcode 真机展开效果验收待用户。
 - 2026-09-15：想法页搜索改为系统 toolbar morphing（`.planning/quick/260915-037-toolbar-morphing/SUMMARY.md`）；删除内容区 safeAreaInset 搜索抽屉，使用 searchable(placement:.toolbar) 让搜索按钮向左展开并保留右侧更多按钮；391 包测试全绿，Xcode 真机展开方向验收待用户。
 - 2026-09-15：想法页自定义 toolbar 伸缩搜索完成（`.planning/quick/260915-04v-toolbar/SUMMARY.md`）；移除系统 searchable，搜索按钮与更多菜单置于同一 trailing group，搜索控件从 44pt 按钮向左增长为输入框，更多按钮位置不变；391 包测试全绿，Xcode 真机动效验收待用户。
+- 2026-09-15：想法页搜索改造全部撤回（`.planning/quick/260915-05n-revert-thoughts-search/SUMMARY.md`）；`ThoughtsView` 与想法 Spec 已恢复到搜索实验前的 `2d1f1c4` 状态，系统常驻搜索行为恢复，台账保留；391 包测试全绿。
