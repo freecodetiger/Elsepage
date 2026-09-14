@@ -10,6 +10,7 @@ struct ThoughtsView: View {
     @Bindable var settings: SettingsRootModel
     @State private var showsSettings = false
     @State private var searchText = ""
+    @State private var isSearchPresented = false
     @State private var grouping: ThoughtsGrouping = .timeline
     @State private var selectedEntry: ReflectionArchiveEntry?
     let openSource: (Book, BookLocator) -> Void
@@ -32,7 +33,12 @@ struct ThoughtsView: View {
             .background(Color.elsepageBackground)
             .navigationTitle("想法")
             .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: "搜索记录、书名或回应")
+            .searchable(
+                text: $searchText,
+                isPresented: $isSearchPresented,
+                placement: .toolbar,
+                prompt: "搜索记录、书名或回应"
+            )
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
