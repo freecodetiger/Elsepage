@@ -161,7 +161,7 @@ AI 回应
   - 按书籍
   - 设置
 
-右上角显式提供 `magnifyingglass` 工具栏按钮；点击后通过 `searchable(isPresented:)` 展开导航栏搜索抽屉，不显示常驻搜索框。
+右上角显式提供 `magnifyingglass` 工具栏按钮；默认不显示搜索条，点击后从右侧展开 `ultraThinMaterial` 玻璃搜索抽屉，关闭时清空搜索。
 
 ### 5.2 分组标题
 

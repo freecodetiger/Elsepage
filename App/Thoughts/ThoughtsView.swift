@@ -10,9 +10,11 @@ struct ThoughtsView: View {
     @Bindable var settings: SettingsRootModel
     @State private var showsSettings = false
     @State private var searchText = ""
-    @State private var isSearchPresented = false
+    @State private var isSearchExpanded = false
     @State private var grouping: ThoughtsGrouping = .timeline
     @State private var selectedEntry: ReflectionArchiveEntry?
+    @FocusState private var isSearchFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let openSource: (Book, BookLocator) -> Void
 
     private var visibleEntries: [ReflectionArchiveEntry] {
@@ -31,22 +33,25 @@ struct ThoughtsView: View {
                 }
             }
             .background(Color.elsepageBackground)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if isSearchExpanded {
+                    searchDrawer
+                        .transition(
+                            .move(edge: .trailing)
+                                .combined(with: .opacity)
+                        )
+                }
+            }
             .navigationTitle("想法")
             .navigationBarTitleDisplayMode(.large)
-            .searchable(
-                text: $searchText,
-                isPresented: $isSearchPresented,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "搜索记录、书名或回应"
-            )
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
-                        isSearchPresented = true
+                        toggleSearch()
                     } label: {
-                        Image(systemName: "magnifyingglass")
+                        Image(systemName: isSearchExpanded ? "xmark" : "magnifyingglass")
                     }
-                    .accessibilityLabel("搜索记录")
+                    .accessibilityLabel(isSearchExpanded ? "关闭搜索" : "搜索记录")
 
                     Menu {
                         Picker("分组", selection: $grouping) {
@@ -89,6 +94,65 @@ struct ThoughtsView: View {
             }
             .onChange(of: searchText) { selectedEntry = nil }
             .onChange(of: grouping) { selectedEntry = nil }
+        }
+    }
+
+    private var searchDrawer: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.elsepageTextSecondary)
+
+            TextField("搜索记录、书名或回应", text: $searchText)
+                .focused($isSearchFocused)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .foregroundStyle(Color.elsepageTextPrimary)
+                .tint(.elsepageInteractive)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Color.elsepageTextTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
+            }
+        }
+        .padding(.horizontal, ElsepageTheme.Spacing.medium)
+        .frame(height: 44)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule().stroke(Color.elsepageBorder.opacity(0.86))
+        }
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 5)
+        .padding(.horizontal, ElsepageTheme.Spacing.page)
+        .padding(.top, ElsepageTheme.Spacing.xSmall)
+        .padding(.bottom, ElsepageTheme.Spacing.small)
+    }
+
+    private func toggleSearch() {
+        let animation = reduceMotion
+            ? nil
+            : Animation.snappy(duration: 0.24, extraBounce: 0)
+
+        if isSearchExpanded {
+            isSearchFocused = false
+            searchText = ""
+            withAnimation(animation) {
+                isSearchExpanded = false
+            }
+        } else {
+            withAnimation(animation) {
+                isSearchExpanded = true
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                isSearchFocused = true
+            }
         }
     }
 
