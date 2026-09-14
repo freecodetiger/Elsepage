@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>页外 · 想法页编辑式原型</title>
+  <style>
+    :root {
+      --stage: #0d0d0c;
+      --stage-ink: #f6f6f1;
+      --stage-muted: #9f9f98;
+      --stage-line: rgba(255, 255, 255, .13);
+      --paper: #f3f3f0;
+      --paper-deep: #ecece8;
+      --surface: #fbfbf9;
+      --ink: #11110f;
+      --ink-2: #5e5e59;
+      --ink-3: #91918b;
+      --line: #d9d9d3;
+      --line-soft: #e8e8e3;
+      --pressed: rgba(17, 17, 15, .055);
+      --glass: rgba(247, 247, 244, .78);
+      --shadow-phone: 0 46px 120px rgba(0, 0, 0, .5), 0 2px 0 rgba(255, 255, 255, .05) inset;
+      --radius-phone: 54px;
+      --ease: cubic-bezier(.2, .78, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--stage-ink);
+      background:
+        radial-gradient(circle at 16% -8%, rgba(255, 255, 255, .08), transparent 31%),
+        radial-gradient(circle at 92% 110%, rgba(255, 255, 255, .045), transparent 29%),
+        var(--stage);
+      font-family: "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .11;
+      background-image:
+        linear-gradient(rgba(255,255,255,.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.09) 1px, transparent 1px);
+      background-size: 54px 54px;
+      mask-image: linear-gradient(to bottom, black, transparent 82%);
+    }
+
+    button, input { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .prototype {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 54px 0 72px;
+      display: grid;
+      grid-template-columns: minmax(260px, 420px) 390px;
+      gap: clamp(56px, 10vw, 140px);
+      align-items: center;
+      justify-content: center;
+    }
+
+    .intro {
+      max-width: 420px;
+      animation: reveal .75s var(--ease) both;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--stage-muted);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 28px;
+      height: 1px;
+      background: currentColor;
+      opacity: .7;
+    }
+
+    .intro h1 {
+      margin: 0;
+      font-family: "Songti SC", "STSong", serif;
+      font-size: clamp(38px, 4.8vw, 64px);
+      font-weight: 600;
+      line-height: 1.08;
+      letter-spacing: -.045em;
+    }
+
+    .intro p {
+      margin: 24px 0 0;
+      color: var(--stage-muted);
+      font-size: 15px;
+      line-height: 1.85;
+    }
+
+    .principles {
+      display: grid;
+      gap: 0;
+      margin: 34px 0 0;
+      border-top: 1px solid var(--stage-line);
+    }
+
+    .principle {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 12px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--stage-line);
+    }
+
+    .principle span {
+      color: #74746e;
+      font-family: "Songti SC", "STSong", serif;
+      font-size: 13px;
+    }
+
+    .principle strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .principle p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.65;
+      color: #8d8d87;
+    }
+
+    .stage-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .control {
+      min-height: 42px;
+      padding: 0 15px;
+      color: var(--stage-ink);
+      background: rgba(255,255,255,.055);
+      border: 1px solid var(--stage-line);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background .18s ease, border-color .18s ease, transform .18s ease;
+    }
+
+    .control:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.22); }
+    .control:active { transform: scale(.97); }
+    .control[aria-pressed="true"] { background: rgba(255,255,255,.15); }
+
+    .phone-wrap {
+      width: 390px;
+      animation: reveal .82s .08s var(--ease) both;
+    }
+
+    .phone-caption {
+      display: flex;
+      justify-content: space-between;
+      margin: 0 8px 14px;
+      color: var(--stage-muted);
+      font-size: 11px;
+      letter-spacing: .12em;
+    }
+
+    .phone-caption strong {
+      color: var(--stage-ink);
+      font-weight: 650;
+      letter-spacing: .06em;
+    }
+
+    .phone-shell {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      padding: 10px;
+      border-radius: var(--radius-phone);
+      background: #050505;
+      box-shadow: var(--shadow-phone);
+    }
+
+    .phone-shell::before,
+    .phone-shell::after {
+      content: "";
+      position: absolute;
+      left: -3px;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+      background: #202020;
+    }
+
+    .phone-shell::before { top: 174px; height: 66px; }
+    .phone-shell::after { top: 258px; height: 88px; }
+
+    .phone-screen {
+      --phone-bg: var(--paper);
+      --phone-paper: var(--paper);
+      --phone-surface: var(--surface);
+      --phone-ink: var(--ink);
+      --phone-ink-2: var(--ink-2);
+      --phone-ink-3: var(--ink-3);
+      --phone-line: var(--line);
+      --phone-line-soft: var(--line-soft);
+      --phone-pressed: var(--pressed);
+      --phone-glass: var(--glass);
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      color: var(--phone-ink);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.30), transparent 24%),
+        var(--phone-bg);
+      border-radius: 44px;
+      isolation: isolate;
+    }
+
+    .prototype.is-dark .phone-screen {
+      --phone-bg: #0b0b0a;
+      --phone-paper: #0f0f0e;
+      --phone-surface: #181817;
+      --phone-ink: #f5f5f0;
+      --phone-ink-2: #aaa9a2;
+      --phone-ink-3: #73736e;
+      --phone-line: #32322f;
+      --phone-line-soft: #262624;
+      --phone-pressed: rgba(255,255,255,.065);
+      --phone-glass: rgba(18, 18, 17, .74);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.025), transparent 25%),
+        var(--phone-bg);
+    }
+
+    .dynamic-island {
+      position: absolute;
+      z-index: 8;
+      top: 12px;
+      left: 50%;
+      width: 124px;
+      height: 34px;
+      border-radius: 999px;
+      background: #030303;
+      transform: translateX(-50%);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.035) inset;
+    }
+
+    .statusbar {
+      flex: 0 0 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      color: var(--phone-ink);
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: .02em;
+    }
+
+    .status-right { display: flex; align-items: center; gap: 6px; }
+
+    .signal { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+    .signal i { display: block; width: 3px; border-radius: 2px; background: currentColor; }
+    .signal i:nth-child(1) { height: 5px; }
+    .signal i:nth-child(2) { height: 7px; }
+    .signal i:nth-child(3) { height: 9px; }
+    .signal i:nth-child(4) { height: 11px; }
+
+    .wifi {
+      width: 14px;
+      height: 11px;
+      border-top: 2px solid currentColor;
+      border-radius: 50% 50% 0 0;
+      position: relative;
+      opacity: .95;
+    }
+
+    .wifi::after {
+      content: "";
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      right: 3px;
+      bottom: 0;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .battery {
+      width: 22px;
+      height: 11px;
+      padding: 1.5px;
+      border: 1.4px solid currentColor;
+      border-radius: 3px;
+      opacity: .95;
+    }
+
+    .battery::before {
+      content: "";
+      display: block;
+      width: 76%;
+      height: 100%;
+      border-radius: 1px;
+      background: #42cf56;
+    }
+
+    .app-scroll {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: none;
+      padding-bottom: 112px;
+    }
+
+    .app-scroll::-webkit-scrollbar { display: none; }
+
+    .app-header {
+      position: sticky;
+      z-index: 6;
+      top: 0;
+      padding: 18px 20px 12px;
+      background:
+        linear-gradient(to bottom, color-mix(in srgb, var(--phone-paper) 94%, transparent) 62%, transparent),
+        transparent;
+      backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .app-header h1 {
+      margin: 0;
+      font-size: 36px;
+      line-height: 1.12;
+      letter-spacing: -.055em;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-button {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      color: var(--phone-ink);
+      background: color-mix(in srgb, var(--phone-surface) 83%, transparent);
+      border: 1px solid var(--phone-line-soft);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0,0,0,.045);
+      transition: transform .16s ease, background .16s ease;
+    }
+
+    .icon-button:active { transform: scale(.94); }
+    .icon-button svg { width: 19px; height: 19px; }
+
+    .search-drawer {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows .28s var(--ease), opacity .2s ease, margin-top .28s var(--ease);
+    }
+
+    .search-drawer.is-open {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      margin-top: 14px;
+    }
+
+    .search-drawer > div { min-height: 0; overflow: hidden; }
+
+    .search-field {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 0 14px;
+      background: color-mix(in srgb, var(--phone-surface) 86%, transparent);
+      border: 1px solid var(--phone-line);
+      border-radius: 14px;
+    }
+
+    .search-field svg { width: 17px; height: 17px; color: var(--phone-ink-3); flex: 0 0 auto; }
+    .search-field input {
+      width: 100%;
+      min-width: 0;
+      color: var(--phone-ink);
+      background: transparent;
+      border: 0;
+      outline: 0;
+      font-size: 15px;
+    }
+    .search-field input::placeholder { color: var(--phone-ink-3); }
+
+    .more-menu {
+      position: absolute;
+      z-index: 20;
+      top: 68px;
+      right: 20px;
+      width: 214px;
+      padding: 8px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-6px) scale(.98);
+      transform-origin: top right;
+      background: color-mix(in srgb, var(--phone-surface) 94%, transparent);
+      border: 1px solid var(--phone-line);
+      border-radius: 18px;
+      box-shadow: 0 20px 55px rgba(0,0,0,.16);
+      backdrop-filter: blur(22px) saturate(120%);
+      -webkit-backdrop-filter: blur(22px) saturate(120%);
+      transition: opacity .18s ease, transform .18s var(--ease), visibility .18s;
+    }
+
+    .more-menu.is-open {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+
+    .menu-label {
+      padding: 8px 10px 5px;
+      color: var(--phone-ink-3);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .14em;
+    }
+
+    .menu-item {
+      width: 100%;
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      color: var(--phone-ink);
+      background: transparent;
+      border: 0;
+      border-radius: 11px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .menu-item:hover { background: var(--phone-pressed); }
+    .menu-item .check { color: var(--phone-ink); opacity: 0; }
+    .menu-item.is-active .check { opacity: 1; }
+    .menu-divider { height: 1px; margin: 6px 4px; background: var(--phone-line-soft); }
+
+    .timeline { padding: 24px 20px 0; }
+
+    .month-section + .month-section { margin-top: 44px; }
+
+    .month-heading {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 14px;
+      margin: 0 0 4px;
+      color: var(--phone-ink-2);
+    }
+
+    .month-heading h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: .03em;
+    }
+
+    .month-heading::after {
+      content: "";
+      height: 1px;
+      background: var(--phone-line);
+    }
+
+    .entry {
+      width: 100%;
+      display: block;
+      margin: 0;
+      padding: 19px 0 20px;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--phone-line-soft);
+      cursor: pointer;
+      text-align: left;
+      transition: background .15s ease, transform .15s ease;
+    }
+
+    .entry:last-child { border-bottom-color: transparent; }
+    .entry:hover { background: linear-gradient(90deg, transparent, var(--phone-pressed), transparent); }
+    .entry:active { transform: scale(.992); }
+    .entry:focus-visible { outline: 2px solid var(--phone-ink); outline-offset: 4px; border-radius: 8px; }
+
+    .entry-meta {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      margin-bottom: 9px;
+      color: var(--phone-ink-3);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .entry-book {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--phone-ink-2);
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta-separator { color: var(--phone-line); }
+    .entry-date { flex: 0 0 auto; }
+
+    .entry-summary {
+      margin: 0;
+      color: var(--phone-ink);
+      font-family: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.62;
+      letter-spacing: -.012em;
+      text-wrap: pretty;
+    }
+
+    .empty-state {
+      padding: 88px 24px;
+      color: var(--phone-ink-3);
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .bottom-nav {
+      position: absolute;
+      z-index: 15;
+      left: 20px;
+      right: 20px;
+      bottom: 12px;
+      height: 74px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      align-items: center;
+      padding: 7px;
+      background: var(--phone-glass);
+      border: 1px solid color-mix(in srgb, var(--phone-line) 72%, transparent);
+      border-radius: 999px;
+      box-shadow: 0 18px 44px rgba(0,0,0,.12);
+      backdrop-filter: blur(26px) saturate(135%);
+      -webkit-backdrop-filter: blur(26px) saturate(135%);
+    }
+
+    .tab {
+      height: 58px;
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      color: var(--phone-ink-3);
+      background: transparent;
+      border: 0;
+      border-radius: 999px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .tab svg { width: 22px; height: 22px; }
+    .tab.is-active { color: var(--phone-ink); background: color-mix(in srgb, var(--phone-ink) 7%, transparent); }
+
+    .toast {
+      position: absolute;
+      z-index: 30;
+      left: 50%;
+      bottom: 100px;
+      max-width: calc(100% - 64px);
+      padding: 9px 13px;
+      color: var(--phone-paper);
+      background: color-mix(in srgb, var(--phone-ink) 90%, transparent);
+      border-radius: 999px;
+      font-size: 11px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 8px);
+      transition: opacity .18s ease, transform .18s var(--ease);
+    }
+
+    .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 900px) {
+      .prototype {
+        grid-template-columns: 1fr;
+        gap: 48px;
+        justify-items: center;
+        padding-top: 38px;
+      }
+
+      .intro { width: min(390px, 100%); text-align: center; }
+      .eyebrow { justify-content: center; }
+      .principles { text-align: left; }
+      .stage-controls { justify-content: center; }
+    }
+
+    @media (max-width: 440px) {
+      .prototype { width: 100%; padding: 0; display: block; }
+      .intro { display: none; }
+      .phone-wrap { width: 100vw; }
+      .phone-caption { display: none; }
+      .phone-shell { width: 100vw; height: 100svh; padding: 0; border-radius: 0; }
+      .phone-screen { border-radius: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype" id="prototype">
+    <section class="intro" aria-labelledby="prototype-title">
+      <div class="eyebrow">Thoughts · Editorial prototype</div>
+      <h1 id="prototype-title">把卡片拿掉，让想法自己站住。</h1>
+      <p>这一版不再用重复盒子组织记录。月份提供时间，书名与日期提供上下文，真正的概要保持最大视觉权重。</p>
+
+      <div class="principles">
+        <div class="principle"><span>01</span><div><strong>内容先于容器</strong><p>留白与细分隔线负责结构，不再让每条想法都进入一张卡片。</p></div></div>
+        <div class="principle"><span>02</span><div><strong>扫读路径更短</strong><p>书名、日期退后，概要在第一眼成为真正可读的句子。</p></div></div>
+        <div class="principle"><span>03</span><div><strong>减少管理感</strong><p>去掉数量、箭头和状态，只保留进入记录世界这一件事。</p></div></div>
+      </div>
+
+      <div class="stage-controls">
+        <button class="control" id="themeToggle" type="button" aria-pressed="false">切换深色</button>
+        <button class="control" id="resetButton" type="button">恢复默认</button>
+      </div>
+    </section>
+
+    <section class="phone-wrap" aria-label="想法页原型">
+      <div class="phone-caption"><strong>想法</strong><span id="modeLabel">按时间</span></div>
+      <div class="phone-shell">
+        <div class="dynamic-island" aria-hidden="true"></div>
+        <div class="phone-screen">
+          <div class="statusbar" aria-hidden="true">
+            <span>23:51</span>
+            <div class="status-right">
+              <span class="signal"><i></i><i></i><i></i><i></i></span>
+              <span class="wifi"></span>
+              <span class="battery"></span>
+            </div>
+          </div>
+
+          <div class="app-scroll" id="appScroll">
+            <header class="app-header">
+              <div class="title-row">
+                <h1>想法</h1>
+                <div class="toolbar">
+                  <button class="icon-button" id="searchToggle" type="button" aria-label="搜索">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="10.8" cy="10.8" r="6.2" stroke="currentColor" stroke-width="1.8"/>
+                      <path d="m15.5 15.5 4.4 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <button class="icon-button" id="menuToggle" type="button" aria-label="更多">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.4" fill="currentColor"/>
+                      <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+                      <circle cx="19" cy="12" r="1.4" fill="currentColor"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="search-drawer" id="searchDrawer">
+                <div>
+                  <label class="search-field">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="10.8" cy="10.8" r="6.2" stroke="currentColor" stroke-width="1.8"/>
+                      <path d="m15.5 15.5 4.4 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                    <input id="searchInput" type="search" placeholder="搜索概要、书名或日期" autocomplete="off">
+                  </label>
+                </div>
+              </div>
+            </header>
+
+            <div class="more-menu" id="moreMenu" role="menu" aria-label="分组与设置">
+              <div class="menu-label">分组方式</div>
+              <button class="menu-item is-active" data-group="timeline" type="button" role="menuitemradio">
+                <span>按时间</span><span class="check">✓</span>
+              </button>
+              <button class="menu-item" data-group="books" type="button" role="menuitemradio">
+                <span>按书籍</span><span class="check">✓</span>
+              </button>
+              <div class="menu-divider"></div>
+              <button class="menu-item" id="settingsItem" type="button" role="menuitem">
+                <span>设置</span><span aria-hidden="true">›</span>
+              </button>
+            </div>
+
+            <section class="timeline" id="timeline" aria-live="polite"></section>
+          </div>
+
+          <nav class="bottom-nav" aria-label="主导航">
+            <button class="tab" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 4.5h3.2v15H5zM10.2 3.8h3.2v15.7h-3.2zM15.4 6.2H19v13.3h-3.6z" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              <span>书架</span>
+            </button>
+            <button class="tab is-active" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3.4c.5 4 2.6 6.1 6.6 6.6-4 .5-6.1 2.6-6.6 6.6-.5-4-2.6-6.1-6.6-6.6 4-.5 6.1-2.6 6.6-6.6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+              <span>想法</span>
+            </button>
+            <button class="tab" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M5.4 19.4c.9-3.3 3.1-5 6.6-5s5.7 1.7 6.6 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+              <span>我的</span>
+            </button>
+          </nav>
+
+          <div class="toast" id="toast" role="status"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const records = [
+      { book: "小岛经济学", date: "2026-09-01", summary: "中国承担生产、美国高消费，顺差并非好事。" },
+      { book: "小岛经济学", date: "2026-08-29", summary: "印钞刺激消费只会掏空储蓄，最终拖垮经济。" },
+      { book: "小岛经济学", date: "2026-08-28", summary: "政治干预经济会透支民众对银行与货币的信任。" },
+      { book: "小岛经济学", date: "2026-08-28", summary: "贸易受阻时保护产业反损民众选择权，岗位是经济发展的结果。" },
+      { book: "穷爸爸富爸爸", date: "2026-08-16", summary: "资产把钱放进口袋，负债把钱从口袋拿走。" },
+      { book: "穷爸爸富爸爸", date: "2026-08-15", summary: "财务自由首先来自对现金流方向的判断。" }
+    ];
+
+    const state = {
+      grouping: "timeline",
+      query: "",
+      dark: false,
+      searchOpen: false
+    };
+
+    const prototype = document.getElementById("prototype");
+    const timeline = document.getElementById("timeline");
+    const searchDrawer = document.getElementById("searchDrawer");
+    const searchInput = document.getElementById("searchInput");
+    const menu = document.getElementById("moreMenu");
+    const modeLabel = document.getElementById("modeLabel");
+    const toast = document.getElementById("toast");
+
+    const monthLabel = (iso) => {
+      const [year, month] = iso.split("-").map(Number);
+      return `${year}年${month}月`;
+    };
+
+    const dayLabel = (iso) => {
+      const [, month, day] = iso.split("-").map(Number);
+      return `${month}月${day}日`;
+    };
+
+    function visibleRecords() {
+      const query = state.query.trim().toLowerCase();
+      if (!query) return records;
+      return records.filter((record) =>
+        `${record.book} ${record.date} ${record.summary}`.toLowerCase().includes(query)
+      );
+    }
+
+    function groupRecords(source) {
+      const map = new Map();
+      source.forEach((record) => {
+        const key = state.grouping === "timeline" ? monthLabel(record.date) : record.book;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(record);
+      });
+      return [...map.entries()];
+    }
+
+    function render() {
+      const source = visibleRecords();
+      modeLabel.textContent = state.grouping === "timeline" ? "按时间" : "按书籍";
+
+      if (!source.length) {
+        timeline.innerHTML = `<div class="empty-state">没有找到对应的想法。<br>换一个书名、日期或词语试试。</div>`;
+        return;
+      }
+
+      timeline.innerHTML = groupRecords(source).map(([heading, items]) => `
+        <section class="month-section">
+          <div class="month-heading"><h2>${escapeHTML(heading)}</h2></div>
+          ${items.map((record) => `
+            <button class="entry" type="button" data-book="${escapeHTML(record.book)}">
+              <div class="entry-meta">
+                ${state.grouping === "timeline" ? `<span class="entry-book">${escapeHTML(record.book)}</span><span class="meta-separator">·</span>` : ""}
+                <span class="entry-date">${dayLabel(record.date)}</span>
+              </div>
+              <p class="entry-summary">${escapeHTML(record.summary)}</p>
+            </button>
+          `).join("")}
+        </section>
+      `).join("");
+
+      timeline.querySelectorAll(".entry").forEach((entry) => {
+        entry.addEventListener("click", () => {
+          showToast(`打开《${entry.dataset.book}》的这条记录`);
+        });
+      });
+    }
+
+    function escapeHTML(value) {
+      return value.replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]);
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("is-visible");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("is-visible"), 1500);
+    }
+
+    document.getElementById("searchToggle").addEventListener("click", () => {
+      state.searchOpen = !state.searchOpen;
+      searchDrawer.classList.toggle("is-open", state.searchOpen);
+      menu.classList.remove("is-open");
+      if (state.searchOpen) {
+        setTimeout(() => searchInput.focus(), 120);
+      } else {
+        searchInput.value = "";
+        state.query = "";
+        render();
+      }
+    });
+
+    searchInput.addEventListener("input", (event) => {
+      state.query = event.target.value;
+      render();
+    });
+
+    document.getElementById("menuToggle").addEventListener("click", () => {
+      menu.classList.toggle("is-open");
+      if (menu.classList.contains("is-open")) {
+        searchDrawer.classList.remove("is-open");
+        state.searchOpen = false;
+      }
+    });
+
+    document.querySelectorAll("[data-group]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.grouping = button.dataset.group;
+        document.querySelectorAll("[data-group]").forEach((item) => {
+          item.classList.toggle("is-active", item === button);
+        });
+        menu.classList.remove("is-open");
+        render();
+      });
+    });
+
+    document.getElementById("settingsItem").addEventListener("click", () => {
+      menu.classList.remove("is-open");
+      showToast("设置入口保持现有层级");
+    });
+
+    document.getElementById("themeToggle").addEventListener("click", (event) => {
+      state.dark = !state.dark;
+      prototype.classList.toggle("is-dark", state.dark);
+      event.currentTarget.textContent = state.dark ? "切换浅色" : "切换深色";
+      event.currentTarget.setAttribute("aria-pressed", String(state.dark));
+    });
+
+    document.getElementById("resetButton").addEventListener("click", () => {
+      state.grouping = "timeline";
+      state.query = "";
+      state.dark = false;
+      state.searchOpen = false;
+      searchInput.value = "";
+      prototype.classList.remove("is-dark");
+      searchDrawer.classList.remove("is-open");
+      menu.classList.remove("is-open");
+      document.getElementById("themeToggle").textContent = "切换深色";
+      document.getElementById("themeToggle").setAttribute("aria-pressed", "false");
+      document.querySelectorAll("[data-group]").forEach((item) => {
+        item.classList.toggle("is-active", item.dataset.group === "timeline");
+      });
+      render();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!menu.contains(event.target) && !document.getElementById("menuToggle").contains(event.target)) {
+        menu.classList.remove("is-open");
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
