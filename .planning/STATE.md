@@ -121,3 +121,4 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 - 2026-09-14：书架 zoom transition 阴影一致性修复完成（`.planning/quick/260914-x2m-zoom-transition/SUMMARY.md`）；恢复封面层次，将封面尺寸、圆角与阴影参数集中管理，并同步写入当前封面/书脊/封面模式的 matched transition configuration；391 包测试全绿，Xcode 真机开合动画验收待用户。
 - 2026-09-14：想法页编辑式 HTML 原型完成（`.planning/quick/260914-x71-html/SUMMARY.md`）；新增 `docs/prototypes/thoughts-editorial.html`，去掉重复卡片/数量/箭头，改为月份分组与细分隔线的编辑式记录流，搜索默认收起，支持时间/书籍分组和明暗预览；HTML/JS 静态检查通过，最终视觉审阅待用户。
 - 2026-09-14：想法页搜索入口调整完成（`.planning/quick/260914-xa0-ui/SUMMARY.md`）；移除标题下方常驻搜索框，改用右上角系统工具栏搜索按钮，点击后展开，其他卡片/分组/详情保持不变；391 包测试全绿，Xcode 真机位置验收待用户。
+- 2026-09-14：想法页显式搜索按钮完成（`.planning/quick/260914-xbg-thoughts-search-button/SUMMARY.md`）；右上角固定加入 magnifyingglass 按钮，与更多菜单并列，点击后展开 searchable 抽屉，卡片/分组/详情不变；391 包测试全绿，Xcode 真机按钮位置验收待用户。
