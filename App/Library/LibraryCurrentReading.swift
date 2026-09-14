@@ -192,19 +192,6 @@ struct LibraryCurrentReadingDeskView: View {
                     height: LibraryBookMetrics.objectHeight
                 )
 
-                if let progress {
-                    GeometryReader { geometry in
-                        Capsule()
-                            .fill(accentColor)
-                            .frame(width: 5, height: max(10, geometry.size.height * progress))
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            .padding(.top, 8)
-                            .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
-                    }
-                    .frame(width: 5, height: LibraryBookMetrics.objectHeight - 16)
-                    .padding(.trailing, 8)
-                    .accessibilityHidden(true)
-                }
             }
         }
         .buttonStyle(.plain)
