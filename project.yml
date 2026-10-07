@@ -22,7 +22,7 @@ packages:
     path: .
   Readium:
     url: https://github.com/readium/swift-toolkit.git
-    exactVersion: 3.3.0
+    exactVersion: 3.11.0
   GRDB:
     url: https://github.com/groue/GRDB.swift.git
     exactVersion: 7.11.1

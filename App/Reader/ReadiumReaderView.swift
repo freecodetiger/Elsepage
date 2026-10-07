@@ -501,7 +501,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             links.flatMap { link in
                 var result: [ReaderChapter] = []
                 let locator = Locator(href: link.url(), mediaType: link.mediaType ?? .xhtml, title: link.title)
-                if let data = try? JSONSerialization.data(withJSONObject: locator.json) {
+                if let data = try? locator.jsonData() {
                     result.append(.init(
                         id: "\(depth)-\(link.href)",
                         title: link.title ?? "未命名章节",
@@ -517,13 +517,12 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         }
 
         private static func readiumLocator(from data: Data) throws -> Locator? {
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-            return try Locator(json: json)
+            try Locator(json: JSONValue(jsonData: data), warnings: nil)
         }
 
         static func anchor(from locator: Locator) throws -> BookLocator {
             try BookLocator(
-                json: JSONSerialization.data(withJSONObject: locator.json),
+                json: locator.jsonData(),
                 href: locator.href.string,
                 progression: locator.locations.progression,
                 totalProgression: locator.locations.totalProgression,

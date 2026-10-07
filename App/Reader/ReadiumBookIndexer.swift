@@ -65,7 +65,7 @@ final class ReadiumBookContentExtractor: BookContentExtractor {
     }
 
     private static func anchor(_ locator: Locator) throws -> BookLocator {
-        try BookLocator(json: JSONSerialization.data(withJSONObject: locator.json), href: locator.href.string,
+        try BookLocator(json: locator.jsonData(), href: locator.href.string,
             progression: locator.locations.progression, totalProgression: locator.locations.totalProgression,
             textBefore: locator.text.before, textHighlight: locator.text.highlight, textAfter: locator.text.after)
     }
