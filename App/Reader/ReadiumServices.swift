@@ -1,5 +1,4 @@
 import Foundation
-@preconcurrency import ReadiumAdapterGCDWebServer
 @preconcurrency import ReadiumShared
 @preconcurrency import ReadiumStreamer
 
@@ -29,7 +28,6 @@ final class ReadiumServices {
     let httpClient: HTTPClient
     let assetRetriever: AssetRetriever
     let publicationOpener: PublicationOpener
-    let httpServer: HTTPServer
 
     init() {
         let httpClient = DefaultHTTPClient()
@@ -43,7 +41,6 @@ final class ReadiumServices {
                 pdfFactory: DefaultPDFDocumentFactory()
             )
         )
-        httpServer = GCDHTTPServer(assetRetriever: assetRetriever)
     }
 
     func open(_ url: URL, allowUserInteraction: Bool) async throws -> Publication {

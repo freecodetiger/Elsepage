@@ -1,7 +1,6 @@
 import Foundation
 import LibraryCore
 import ReaderCore
-import ReadiumAdapterGCDWebServer
 import ReadiumNavigator
 @preconcurrency import ReadiumShared
 import SwiftUI
@@ -83,8 +82,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                                 .compact: (top: 8, bottom: 8),
                                 .regular: (top: 16, bottom: 16),
                             ]
-                        ),
-                        httpServer: model.readium.httpServer
+                        )
                     )
                     navigator.delegate = self
                     host.addChild(navigator)
