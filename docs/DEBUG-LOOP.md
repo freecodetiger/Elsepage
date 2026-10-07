@@ -12,7 +12,8 @@
 | Agent、Journal、Memory/Brain 业务场景 | 未接入；现有单测不等于设备场景覆盖 |
 | 数据库磁盘重启恢复 | 未覆盖；内存数据库重读不能证明磁盘耐久性 |
 | 全链路因果观测 | 部分：动作关联和结果快照已有，缺通用事务、Provider、后台任务事件 |
-| UI 手势、像素、真实帧率 | 未自动化，需真机手测/专用工具 |
+| UI 像素采集 | `GET /screenshot` 可随时拍下 App 自身窗口；拍的是当前画面，不能自己切页面 |
+| UI 手势、真实帧率 | 未自动化，需真机手测/专用工具 |
 | 自动构建、安装、CI、多设备管理、MCP | 未实现；构建安装仍按项目分工由用户完成 |
 
 完成标准按场景计算：真实动作入口、独立环境、状态与数据库/依赖断言、明确异步终态、失败证据、设备验证缺一不可。当前不能标为“全项目 E2E 完整覆盖”。
@@ -34,7 +35,7 @@
 |---|---|
 | `App/AppModel.swift` | DEBUG 自动启动入口 |
 | `App/Performance/DebugHTTPServer.swift` | 通用 loopback HTTP 传输、限制与生命周期 |
-| `App/Performance/DebugLoop.swift` | 业务动作注册、会话隔离、快照和事件 |
+| `App/Performance/DebugLoop.swift` | 业务动作注册、会话隔离、快照、事件和窗口截图 |
 | `Sources/Persistence/ReflectionTestEnvironment.swift` | 真实 GRDB 隔离环境 |
 | `App/Reflection/SessionReflectionSheet.swift` | 场景调用的真实 Reflection Model |
 | `Scripts/debug_loop.py` | Mac 连接、场景执行、断言和证据输出 |
@@ -49,6 +50,8 @@
 - 业务测试装配 `ReflectionTestEnvironment`：独立内存 GRDB、固定书籍与阅读会话，实例化产品使用的 `SessionReflectionModel`，调用其 `submit()`。不会连接用户数据库、书籍文件、Keychain 或真实 Provider。
 - 验证模型 saved、数据库原文与 ID、讨论计数、相同动作 ID 重试不重复写入、空白输入拒绝。每个新场景重建隔离环境。
 
+- `GET /screenshot` 用 `UIGraphicsImageRenderer` + `drawHierarchy` 渲染 App 自己的 key window，返回 base64 PNG。它只能**采集**当前画面，不能驱动界面：要拍某个状态，仍需用户先把 App 操作到那个状态。旧版本构建没有此路由，脚本会收到 404。
+
 这不是点击/键盘/长按自动化。`GET /perf` 读取现有手测数据；`GET /events` 是业务动作事件，不是性能事件的增量接口。Agent/Journal/Brain 场景、正式 UI 当前模型的远程操作、自动构建安装不属于 v1。
 
 ## 自动连接
@@ -60,6 +63,7 @@
 python3 Scripts/debug_loop.py status
 python3 Scripts/debug_loop.py perf
 python3 Scripts/debug_loop.py save
+python3 Scripts/debug_loop.py screenshot --scale 2
 ```
 
 不需要开启开关或复制令牌。脚本发现本地端口未监听时，使用已安装的 `idevice_id` 和 `iproxy` 启动 USB 转发；转发后台保留供后续命令复用。多设备首次建转发可用 `--udid` 指定设备。已有转发会复用，要切换设备需先停止原转发进程。
@@ -76,6 +80,7 @@ Xcode 覆盖安装并启动后服务自动恢复；仅安装而未启动、App �
 |---|---|
 | GET /status | protocolVersion、instrumentationVersion、build、runID、busy、能力列表 |
 | GET /perf | 当前 App 的性能报告文本 |
+| GET /screenshot?scale=1\|2\|3 | App 自身窗口的 PNG（base64，`scale` 默认 2，sRGB 8-bit）。拍的是 App 窗口，不含状态栏等系统合成层；scale 超出 1–3 返回 400 |
 | POST /session `{}` | 重建独立测试环境；操作执行期间返回 409 |
 | GET /snapshot | 测试模型与数据库真值；执行中/读取期间状态变化返回 409 |
 | POST /actions | `{id: UUID, name: "reflection.submit", text: string}`；202 表示接收，不表示业务完成 |
@@ -89,9 +94,10 @@ Xcode 覆盖安装并启动后服务自动恢复；仅安装而未启动、App �
 ## 验证证据与边界
 
 - `swift test`：349 Swift Testing + 26 XCTest 通过。新测试验证真实 GRDB 保存、来源证据、幂等重试、环境隔离和空白拒绝。
-- `python3 -m unittest discover -s Scripts -p test_debug_loop.py`：5 个执行器/连接管理测试通过，包含“页面成功但数据库文本错误”必须 FAIL。
+- `python3 -m unittest discover -s Scripts -p test_debug_loop.py`：7 个执行器/连接管理测试通过，包含“页面成功但数据库文本错误”必须 FAIL、以及“HTTP 200 但载荷不是真 PNG”必须 FAIL（缺 png 字段 / 非法 base64 / base64 解出的不是 PNG 三种都覆盖）。
 - `xcodegen generate` 已完成；它只生成工程，不是构建。
 - 2026-09-12：用户构建安装后，已在 iPhone 上运行 `save` 并 PASS；无令牌自启动版本也通过，protocolVersion=1、instrumentationVersion=5。保存、重试与空白拒绝的原始结果见 [设备验收证据](testing/debug-loop/2026-09-12-device-save.json)。后续 instrumentationVersion=6 已连接并读取性能数据；版本 7 增加文本缓存统计；当前版本 8 通过 `/perf` 暴露 annotation 点击坐标、hit rect 和冲突命中事件，但这不自动构成未来代码改动的回归通过。
+- 2026-10-07：`/screenshot` 已在 iPhone 17 / iOS 26.6 真机验证。scale=2 输出 804×1748、8-bit RGB、约 363KB PNG，内容是 App 书架的真实画面。此改动**未升级** `protocolVersion`（新增路由向后兼容）也未升级 `instrumentationVersion`（不是性能观测）；旧构建请求该路由返回 404。截图含用户真实书库，属个人数据，按第 6 条只留本机路径不进仓库。
 
 ## 后续扩展
 

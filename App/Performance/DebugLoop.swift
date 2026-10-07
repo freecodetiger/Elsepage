@@ -6,6 +6,7 @@ import Persistence
 import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
+import UIKit
 
 /// Device-side business adapter. HTTP transport knows no ReadLoop concepts.
 @MainActor @Observable
@@ -91,6 +92,36 @@ final class DebugLoop {
                                 "discussionCount": session?.agentDiscussionCount ?? 0]]
     }
 
+    /// The app's own key window, not the whole screen: system-composited layers
+    /// (status bar, banners, other apps) are deliberately absent so the captured
+    /// frame is exactly the view hierarchy under test.
+    private func screenshotWindow() -> UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first
+    }
+
+    private func screenshot(scale: CGFloat) -> [String: Any]? {
+        guard let window = screenshotWindow() else { return nil }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = scale
+        format.opaque = true
+        // Wide-color is the default range on modern devices; pinning sRGB keeps
+        // the payload 8-bit instead of 16-bit for a frame nobody color-grades.
+        format.preferredRange = .standard
+        let bounds = window.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        let image = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
+            window.drawHierarchy(in: bounds, afterScreenUpdates: true)
+        }
+        guard let png = image.pngData() else { return nil }
+        return ["scale": Double(scale),
+                "width": Double(bounds.width),
+                "height": Double(bounds.height),
+                "bytes": png.count,
+                "png": png.base64EncodedString()]
+    }
+
     private func handle(_ method: String, _ target: String, _ body: Data) async -> (Int, Data) {
         guard let url = URLComponents(string: target) else { return reply(400, ["error": "invalid_target"]) }
         let path = url.path
@@ -98,9 +129,19 @@ final class DebugLoop {
             return reply(200, ["protocolVersion": 1, "authentication": "none-usb-loopback", "instrumentationVersion": 8,
                                "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
                                "runID": runID, "busy": busy, "environment": "isolated-memory-grdb",
-                               "actions": ["reflection.submit"], "scope": "reflection-save; no Agent or UI automation"])
+                               "actions": ["reflection.submit"], "scope": "reflection-save, ui-screenshot; no gesture automation"])
         }
         if method == "GET", path == "/perf" { return reply(200, ["report": Perf.shared.report]) }
+        if method == "GET", path == "/screenshot" {
+            let raw = url.queryItems?.first(where: { $0.name == "scale" })?.value ?? "2"
+            guard let requested = Int(raw), (1...3).contains(requested) else {
+                return reply(400, ["error": "invalid_scale"])
+            }
+            guard let shot = screenshot(scale: CGFloat(requested)) else {
+                return reply(500, ["error": "screenshot_failed"])
+            }
+            return reply(200, shot)
+        }
         if method == "GET", path == "/events" {
             let raw = url.queryItems?.first(where: { $0.name == "after" })?.value ?? "0"
             guard let after = Int(raw), after >= 0 else { return reply(400, ["error": "invalid_cursor"]) }

@@ -1,8 +1,11 @@
 """Tests that the host verdict rejects false business success."""
+import base64
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 import urllib.error
-from debug_loop import run_save, wait_ready, forward_usb
+from debug_loop import decode_screenshot, run_save, run_screenshot, wait_ready, forward_usb
 
 
 class ScenarioClient:
@@ -63,6 +66,35 @@ class VerdictTests(unittest.TestCase):
     def test_ui_success_with_wrong_persistence_fails(self):
         with self.assertRaisesRegex(AssertionError, "Persisted text differs"):
             run_save(ScenarioClient(corrupt=True), {})
+
+
+class ScreenshotTests(unittest.TestCase):
+    def payload(self, raw):
+        return {"scale": 2.0, "width": 393.0, "height": 852.0, "bytes": len(raw),
+                "png": base64.b64encode(raw).decode()}
+
+    def test_real_png_is_written_to_the_run_directory(self):
+        raw = b"\x89PNG\r\n\x1a\n" + b"payload"
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = run_screenshot(StubClient(self.payload(raw)), Path(directory), 2)
+            self.assertEqual(Path(evidence["path"]).read_bytes(), raw)
+            self.assertEqual(evidence["bytes"], len(raw))
+
+    def test_http_200_without_a_real_png_fails(self):
+        for payload in [{"scale": 2.0}, {"png": "not base64!!"},
+                        self.payload(b"not a png at all")]:
+            with self.assertRaises(AssertionError):
+                decode_screenshot(payload)
+
+
+class StubClient:
+    def __init__(self, payload):
+        self.payload = payload
+        self.path = None
+
+    def request(self, method, path, payload=None):
+        self.path = path
+        return self.payload
 
 
 if __name__ == "__main__":

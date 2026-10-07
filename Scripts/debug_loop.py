@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """ReadLoop DEBUG USB client: automatically establishes forwarding, no token required."""
 import argparse
+import base64
+import binascii
 import json
 import shutil
 import socket
@@ -82,6 +84,31 @@ def check(condition, message):
         raise AssertionError(message)
 
 
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def decode_screenshot(payload):
+    """Base64 image -> PNG bytes. Rejects a 200 that carries no real PNG, so a
+    device-side render failure can never be recorded as a visual PASS."""
+    check(isinstance(payload, dict), "Screenshot payload is not an object")
+    check(isinstance(payload.get("png"), str), "Screenshot payload has no image")
+    try:
+        raw = base64.b64decode(payload["png"], validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise AssertionError("Screenshot is not valid base64: " + str(error)) from error
+    check(raw.startswith(PNG_MAGIC), "Screenshot is not a PNG")
+    return raw
+
+
+def run_screenshot(client, directory, scale):
+    payload = client.request("GET", "/screenshot?scale=%d" % scale)
+    raw = decode_screenshot(payload)
+    path = directory / "screenshot.png"
+    path.write_bytes(raw)
+    return {"scale": payload.get("scale"), "width": payload.get("width"),
+            "height": payload.get("height"), "bytes": len(raw), "path": str(path)}
+
+
 def run_save(client, evidence):
     session = client.request("POST", "/session", {})
     evidence["session"] = session
@@ -118,11 +145,13 @@ def run_save(client, evidence):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "perf", "save"])
+    parser.add_argument("command", choices=["status", "perf", "save", "screenshot"])
     parser.add_argument("--base", default="http://127.0.0.1:18765")
     parser.add_argument("--output", type=Path, default=Path("/tmp/readloop-debug-runs"))
     parser.add_argument("--udid", help="Device to use when creating a new USB forward")
     parser.add_argument("--wait", type=float, default=15, help="Startup retry window in seconds")
+    parser.add_argument("--scale", type=int, choices=[1, 2, 3], default=2,
+                        help="Screenshot scale: 1 is point geometry, 3 is device pixels")
     args = parser.parse_args()
     client = Client(args.base)
     try:
@@ -131,7 +160,7 @@ def main():
         wait_ready(client, args.wait)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         parser.exit(1, "Connection failed: " + str(error) + "\n")
-    if args.command != "save":
+    if args.command in ("status", "perf"):
         print(json.dumps(client.request("GET", "/" + args.command), ensure_ascii=False, indent=2))
         return
     directory = args.output / str(uuid.uuid4())
@@ -141,21 +170,26 @@ def main():
     try:
         evidence["status"] = client.request("GET", "/status")
         check(evidence["status"]["protocolVersion"] == 1, "Unsupported protocol")
-        run_save(client, evidence)
+        if args.command == "save":
+            run_save(client, evidence)
+        else:
+            evidence["screenshot"] = run_screenshot(client, directory, args.scale)
         evidence["verdict"] = "PASS"
     except Exception as error:
         evidence["verdict"] = "FAIL"
         evidence["error"] = str(error)
         code = 1
     finally:
-        try:
-            evidence["latest_events"] = client.request("GET", "/events?after=0")
-        except Exception as error:
-            evidence["collection_error"] = str(error)
+        if args.command == "save":
+            try:
+                evidence["latest_events"] = client.request("GET", "/events?after=0")
+            except Exception as error:
+                evidence["collection_error"] = str(error)
         (directory / "result.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2))
-        events = evidence.get("save_events", {}).get("events", []) + evidence.get("latest_events", {}).get("events", [])
-        (directory / "events.jsonl").write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events))
-    print(evidence["verdict"], directory)
+        if args.command == "save":
+            events = evidence.get("save_events", {}).get("events", []) + evidence.get("latest_events", {}).get("events", [])
+            (directory / "events.jsonl").write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events))
+    print(evidence["verdict"], evidence.get("screenshot", {}).get("path") or directory)
     raise SystemExit(code)
 
 
