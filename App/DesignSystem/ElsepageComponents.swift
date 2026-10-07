@@ -42,6 +42,8 @@ extension View {
 enum ElsepageBookCoverMetrics {
     static let width: CGFloat = 100
     static let height: CGFloat = 150
+    /// Covers are always 2:3, regardless of the artwork's own aspect.
+    static let aspectRatio: CGFloat = 2 / 3
     static let cornerRadius = ElsepageTheme.Radius.small
     static let shadowColor = ElsepageTheme.Shadow.coverColor
     static let shadowRadius = ElsepageTheme.Shadow.coverRadius
@@ -54,19 +56,31 @@ struct ElsepageBookCover: View {
     let author: String?
     let seed: Int
     let showsShadow: Bool
+    /// Rendered width; height always follows the 2:3 cover ratio. It is passed
+    /// in rather than negotiated because a resizable `Image` reports its own
+    /// pixel size as its ideal size — so a cover that is allowed to size itself
+    /// inside a flexible grid cell comes out wider than the column, and
+    /// `scaledToFill` then leaves the artwork sitting short in its own box.
+    let width: CGFloat
 
     init(
         image: UIImage?,
         title: String,
         author: String?,
         seed: Int,
-        showsShadow: Bool = true
+        showsShadow: Bool = true,
+        width: CGFloat
     ) {
         self.image = image
         self.title = title
         self.author = author
         self.seed = seed
         self.showsShadow = showsShadow
+        self.width = width
+    }
+
+    private var size: CGSize {
+        CGSize(width: width, height: width / ElsepageBookCoverMetrics.aspectRatio)
     }
 
     private var palette: [Color] {
@@ -79,42 +93,54 @@ struct ElsepageBookCover: View {
         return palettes[abs(seed) % palettes.count]
     }
 
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .accessibilityHidden(true)
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.64)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-            } else {
-                LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
-            }
-            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
-                Text(title)
-                    .font(ElsepageTheme.Typography.bookTitle)
-                    .lineLimit(4)
-                    // The cover frame is fixed 2:3 while the title follows Dynamic
-                    // Type; graceful downscale keeps oversized type inside the
-                    // artwork instead of clipping it (A11Y-01). The card's real
-                    // title text below the cover always renders at full size.
+    /// A real cover already carries its own title and artwork; stamping the EPUB
+    /// metadata over it only fights the art (titles are frequently a concatenated
+    /// multi-book string). The label is reserved for the generated placeholder.
+    private var label: some View {
+        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
+            Text(title)
+                .font(ElsepageTheme.Typography.bookTitle)
+                .lineLimit(4)
+                // The cover frame is fixed 2:3 while the title follows Dynamic
+                // Type; graceful downscale keeps oversized type inside the
+                // artwork instead of clipping it (A11Y-01). The card's real
+                // title text below the cover always renders at full size.
+                .minimumScaleFactor(0.5)
+            if let author, !author.isEmpty {
+                Text(author)
+                    .font(ElsepageTheme.Typography.metadata)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.5)
-                if let author, !author.isEmpty {
-                    Text(author)
-                        .font(ElsepageTheme.Typography.metadata)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.5)
-                        .opacity(0.72)
-                }
+                    .opacity(0.72)
             }
-            .foregroundStyle(.white)
-            .padding(ElsepageTheme.Spacing.medium)
         }
-        .clipped()
+        .foregroundStyle(.white)
+        .padding(ElsepageTheme.Spacing.medium)
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        if let image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+
+    var body: some View {
+        // The canonical fill recipe, with every size stated explicitly. Nothing
+        // here negotiates with the parent: the artwork gets the full 2:3 box and
+        // is clipped to it, and the label rides in a bottom-leading overlay that
+        // cannot change the box either.
+        ZStack(alignment: .bottomLeading) {
+            artwork
+                .frame(width: size.width, height: size.height)
+                .clipped()
+            if image == nil { label }
+        }
+        .frame(width: size.width, height: size.height)
         .clipShape(
             RoundedRectangle(cornerRadius: ElsepageBookCoverMetrics.cornerRadius, style: .continuous)
         )

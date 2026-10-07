@@ -190,20 +190,4 @@ final class AccessibilitySupportTests: XCTestCase {
         XCTAssertFalse(ElsepageDateFormat.monthTitle(date).contains("Sep"))
     }
 
-    // MARK: - A11Y-01: library grid adapts at accessibility sizes
-
-    func testAccessibilityDynamicTypeCollapsesLibraryGridToSingleColumn() {
-        XCTAssertEqual(LibraryGridLayout.columnCount(isAccessibilitySize: false), 2)
-        XCTAssertEqual(LibraryGridLayout.columnCount(isAccessibilitySize: true), 1)
-    }
-
-    func testColumnWidthHonorsExplicitColumnCount() {
-        let width = LibraryGridLayout.columnWidth(
-            containerWidth: 390,
-            horizontalPadding: 20,
-            columnSpacing: 16,
-            columnCount: 1
-        )
-        XCTAssertEqual(width, 350)
-    }
 }

@@ -50,9 +50,4 @@ enum Haptics {
     static func bookPulled() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
-
-    /// 书回到书架并吸附。
-    static func bookSettled() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-    }
 }

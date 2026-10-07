@@ -1,6 +1,8 @@
 import AchievementCore
 import AppInfrastructure
 import LibraryCore
+import ReadingSessionCore
+import ReflectionCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,15 +11,14 @@ struct LibraryView: View {
     @Bindable var settings: SettingsRootModel
     let achievements: AchievementModel?
     @State private var nextActionModel: LibraryNextActionModel
-    @State private var displayMode: LibraryDisplayMode = .spines
     @State private var importing = false
     @State private var showsSettings = false
     @State private var selectedBook: Book?
     @State private var deletingBook: Book?
+    @State private var reflection: SessionReflectionModel?
+    @State private var presentedReflectionSessionID: ReadingSessionID?
+    @State private var didSaveReflectionInSheet = false
     @Namespace private var bookTransitionNamespace
-    /// A11Y-01: the grid collapses to one readable column at accessibility
-    /// Dynamic Type sizes instead of squeezing titles into half-width cells.
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(
         model: LibraryModel,
@@ -44,12 +45,6 @@ struct LibraryView: View {
                         Picker("排序", selection: $model.sortOrder) {
                             ForEach(LibrarySortOrder.allCases) { order in
                                 Text(order.title).tag(order)
-                            }
-                        }
-                        Divider()
-                        Picker("显示", selection: $displayMode) {
-                            ForEach(LibraryDisplayMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
                             }
                         }
                     } label: {
@@ -83,6 +78,24 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)
+            }
+            .sheet(item: $reflection) { reflection in
+                SessionReflectionSheet(model: reflection) { _ in
+                    didSaveReflectionInSheet = true
+                    Task {
+                        await model.reload()
+                        await nextActionModel.reload()
+                    }
+                }
+            }
+            .onChange(of: reflection?.id) { _, currentID in
+                guard currentID == nil, let sessionID = presentedReflectionSessionID else { return }
+                presentedReflectionSessionID = nil
+                defer { didSaveReflectionInSheet = false }
+                if !didSaveReflectionInSheet {
+                    nextActionModel.dismissReflectionPrompt(for: sessionID)
+                    Task { await nextActionModel.reload() }
+                }
             }
             .navigationDestination(item: $selectedBook) { book in
                 ReaderScreen(
@@ -165,60 +178,54 @@ struct LibraryView: View {
     }
 
     private func bookList(_ model: LibraryModel) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
-                if model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   let currentBook = model.currentBook {
-                    LibraryCurrentReadingDeskView(
-                        model: nextActionModel,
-                        book: currentBook,
-                        progress: model.progress(for: currentBook),
-                        cover: model.cover(for: currentBook),
-                        achievements: achievements,
-                        transitionNamespace: bookTransitionNamespace,
-                        openBook: { selectedBook = currentBook },
-                        onSaved: {
-                            Task {
-                                await model.reload()
-                                await nextActionModel.reload()
-                            }
-                        }
-                    )
-                    .task(id: currentBook.id) {
-                        await model.loadCover(for: currentBook)
-                    }
-                }
-
-                let shelfBooks = model.visibleBooks.filter { candidate in
-                    guard model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                          let currentBook = model.currentBook else { return true }
-                    return candidate.id != currentBook.id
-                }
-
-                if shelfBooks.isEmpty {
-                    if model.visibleBooks.isEmpty {
-                        ContentUnavailableView.search(text: model.searchQuery)
-                            .frame(maxWidth: .infinity, minHeight: 260)
-                    }
+        // The grid needs its available width to size covers explicitly.
+        GeometryReader { proxy in
+            ScrollView {
+                if model.visibleBooks.isEmpty {
+                    ContentUnavailableView.search(text: model.searchQuery)
+                        .frame(maxWidth: .infinity, minHeight: 260)
+                        .padding(ElsepageTheme.Spacing.page)
                 } else {
-                    LibraryShelfView(
-                        books: shelfBooks,
-                        mode: displayMode,
+                    LibraryGridView(
+                        books: model.visibleBooks,
                         cover: { model.cover(for: $0) },
                         progress: { model.progress(for: $0) },
+                        statusLine: { statusLine(for: $0) },
+                        pendingReflectionBookID: nextActionModel.pendingReflection?.book.id,
                         transitionNamespace: bookTransitionNamespace,
                         openBook: { selectedBook = $0 },
-                        loadCover: { await model.loadCover(for: $0) }
+                        loadCover: { await model.loadCover(for: $0) },
+                        writeReflection: { _ in presentReflection() },
+                        requestDelete: { deletingBook = $0 },
+                        accessibilityLabel: { accessibilityLabel(for: $0) },
+                        containerWidth: proxy.size.width
                     )
                 }
             }
-            .padding(ElsepageTheme.Spacing.page)
+        }
+        .refreshable {
+            await model.reload()
+            await nextActionModel.reload()
+        }
+        // The index is only consulted for the book on the desk, and only once
+        // per book; the chapter is presentation data, never a blocking load.
+        .task(id: model.currentBook?.id) {
+            guard let book = model.currentBook else { return }
+            await model.loadChapterTitle(for: book)
         }
     }
 
-    private func metadata(for book: Book) -> String {
-        if let author = book.author, !author.isEmpty { return author }
-        return "未知作者"
+    /// One quiet line under a card. The book you are reading says where you are;
+    /// every other book says what it has accumulated. A fresh book says nothing
+    /// rather than "0%".
+    private func statusLine(for book: Book) -> String? {
+        if book.id == model.currentBook?.id {
+            if let chapter = model.chapterTitles[book.id], !chapter.isEmpty { return chapter }
+            // Opened before but no chapter resolved — still the book you would
+            // resume. Never opened: fall through to the statistics.
+            if book.lastOpenedAt != nil { return "继续阅读中" }
+        }
+        return model.statsLine(for: book)
     }
 
     private func accessibilityLabel(for book: Book) -> String {
@@ -227,6 +234,28 @@ struct LibraryView: View {
             author: book.author,
             statsLine: model.statsLine(for: book),
             progress: model.progress(for: book)
+        )
+    }
+
+    /// Presents the reflection the reader offered at the end of a session and
+    /// the user has not written yet. Moving off the shelf without saving counts
+    /// as "今天先不了" — see the dismissal store.
+    private func presentReflection() {
+        guard let pending = nextActionModel.pendingReflection,
+              let locator = pending.session.endLocator else { return }
+        didSaveReflectionInSheet = false
+        presentedReflectionSessionID = pending.session.id
+        reflection = SessionReflectionModel(
+            book: pending.book,
+            summary: SessionEndingSummary(session: pending.session),
+            locator: locator,
+            reflectionRepository: model.reflectionRepository,
+            readerAgent: model.readerAgent,
+            makePolishService: model.makePolishService,
+            achievements: achievements,
+            recordAgentDiscussion: { sessionID in
+                try? await model.sessionService.recordAgentDiscussion(id: sessionID)
+            }
         )
     }
 }

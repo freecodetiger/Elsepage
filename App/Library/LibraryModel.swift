@@ -7,6 +7,7 @@ import ReaderCore
 import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
+import RetrievalCore
 import UIKit
 
 @MainActor @Observable
@@ -22,6 +23,7 @@ final class LibraryModel {
     private let metadataReader: ReadiumMetadataReader
     private let readium: ReadiumServices
     private let indexCoordinator: BookIndexCoordinator
+    private let bookIndex: any BookIndexRepository
     let readerAgent: ReaderAgent
     let readerHelpService: ReaderHelpService
     let textAnnotations: any TextAnnotationRepository
@@ -33,6 +35,9 @@ final class LibraryModel {
     /// single grouped query — never re-queried while search filters the grid.
     private(set) var bookStats: [BookID: BookLibraryStats] = [:]
     private(set) var covers: [BookID: UIImage] = [:]
+    /// Current chapter title per book, resolved lazily from the persisted
+    /// index. Presentation data like covers: absent until asked for.
+    private(set) var chapterTitles: [BookID: String] = [:]
     private(set) var isImporting = false
     private(set) var deletingBookID: BookID?
     var errorMessage: String?
@@ -53,6 +58,7 @@ final class LibraryModel {
         metadataReader: ReadiumMetadataReader,
         readium: ReadiumServices,
         indexCoordinator: BookIndexCoordinator,
+        bookIndex: any BookIndexRepository,
         audioStore: AudioFileStore = .live()
     ) {
         booksRepository = books; readingRepository = reading; self.files = files
@@ -68,6 +74,7 @@ final class LibraryModel {
         self.metadataReader = metadataReader
         self.readium = readium
         self.indexCoordinator = indexCoordinator
+        self.bookIndex = bookIndex
     }
 
     func reload() async {
@@ -194,6 +201,21 @@ final class LibraryModel {
         }
     }
 
+    /// The chapter the saved position sits in, read from the persisted index —
+    /// the shelf never opens the EPUB for this. Books that are not indexed yet
+    /// (or have no usable TOC) leave the shelf's chapter line empty.
+    func loadChapterTitle(for book: Book) async {
+        guard chapterTitles[book.id] == nil else { return }
+        do {
+            guard let position = try await readingRepository.positions(for: [book.id])[book.id] else { return }
+            let chapters = try await bookIndex.chapters(for: book.id, from: position.locator, to: nil)
+            chapterTitles[book.id] = ChapterTitle.readingChapter(in: chapters.map(\.title))
+        } catch {
+            // Optional presentation data; a missing chapter must not surface an
+            // error over the shelf. Same policy as `loadCover`.
+        }
+    }
+
     func delete(_ book: Book) async {
         guard deletingBookID == nil else { return }
         deletingBookID = book.id
@@ -230,6 +252,7 @@ final class LibraryModel {
             readingProgress[book.id] = nil
             bookStats[book.id] = nil
             covers[book.id] = nil
+            chapterTitles[book.id] = nil
         } catch is CancellationError {
             return
         } catch {

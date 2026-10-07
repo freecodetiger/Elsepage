@@ -145,11 +145,8 @@ struct ReaderScreen: View {
                 image: openingCover,
                 title: model.book.title,
                 author: model.book.author,
-                seed: Int(model.book.id.rawValue.uuid.0)
-            )
-            .frame(
-                width: ElsepageBookCoverMetrics.width,
-                height: ElsepageBookCoverMetrics.height
+                seed: Int(model.book.id.rawValue.uuid.0),
+                width: ElsepageBookCoverMetrics.width
             )
 
             ProgressView()

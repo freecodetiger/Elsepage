@@ -161,6 +161,7 @@ final class AppModel {
                 metadataReader: ReadiumMetadataReader(readium: readium),
                 readium: readium,
                 indexCoordinator: indexCoordinator,
+                bookIndex: bookIndex,
                 audioStore: audioStore
             )
             let chatSettings = ProviderSettingsModel(configurations: providerConfigurations, secrets: secrets)
