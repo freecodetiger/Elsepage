@@ -42,8 +42,10 @@
       PRD 升至 v0.4，新增 §21.12（F10 分类学退役 + userEdited 替代 + 回填保真度损失 + P7 未覆盖项）与 §21.13（v1.1 Personal Brain 里程碑）。§21 节首注明 §21.12–21.13 为追溯补录，不构成 §0 顺序约定豁免先例。剩余 P2 项「F10 userEdited 字段缺失」经复核已由 `origin == .userExplicit` + `brainItemRevisions` 覆盖，见 §0 备注。
 - [ ] **`elsepageBrand` 零引用 / brand 与 interactive 同值** `[Agent]`
       `App/DesignSystem/ElsepageTheme.swift:95` 定义后全仓无引用；`Sources/AppInfrastructure/AccessibilitySupport.swift:116-124` 中两者颜色完全相同，且 `Tests/ReadLoopCoreTests/AccessibilitySupportTests.swift:33-52` 强制单色。正是 PRD §21.9 声明要修的「单一颜色承担品牌/交互/状态」问题。
-- [ ] **离线补发文案与实现不一致** `[Agent]`
-      `App/Reflection/SessionReflectionSheet.swift:957` 对用户说「网络恢复后，页外会继续回应」，实际只在用户再次打开想法页时懒补发（`App/Thoughts/ThoughtsModel.swift:95-112`）；重开 Reflection 会话页没有「重试回应」按钮。要么改文案，要么补重试入口。
+- [x] **离线补发文案与实现不一致** `[Agent]` —— 2026-10-09 完成
+      改文案而非改机制：`App/Reflection/SessionReflectionSheet.swift:956-957` 的 `.providerNotConfigured` 分支原写「网络恢复后，页外会继续回应」，但该失败只在 `models.makeClient()` 抛错时发出（`Sources/ReaderAgent/ReaderAgent.swift:208-211`），即**没有可用 Provider 配置**，与网络无关 —— 而这正是新用户「还没配 AI 就写了想法」的常见路径，属于事实性误导。现改为「配置好 AI 服务后，回到想法页就会继续回应」，与 `App/Thoughts/ThoughtsModel.swift:173` 既有措辞「AI 服务」一致。
+      机制侧确认无需改动：懒补发（`App/Thoughts/ThoughtsModel.swift:95-112`）符合 PRD §14「离线产生的数据待未来联网后再处理，但不能阻塞用户阅读」，文案已指明续接位置。
+      **未采纳的完整解**：重开一条缺回应的 Reflection 会话页时没有手动「重试回应」按钮（网络类失败的文案「现在网络不可用，表达仍已保存在本机。」本身诚实，不误导）。留作 P2。
 - [ ] **`requiresOnDeviceRecognition` 决策** `[Agent]` + `[用户]`
       `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift:124-127` 未设置，实际可能走 Apple 服务端。开了更诚实（但识别质量与语言覆盖下降），关了就按现状修正隐私文案措辞。
 - [ ] **`Reset Reader Profile` 无独立入口** `[Agent]`
@@ -57,6 +59,8 @@
 
 ## P2 — 首发后可延
 
+- [ ] **缺手动「重试回应」入口** `[Agent]`
+      重开一条没有 Agent 回应的 Reflection 会话页时无法手动触发；`requestAgentReply` 只在保存流程中调用（`App/Reflection/SessionReflectionSheet.swift:1106`），此后只能等想法页懒补发。追问失败有「重新发送」、Reader Help 有「重试」，此处缺同等能力。
 - [ ] **F8 旧 Reflection 引用无法跳回证据源** `[Agent]`
       组装时 `locator: nil`（`Sources/ContextEngineering/ContextAssembler.swift:103`），UI 仅在 `locator != nil` 时给按钮（`App/Reflection/SessionReflectionSheet.swift:1492-1497`）。反向（记忆 → 证据）可用。
 - [x] ~~**F10 `userEdited` 字段缺失**~~ —— 2026-10-09 复核后**撤销**：语义已由替代设计覆盖，非缺口

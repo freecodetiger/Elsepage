@@ -954,7 +954,7 @@ final class ReflectionConversationModel: Identifiable {
             case .cancelled:
                 agentNotice = nil
             case .failed(.providerNotConfigured):
-                agentNotice = "你的表达已经保存在本机。网络恢复后，页外会继续回应。"
+                agentNotice = "你的表达已经保存在本机。配置好 AI 服务后，回到想法页就会继续回应。"
             case .failed(let failure):
                 agentNotice = Self.message(for: failure)
             }
