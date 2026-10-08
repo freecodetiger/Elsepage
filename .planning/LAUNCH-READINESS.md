@@ -59,8 +59,11 @@
 
 ## P2 — 首发后可延
 
-- [ ] **缺手动「重试回应」入口** `[Agent]`
-      重开一条没有 Agent 回应的 Reflection 会话页时无法手动触发；`requestAgentReply` 只在保存流程中调用（`App/Reflection/SessionReflectionSheet.swift:1106`），此后只能等想法页懒补发。追问失败有「重新发送」、Reader Help 有「重试」，此处缺同等能力。
+- [x] **缺手动「重试回应」入口** `[Agent]` —— 2026-10-09 完成
+      `ReflectionConversationView` 在「已保存但尚无 Agent 回应」时显示「让页外回应」按钮，调用既有的 `requestAgentReply()`。判据是持久化状态（`messages` 中无 `.agent` 作者）而非内存中的 `agentNotice`，因此重开缺回应的记录同样可用 —— 这才是原缺口的主要场景（自动补发只在想法页加载时触发）。
+      顺序不变量：`consume()` 的 `defer { isResponding = false }` 在末尾 `reloadMessages()` **之后**执行，故刚收到回应不会闪出按钮；首次加载期间由 `hasLoadedMessages` 兜住。两处均已在代码注释中写明，供后续修改者保持。
+      **未加测试**：判据是 App 层布尔表达式，而 `swift test` 不编译 `App/`；为此把它抽成包内函数会是「只有一个内部调用者的抽象」。验证依靠 `swiftc -parse`（已过）+ 用户真机。
+      **待用户真机确认**：按钮出现时机、44pt 点击区、失败后与「重新发送」并存的视觉。同时复验上一条改动 —— 未配 Provider 时提交应显示新文案并出现此按钮。
 - [ ] **F8 旧 Reflection 引用无法跳回证据源** `[Agent]`
       组装时 `locator: nil`（`Sources/ContextEngineering/ContextAssembler.swift:103`），UI 仅在 `locator != nil` 时给按钮（`App/Reflection/SessionReflectionSheet.swift:1492-1497`）。反向（记忆 → 证据）可用。
 - [x] ~~**F10 `userEdited` 字段缺失**~~ —— 2026-10-09 复核后**撤销**：语义已由替代设计覆盖，非缺口

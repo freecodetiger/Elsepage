@@ -683,6 +683,10 @@ final class ReflectionConversationModel: Identifiable {
     private(set) var isPolishing = false
     private(set) var contextDisclosure: ContextDisclosure?
     private(set) var isDeleted = false
+    /// Messages load asynchronously on appear. Predicates that inspect
+    /// `messages` must wait for this, so an existing reply never briefly reads
+    /// as missing.
+    private(set) var hasLoadedMessages = false
     private(set) var pendingUserMessage: PendingReflectionMessage?
     private(set) var audioFileName: String?
     var audioDraftURLs: [URL] = []
@@ -727,6 +731,15 @@ final class ReflectionConversationModel: Identifiable {
 
     var canPolish: Bool {
         polishService != nil && !draft.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The Reflection is saved but no Agent reply has been persisted yet. This
+    /// covers both a failed attempt in this session and reopening a Reflection
+    /// that never got one (saved offline, or before a Provider was configured)
+    /// — the automatic path only retries when Thoughts next loads.
+    var isAwaitingFirstReply: Bool {
+        hasLoadedMessages && !isDeleted && !isResponding
+            && !messages.contains { $0.author == .agent }
     }
 
     func load() async {
@@ -917,6 +930,9 @@ final class ReflectionConversationModel: Identifiable {
         streamingResponse = ""
         agentNotice = nil
         contextDisclosure = nil
+        // Runs on return, i.e. after `reloadMessages()` at the end of this
+        // method — `isAwaitingFirstReply` depends on that order, otherwise a
+        // completed reply would briefly read as missing.
         defer { isResponding = false }
         var didComplete = false
         for await event in stream {
@@ -982,6 +998,7 @@ final class ReflectionConversationModel: Identifiable {
             loaded[message.id] = try await repository.provenance(for: message.id)
         }
         responseProvenance = loaded
+        hasLoadedMessages = true
     }
 
     private static func withoutCitationBlock(_ content: String) -> String {
@@ -1395,6 +1412,14 @@ struct ReflectionConversationView: View {
                 }
             }
             if let notice = model.agentNotice { Text(notice).font(.footnote).foregroundStyle(.secondary) }
+            if model.isAwaitingFirstReply {
+                Button("让页外回应") {
+                    Task { await model.requestAgentReply() }
+                }
+                .font(.caption.weight(.semibold))
+                .frame(minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
             if let disclosure = model.contextDisclosure {
                 Label(disclosureLine(disclosure), systemImage: "doc.text.magnifyingglass")
                     .font(.caption).foregroundStyle(.tertiary).textSelection(.enabled)
