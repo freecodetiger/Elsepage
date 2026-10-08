@@ -64,6 +64,11 @@
       顺序不变量：`consume()` 的 `defer { isResponding = false }` 在末尾 `reloadMessages()` **之后**执行，故刚收到回应不会闪出按钮；首次加载期间由 `hasLoadedMessages` 兜住。两处均已在代码注释中写明，供后续修改者保持。
       **未加测试**：判据是 App 层布尔表达式，而 `swift test` 不编译 `App/`；为此把它抽成包内函数会是「只有一个内部调用者的抽象」。验证依靠 `swiftc -parse`（已过）+ 用户真机。
       **待用户真机确认**：按钮出现时机、44pt 点击区、失败后与「重新发送」并存的视觉。同时复验上一条改动 —— 未配 Provider 时提交应显示新文案并出现此按钮。
+- [x] **同一记录并发发起首次回应会产生重复 Agent 回应** `[Agent]` —— 2026-10-09 完成（上一条改动的连带发现）
+      管线里唯一的重入保护是「库里已有 Agent 消息就短路」，**只在回应落库之后生效**；两个调用方只要在落库前重叠，就各跑一次模型、各写一条回应。原有窗口很窄（保存流程撞想法页补发），但重试按钮把「关窗后立刻重开并点击」变成常见路径。
+      修法：`ReaderAgent` 新增 `InFlightReplyRegistry` 按 reflectionID 仲裁——`AsyncStream` 的 build 闭包同步执行，认领在 `run` 返回前完成，故两个调用方不可能同时赢；后来者等待，若先前尝试未落库（即失败）则接管，避免点击变成静默空操作。只仲裁首次回应：`continueDiscussion` 已由稳定 messageID 保证幂等。仅动 `Sources/`，App 层无需改动——等待期间 `isResponding` 为真，按钮自然变回「页外正在理解你的表达…」。
+      测试：`Tests/ReadLoopCoreTests/InFlightReplyTests.swift`（3 例）。**已验证有效性**：临时禁用认领后并发用例失败（2 次模型调用 / 2 条回应 / id 不同），恢复后 394 全绿。
+      已知残余：两个等待者同时被唤醒时，只有一个能接管，另一个空手返回（`continuation.finish()` 无事件）；UI 表现为重新出现按钮。可接受，未处理。
 - [ ] **F8 旧 Reflection 引用无法跳回证据源** `[Agent]`
       组装时 `locator: nil`（`Sources/ContextEngineering/ContextAssembler.swift:103`），UI 仅在 `locator != nil` 时给按钮（`App/Reflection/SessionReflectionSheet.swift:1492-1497`）。反向（记忆 → 证据）可用。
 - [x] ~~**F10 `userEdited` 字段缺失**~~ —— 2026-10-09 复核后**撤销**：语义已由替代设计覆盖，非缺口

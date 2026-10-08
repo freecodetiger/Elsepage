@@ -93,6 +93,9 @@ public struct ReaderAgent: Sendable {
     /// Nil → the existing lexical-only behavior, unchanged.
     private let semanticRanking: (any SemanticRanking)?
     private let summaryService: ReflectionSummaryService?
+    /// A reference type on purpose: `ReaderAgent` is a value type, so every copy
+    /// of one instance must share the same slot table.
+    private let inFlightReplies = InFlightReplyRegistry()
 
     public init(
         reflections: any ReflectionRepository,
@@ -152,8 +155,32 @@ public struct ReaderAgent: Sendable {
         activeBrain: BrainItem? = nil
     ) -> AsyncStream<ReaderAgentEvent> {
         AsyncStream { continuation in
+            // `AsyncStream` runs this closure synchronously, so the claim is
+            // settled before `run` returns — two concurrent callers cannot both
+            // win. Only the first reply is arbitrated: `continueDiscussion` is
+            // already idempotent through its stable message ID.
+            let ownsRequest = followUp != nil || inFlightReplies.claim(reflectionID)
             let task = Task {
                 do {
+                    if !ownsRequest {
+                        await inFlightReplies.wait(for: reflectionID)
+                        let persisted = try? await reflections.messages(for: reflectionID)
+                        if let existing = persisted?.first(where: { $0.author == .agent }) {
+                            continuation.yield(.completed(existing))
+                            continuation.finish()
+                            return
+                        }
+                        // The earlier attempt persisted nothing, so it failed.
+                        // Take over rather than leaving the caller empty-handed:
+                        // a tapped retry must not be a silent no-op.
+                        guard inFlightReplies.claim(reflectionID) else {
+                            continuation.finish()
+                            return
+                        }
+                    }
+                    defer {
+                        if followUp == nil { inFlightReplies.release(reflectionID) }
+                    }
                     guard let reflection = try await reflections.reflection(id: reflectionID) else {
                         continuation.yield(.failed(.missingReflection))
                         continuation.finish()
@@ -603,4 +630,48 @@ public struct ReaderAgent: Sendable {
         return agent.content.contains("？") || agent.content.contains("?")
     }
 
+}
+
+/// Arbitrates the single in-flight first-reply request per Reflection.
+///
+/// Two independent surfaces can ask for the same stored record's first reply —
+/// the reading-end conversation and the Thoughts backfill — and both call
+/// `respond(to:)`. They overlap whenever one is still streaming, or whenever a
+/// previous attempt failed and left the record without a reply. Nothing else in
+/// the pipeline catches that: the "already persisted" short-circuit inside
+/// `run` only fires once a reply reached the database, so without this slot the
+/// record ends up with duplicate Agent replies.
+private final class InFlightReplyRegistry: @unchecked Sendable {
+    private let lock = NSLock()
+    private var owners: Set<ReflectionID> = []
+    private var waiters: [ReflectionID: [CheckedContinuation<Void, Never>]] = [:]
+
+    /// True when the caller owns the request and must run it itself.
+    func claim(_ id: ReflectionID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return owners.insert(id).inserted
+    }
+
+    /// Suspends until the owning request releases the slot.
+    func wait(for id: ReflectionID) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            defer { lock.unlock() }
+            guard owners.contains(id) else {
+                continuation.resume()
+                return
+            }
+            waiters[id, default: []].append(continuation)
+        }
+    }
+
+    func release(_ id: ReflectionID) {
+        lock.lock()
+        let pending = waiters.removeValue(forKey: id) ?? []
+        owners.remove(id)
+        lock.unlock()
+        // Resumed outside the lock: a waiter may immediately claim again.
+        for continuation in pending { continuation.resume() }
+    }
 }
