@@ -1,0 +1,98 @@
+# App Store 首发就绪清单（Launch Readiness）
+
+> 建立：2026-10-09　分支：`release/app-store-readiness`
+> 来源：2026-10-09 对照 `ReadLoop_PRD.md`（v0.3）的完成度调研 —— 五维度代码审计 + `swift test` 实跑
+> 口径：`P0` = 阻断提审；`P1` = 首轮真机构建前应修；`P2` = 可延后到首发后
+> 分工：`[Agent]` 可在代码/文档侧完成；`[用户]` 必须真机/账号/决策侧完成（见 AGENTS.md 验证分工）
+
+## 0. 调研基线（2026-10-09）
+
+| 项 | 值 |
+|---|---|
+| 包测试 | `swift test` **391 用例 / 15 套件全绿**，exit 0（本次实跑） |
+| 源码 / 测试 | 218 个 Swift 文件 31.5k 行 / 66 个测试文件 11.0k 行 |
+| DB 迁移 | v1 → **v29**（v26 已 `drop(table: "memories")`） |
+| 模块 | 18 个（LibraryCore … BrainCore） |
+| Commits | 408（8月 234 / 9月 167 / 10月 7） |
+| ROADMAP | Phase 1–10 ✅、11 `1/2`、12–19 ✅ |
+| 真机/TestFlight 证据 | **零** —— 无 fastlane、无截图目录、UAT 清单 0 勾选、`.planning/UAT-v0.5.md` 被引用但不存在 |
+
+**总体判断**：代码侧已超过 PRD §18 的 1.0 首发标准（并额外完成 PRD 划给 v2 的 v1.1 Personal Brain），代码 ~92%、发布工程 ~25%。瓶颈不在代码，在「真实构建 → 真机 → TestFlight → 提交」这条从未跑通的链路。
+
+---
+
+## P0 — 阻断提审
+
+- [ ] **补 `PrivacyInfo.xcprivacy`** `[Agent]`
+      全仓 `find -name "*.xcprivacy"` 零命中。用到 UserDefaults / 文件时间戳等 required-reason API，苹果自 2024-05 起强制要求。与 `Data Not Collected` 申报配套。
+- [ ] **定案 App 名称** `[用户]`
+      PRD 头部：正式名待定（余思 / 页外）。`APP-STORE-METADATA.md` 中 App Name 仍为占位。App Store 必须有确定名称。
+- [ ] **隐私政策填生效日期 + 联系邮箱，并托管到公网 URL** `[用户]`
+      `docs/release/PRIVACY-POLICY.zh-Hans.md` / `.en.md` 正文已完成（100/99 行），但 `:5-6` 仍是 `[生效日期]` / `[联系邮箱]` 占位；文件头自述「上架前须完成」托管。
+- [ ] **第一轮真机构建 + UAT 七节走查** `[用户]`
+      `docs/release/UAT-CHECKLIST.md` 全部 `[ ]` 未勾。含崩溃恢复 6 项、Provider 矩阵、无 AI 完整可用路径、AX5/VoiceOver 过检。
+- [ ] **TestFlight 跑通一轮** `[用户]`
+      这是唯一能真正量化「还剩多远」的动作。跑完后本清单中所有「代码在但没验证」项会分化成「真的好了」和「真有问题」。ROADMAP Phase 11-02 亦为此项。
+
+## P1 — 首轮构建前应修
+
+- [ ] **F9 `whatIThink` 生产端缺失** `[Agent]`
+      `Sources/ReflectionCore/JournalStructuredParser.swift:35,46` 解析 `whatIThink`，但 `Sources/ReaderAgent/ReaderAgentSystemPrompt.swift:544-566` 的输出策略只示范 `comment/connection/question/memory_proposals` —— 全仓无任何生产者要求模型产出该键。生产环境「这次留下 → 看法」大概率长期为空，`ThoughtRecordExtras` 是死路径。
+- [ ] **v26 删除 F10 五类分类学：写回 PRD §21** `[Agent]`
+      `v26_retire_legacy_memories`（`Sources/Persistence/AppDatabase.swift:578-581`）drop 了 `memories` 表，`BrainItemKind` 现仅 `{thought, question, memory}`（`Sources/BrainCore/BrainItem.swift:18-20`）。Episodic/Semantic/Preference/OpenQuestion/ProfileTrait 分类学与 `userEdited` 字段一并消失，而 PRD §21 无对应豁免条目 —— 按 PRD §0「先写回 PRD 再改代码」，这是当前唯一的流程违规。同时 v1.1 Personal Brain 整个里程碑也未在 PRD 留痕。
+- [ ] **`elsepageBrand` 零引用 / brand 与 interactive 同值** `[Agent]`
+      `App/DesignSystem/ElsepageTheme.swift:95` 定义后全仓无引用；`Sources/AppInfrastructure/AccessibilitySupport.swift:116-124` 中两者颜色完全相同，且 `Tests/ReadLoopCoreTests/AccessibilitySupportTests.swift:33-52` 强制单色。正是 PRD §21.9 声明要修的「单一颜色承担品牌/交互/状态」问题。
+- [ ] **离线补发文案与实现不一致** `[Agent]`
+      `App/Reflection/SessionReflectionSheet.swift:957` 对用户说「网络恢复后，页外会继续回应」，实际只在用户再次打开想法页时懒补发（`App/Thoughts/ThoughtsModel.swift:95-112`）；重开 Reflection 会话页没有「重试回应」按钮。要么改文案，要么补重试入口。
+- [ ] **`requiresOnDeviceRecognition` 决策** `[Agent]` + `[用户]`
+      `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift:124-127` 未设置，实际可能走 Apple 服务端。开了更诚实（但识别质量与语言覆盖下降），关了就按现状修正隐私文案措辞。
+- [ ] **`Reset Reader Profile` 无独立入口** `[Agent]`
+      PRD §13.3 要求；现只能靠「清除全部记忆」连带清除（`App/MyMind/MyMindModel.swift:156-161`）。
+- [ ] **App Store 元数据收尾** `[用户]`（文案可 `[Agent]` 起草）
+      `docs/release/APP-STORE-METADATA.md`：Support URL、营销 URL、版权行未填；**6.9" 截图未制作**；§8 补齐清单 7 项全未勾。
+- [ ] **App Review Notes 填充** `[用户]` + `[Agent]`
+      `docs/release/APP-REVIEW-NOTES.md` 正文双语完整，但 `[APP_NAME]`、`[REVIEWER_DEMO_KEY]` 为占位；§三检查清单 7 项全 `☐`；要求用真实构建自测 BYOK 路径。
+- [ ] **Provider 验证矩阵填写** `[用户]`（需真实 Key）
+      `docs/providers/VERIFICATION-MATRIX.md` 3 行全「☐ 待填」。代码侧 OpenAI / Anthropic / Gemini / DeepSeek 均已实现，缺的是真机联调记录。
+
+## P2 — 首发后可延
+
+- [ ] **F8 旧 Reflection 引用无法跳回证据源** `[Agent]`
+      组装时 `locator: nil`（`Sources/ContextEngineering/ContextAssembler.swift:103`），UI 仅在 `locator != nil` 时给按钮（`App/Reflection/SessionReflectionSheet.swift:1492-1497`）。反向（记忆 → 证据）可用。
+- [ ] **F10 `userEdited` 字段缺失** `[Agent]`（随 F10 写回一并处理）
+      Journal 侧有（`Sources/ReflectionCore/Journal.swift:23`），Brain Memory 侧无。
+- [ ] **P7「禁止某些内容进入长期记忆」未实现** `[Agent]`
+      全仓 grep `optOut/doNotRemember/blocklist` 无命中。缓解：memory 默认 `needsReview` 待确认。
+- [ ] **F11 Reader Profile 聚合实体缺失** `[Agent]`
+      F11 的「准确/不准确/修改/忘记/查看依据」操作已实现但作用于单条 memory，非画像聚合。
+- [ ] **§6.1 书架顶部 Next Action 卡片** `[Agent]`
+      现退化为当前书卡上的「补写想法」按钮（`App/Library/LibraryGridView.swift:103-104`），无顶部卡片，也无「刚才读的，还没有留下想法」文案。
+- [ ] **F4 Session Ending 三分支入口** `[Agent]`
+      `[按住说] / [写一点] / [今天先不了]` 合并进单一编辑器（`App/Reflection/SessionReflectionSheet.swift:1062-1077`）。功能等价，UI 结构不同。
+- [ ] **§12 预设模式下 Base URL 只读** `[Agent]`
+      仅 `.custom` 时可编辑（`App/Settings/SettingsView.swift:137-147`），代理地址需先切「自定义」。
+- [ ] **§13.2 用户可见的「本次上下文」逐项视图** `[Agent]`
+      trace 已落库（`ContextPlanTrace.selectedBookEvidenceIDs`），但诊断屏只显示计数/回退（`App/Settings/SettingsView.swift:309-368`）。
+- [ ] **EPUB 正文不随系统 Dynamic Type 缩放** `[Agent]`
+      `App/Reader/ReadiumReaderView.swift:421` 走自研 fontSize 滑块，需用户手动调。PRD 未豁免。
+- [ ] **Settings 中英混排无一致 gloss** `[Agent]`
+      `Provider` / `Reflection` / `Agent` / `Embedding` / `Reranker` 残留；同页既有「反思」(`:451`) 又有「Reflection」(`:464`)。§21.9 允许保留技术原文但要求就地中文解释。
+- [ ] **§11 无独立「欢迎」屏；Onboarding 未编排首次 Agent 反馈** `[Agent]`
+      三步流程本身完整（`Sources/AppInfrastructure/OnboardingFlow.swift:5-17`），但 PRD 建议流程的「欢迎」首项与「Agent 第一次反馈」段未在此链路内编排。
+
+---
+
+## 已确认无问题（供复审时免检）
+
+- **无自有后端**：全仓 `URLSession` 只在 `Sources/ModelProviders/`；唯一其他网络是 `App/Performance/DebugHTTPServer.swift` 的 `#if DEBUG` + `127.0.0.1:18765` 回环。
+- **API Key 安全**：Keychain `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`（`Sources/ModelProviders/SecretStore.swift:54`）；DB 只存 `secretReference` 文本列；`Sources/ModelProviders` + `AgentRuntime` + `BenchCore` 中 `print/os_log/Logger/NSLog` 零命中。
+- **依赖面干净**：仅 GRDB 7.11.1 + Readium 3.11.0，无统计/遥测/崩溃 SDK。
+- **数据控制**：Export / Delete Book & Index / Delete Memory / Delete All Local Data 均已实现且带级联（`App/Settings/DataSettingsModel.swift`、`Sources/Persistence/LocalDataWipeService.swift`）。
+- **F1/F2/F3/F5/F6/F7/F12/F13**：实现完整，多处超 PRD 要求（4 阅读主题、5 色高亮、音频波形 seek、80–220 字长度硬约束、6 项成就全接线）。
+- **无 `TODO`/`FIXME` 遗留标记**（`App/` + `Sources/`）。
+
+## 备注
+
+- 本清单为一次性调研产物，与 GSD 的 `.planning/ROADMAP.md` 相位体系并行；P1 项若要进入正式执行，建议按 `docs/exec-plans/active/` 的格式各起一份 exec plan。
+- 若需隔离开发环境，可改用 worktree（约定见 `.planning/WORKTREES.md`）：`git worktree add ../elsepage-worktrees/release-readiness -b release/app-store-readiness main`。
+- 未提交项：本文件写入后尚未 commit，由用户决定提交时机与信息。
