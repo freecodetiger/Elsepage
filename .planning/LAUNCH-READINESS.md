@@ -38,8 +38,8 @@
 
 - [ ] **F9 `whatIThink` 生产端缺失** `[Agent]`
       `Sources/ReflectionCore/JournalStructuredParser.swift:35,46` 解析 `whatIThink`，但 `Sources/ReaderAgent/ReaderAgentSystemPrompt.swift:544-566` 的输出策略只示范 `comment/connection/question/memory_proposals` —— 全仓无任何生产者要求模型产出该键。生产环境「这次留下 → 看法」大概率长期为空，`ThoughtRecordExtras` 是死路径。
-- [ ] **v26 删除 F10 五类分类学：写回 PRD §21** `[Agent]`
-      `v26_retire_legacy_memories`（`Sources/Persistence/AppDatabase.swift:578-581`）drop 了 `memories` 表，`BrainItemKind` 现仅 `{thought, question, memory}`（`Sources/BrainCore/BrainItem.swift:18-20`）。Episodic/Semantic/Preference/OpenQuestion/ProfileTrait 分类学与 `userEdited` 字段一并消失，而 PRD §21 无对应豁免条目 —— 按 PRD §0「先写回 PRD 再改代码」，这是当前唯一的流程违规。同时 v1.1 Personal Brain 整个里程碑也未在 PRD 留痕。
+- [x] **v26 删除 F10 五类分类学：写回 PRD §21** `[Agent]` —— 2026-10-09 完成
+      PRD 升至 v0.4，新增 §21.12（F10 分类学退役 + userEdited 替代 + 回填保真度损失 + P7 未覆盖项）与 §21.13（v1.1 Personal Brain 里程碑）。§21 节首注明 §21.12–21.13 为追溯补录，不构成 §0 顺序约定豁免先例。剩余 P2 项「F10 userEdited 字段缺失」经复核已由 `origin == .userExplicit` + `brainItemRevisions` 覆盖，见 §0 备注。
 - [ ] **`elsepageBrand` 零引用 / brand 与 interactive 同值** `[Agent]`
       `App/DesignSystem/ElsepageTheme.swift:95` 定义后全仓无引用；`Sources/AppInfrastructure/AccessibilitySupport.swift:116-124` 中两者颜色完全相同，且 `Tests/ReadLoopCoreTests/AccessibilitySupportTests.swift:33-52` 强制单色。正是 PRD §21.9 声明要修的「单一颜色承担品牌/交互/状态」问题。
 - [ ] **离线补发文案与实现不一致** `[Agent]`
@@ -59,8 +59,8 @@
 
 - [ ] **F8 旧 Reflection 引用无法跳回证据源** `[Agent]`
       组装时 `locator: nil`（`Sources/ContextEngineering/ContextAssembler.swift:103`），UI 仅在 `locator != nil` 时给按钮（`App/Reflection/SessionReflectionSheet.swift:1492-1497`）。反向（记忆 → 证据）可用。
-- [ ] **F10 `userEdited` 字段缺失** `[Agent]`（随 F10 写回一并处理）
-      Journal 侧有（`Sources/ReflectionCore/Journal.swift:23`），Brain Memory 侧无。
+- [x] ~~**F10 `userEdited` 字段缺失**~~ —— 2026-10-09 复核后**撤销**：语义已由替代设计覆盖，非缺口
+      `App/MyMind/MyMindModel.swift:137-149`：编辑时先用 `recordRevision` 存入改写前陈述，再把 `origin` 置为 `.userExplicit`、`state` 置为 `.active`。即「用户改过」可由 origin 与修订历史共同判定，且比原布尔字段多保留改写前原文。已在 PRD §21.12 记录。Journal 侧仍保有独立 `userEdited`（`Sources/ReflectionCore/Journal.swift:23`），两者语义不冲突。
 - [ ] **P7「禁止某些内容进入长期记忆」未实现** `[Agent]`
       全仓 grep `optOut/doNotRemember/blocklist` 无命中。缓解：memory 默认 `needsReview` 待确认。
 - [ ] **F11 Reader Profile 聚合实体缺失** `[Agent]`
@@ -95,4 +95,4 @@
 
 - 本清单为一次性调研产物，与 GSD 的 `.planning/ROADMAP.md` 相位体系并行；P1 项若要进入正式执行，建议按 `docs/exec-plans/active/` 的格式各起一份 exec plan。
 - 若需隔离开发环境，可改用 worktree（约定见 `.planning/WORKTREES.md`）：`git worktree add ../elsepage-worktrees/release-readiness -b release/app-store-readiness main`。
-- 未提交项：本文件写入后尚未 commit，由用户决定提交时机与信息。
+- 本文件与 PRD v0.4 的 §21 补录随 `release/app-store-readiness` 分支提交；勾选进度就地更新。

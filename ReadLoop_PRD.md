@@ -3,12 +3,12 @@
 > 工程代号：**ReadLoop**  
 > 正式产品名：**待定**（当前候选：余思 / 页外；正式命名前不要在代码中硬编码品牌名）  
 > 产品定位：**以阅读为入口的 Personal Thinking Agent / Agent-native iOS Reader**  
-> 文档版本：v0.3  
+> 文档版本：v0.4  
 > 状态：长期主文档（Source of Truth）  
 > 首发平台：iOS / iPhone  
 > 首发内容格式：用户自导入的非 DRM EPUB  
 > 核心 AI 形态：**BYOK（Bring Your Own Key）云端模型 + 本地 Agent Runtime**  
-> 最后更新：2026-08-29
+> 最后更新：2026-10-09
 
 ---
 
@@ -1527,9 +1527,11 @@ ReadLoop 最终不是要证明：
 
 ---
 
-# 21. 实现偏差与豁免记录（v0.3）
+# 21. 实现偏差与豁免记录（v0.3–v0.4）
 
 以下偏差已在实现评审中接受并豁免。按 §0 约定先记录于本节，再做对应代码改动。每条包含偏差内容与豁免理由；后续版本如推翻某条豁免，应先修订本节再改代码。
+
+§21.1–21.11 于 v0.3 记录；§21.12–21.13 为 v0.4 补记——两者对应的代码改动**已先行落地**，本次为追溯补录，不构成对 §0 顺序约定的豁免先例。
 
 ## 21.1 ASR 仅 Apple 系统转写
 
@@ -1593,3 +1595,21 @@ ReadLoop 最终不是要证明：
 - 结论：撤回木质桌面与木质承托板，恢复低噪中性基底。
 - 保留：固定桌面几何、信息槽位、同级操作、删除抽象书签、封面/书脊统一尺度与 iOS 18 zoom transition。
 - 边界：后续物理感优先通过留白、固定位置、轻阴影和克制动效表达，不以完整拟物材质覆盖书架内容。
+
+## 21.12 长期记忆模型收敛为 Brain（F10 分类学退役）
+
+- 偏差：F10 的 Memory 五类分类学（Episodic / Semantic / Preference / Open Question / Profile Trait）与 `userEdited` 字段退役。v26 迁移 `v26_retire_legacy_memories` 在回填后 `drop` 了 `memories` 表；`BrainItemKind` 现仅 `thought` / `question` / `memory`（`Sources/BrainCore/BrainItem.swift:18-20`）。
+- 替代：单一 Memory 对象 + 三条正交轴——`origin`（userExplicit / agentInferred / derivedFromThought）、`state`（active / needsReview / superseded / forgotten）、`confidence`（high / medium / low）。原五类把「记忆的内容性质」与「记忆的获得方式」压进同一维度；收敛后两者正交，获得方式由 `origin` 承担，可信度由 `confidence` 承担，生命周理由 `state` 承担。
+- `userEdited` 的替代：用户编辑使 `origin` 变为 `userExplicit`，同时写入 `brainItemRevisions` 保留改写前陈述（`docs/brain.md` §10），因此「用户改过」不再是独立布尔字段，而是可由 origin 与修订历史共同判定，且比原字段多保留了改写前的原文。
+- 连带的 F11 偏差：F11 的 Reader Profile 聚合实体（Profile Trait）随分类学一并退役，无独立画像页；「AI 眼中的我」由 memory 列表承载，实现中文案为「AI 记住的我」。F11 要求的每条操作（准确 / 不准确 / 修改 / 忘记 / 查看依据）在单条 memory 上均已实现，与 §21.9 的语言方向一致。
+- 回填保真度（已知损失）：回填把所有 kind 折叠为 `memory`，`status` 与 `confidence` 按确定性映射转换，但 `userEdited` 与 `evidenceIDsJSON` 未搬运，且 `origin` 统一写为 `agentInferred`（`Sources/Persistence/AppDatabase.swift:826-841`）。即迁移前已被用户编辑过的旧记忆，迁移后不再携带该标记。
+- 未覆盖项：P7 的「禁止某些内容进入长期记忆」仍无实现。当前缓解为 agent 推断产生的 memory 默认落在 `needsReview` 待用户确认，且 `forgotten` / `superseded` 不参与检索；此项不视为已豁免，计入首发后待办。
+- 豁免理由：PRD F10 写于 Brain 领域模型之前。`docs/brain.md` §2–§3 给出的强类型 tagged union 能表达原分类学的全部语义，且消除了「kind 与 confidence 可矛盾」的非法状态；同一模型同时服务 UI、Agent Context 与长期记忆三处消费方，优于在旧五类上叠加修补。
+- 依据：`docs/brain.md` §2 Memory、§3 Domain Model、§10 Revision / Evolution。
+
+## 21.13 v1.1 Personal Brain 里程碑
+
+- 偏差：实现了 PRD 未列入版本路线 §18 的整个里程碑（Phase 12–19：Brain Domain / UI / Evidence / Retriever / Agent Bridge / Projection / Revision / Observability），并在 1.0 首发**之前**完成。§18 的 v1.0 与 v1.x 之间无此条目；§8 中与之最接近的是 P2 的 Personal Intellectual Graph，但范围与实现方式（LLM 提议、代码执行、Evidence 为事实）均已超出其描述。
+- 豁免理由：长期记忆是 P9 认定的产品护城河，而 F10 的记忆模型在首发前即已暴露语义不足（见 §21.12）；与其带着已知会重构的模型首发，不如在首发前一次收敛到位。Brain 为纯增量模块（BrainCore 不 import ReaderAgent），且维护路径异步、不阻塞 ReaderAgent，未挤占首发关键路径。
+- 边界：本里程碑不改变 P1–P9 任何产品不变量；Brain 页面的「继续想想」等入口属既有 Reflection 链路的复用，不引入新的一级入口。
+- 依据：`docs/brain.md` §20 阶段划分；`.planning/ROADMAP.md` v1.1 Personal Brain。
