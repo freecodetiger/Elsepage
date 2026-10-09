@@ -103,7 +103,9 @@ python3 Scripts/debug_loop.py transcribe --reference clips.json \
 3. **但偏置救不了词表外的词。** 第 5 段 `Keynesian` **就在偏置列表里**，`Kenyon` 依然没纠正，CER 三轮都是 0.333。合理推测（未验证）是 `contextualStrings` 只能把识别器往它的词表内推，**无法凭空造出词表里没有的词**；`incentive` 是常见词所以推得动，`Keynesian` 不是。所以偏置不是万能的专名解药，**别把「加进列表」等同于「一定对」**。
 4. **纯英文段暴露的是结构上限。** 基线 0.208、加词后 0.146，仍然是 `The after a goes that incentive shape out comes` —— 这是「zh-CN 识别器解英文语音」本身的失败，偏置只是把其中一个词碰巧拉回来。
 
-### 端上 vs 服务端：几乎无代价（`--on-device`）
+### 端上 vs 服务端：几乎无代价（`--requires-on-device true|false`）
+
+> 复现命令：`--requires-on-device false` 强制服务端，`true` 强制端上。**不传该参数时用 App 自己的默认值** —— 默认已改为端上（PRD §21.14），所以不传参数的运行测的是**实际出货配置**。
 
 同一个五段素材，四组配置（音频与偏置列表可控）：
 
@@ -122,7 +124,11 @@ python3 Scripts/debug_loop.py transcribe --reference clips.json \
 
 **但这条结论的边界要说清楚**：五段、短句、安静环境、本人设备。端上模型相对服务端的差距通常出现在**长音频、嘈杂环境、口音、罕见词汇**上 —— 这些都没有被这批素材覆盖。所以这不是「端上等于服务端」的证明，而是一个足够支持决策的信号：方向明确，且该改动可回退。
 
-**一个新增的失败模式**：强制端上后，若目标 locale 的端上模型未下载，识别会**直接失败**（不会再退回服务端）。`SFSpeechRecognizer.supportsOnDeviceRecognition` 可以查，但当前代码没有判断。所以开启这个开关必须配套一个回退策略 —— 这是产品决策，不是实现细节。
+**一个新增的失败模式（已定案处理）**：强制端上后，若目标 locale 的端上模型未下载，识别会**直接失败**，不退回服务端。
+
+已实现：`SystemSpeechTranscriptionProvider.start` 与 `FileTranscriptionService.transcribe` 在发起请求前检查 `supportsOnDeviceRecognition`，缺失时抛 `SpeechProviderError.onDeviceModelUnavailable`，文案给出可行动路径且声明音频不会上传（PRD §21.14）。
+
+**未消除的已知风险**：iOS 的端上模型按需下载，而触发下载通常依赖一次服务端识别 —— 硬失败因此可能形成死锁。zh-CN 实测已存在，所以目标场景不受影响；若出现真实死锁，处置方案记在 PRD §21.14。
 
 ### 对下一步的影响
 

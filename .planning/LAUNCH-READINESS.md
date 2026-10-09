@@ -46,9 +46,11 @@
       改文案而非改机制：`App/Reflection/SessionReflectionSheet.swift:956-957` 的 `.providerNotConfigured` 分支原写「网络恢复后，页外会继续回应」，但该失败只在 `models.makeClient()` 抛错时发出（`Sources/ReaderAgent/ReaderAgent.swift:208-211`），即**没有可用 Provider 配置**，与网络无关 —— 而这正是新用户「还没配 AI 就写了想法」的常见路径，属于事实性误导。现改为「配置好 AI 服务后，回到想法页就会继续回应」，与 `App/Thoughts/ThoughtsModel.swift:173` 既有措辞「AI 服务」一致。
       机制侧确认无需改动：懒补发（`App/Thoughts/ThoughtsModel.swift:95-112`）符合 PRD §14「离线产生的数据待未来联网后再处理，但不能阻塞用户阅读」，文案已指明续接位置。
       **未采纳的完整解**：重开一条缺回应的 Reflection 会话页时没有手动「重试回应」按钮（网络类失败的文案「现在网络不可用，表达仍已保存在本机。」本身诚实，不误导）。留作 P2。
-- [ ] **`requiresOnDeviceRecognition` 决策** `[Agent]` + `[用户]`
-      `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift` 未设置该属性，即允许走 Apple 服务端。这是**隐私 vs 准确率的取舍，不是免费修正**：端上 zh-CN 模型更小，开了可能更差。**现在可以量了** —— `speech.transcribe` DEBUG 动作支持传入该开关重跑同一段音频，协议见 `docs/testing/voice/2026-10-09-transcription-measurement.md`。先测再定，别顺手打开。
-      相关：§21.1 的豁免理由写「系统转写本地优先」，这句话在当前代码里不成立，无论怎么定案都要同步改一处。
+- [x] **`requiresOnDeviceRecognition` 决策** `[Agent]` —— 2026-10-09 完成
+      实测（五段真人素材，`docs/testing/voice/2026-10-09-transcription-measurement.md`）：端上 vs 服务端均值 CER 为 0.249 / 0.244（无偏置）、0.149 / 0.149（带偏置）—— 代价在这批素材上测不出来，且 `contextualStrings` 的收益在端上完整保留。**判定默认改为端上**，识别全程不出设备。
+      连带结清两笔：隐私政策不需要新增外发披露（反而改成了更强的「不上传」声明），§21.1 那句「系统转写本地优先」从与实现不符变为成立。记录见 PRD §21.14、§21.1 更正项；`PRIVACY-CLAIMS-EVIDENCE.md` §4 已补证据行。
+      回退策略（用户定案 A）：模型缺失时**明确报错并给出可行动路径**，不退回服务端。已知未消除风险：端上模型按需下载、触发下载通常依赖服务端识别，硬失败可能死锁；zh-CN 实测已存在，处置预案记在 PRD §21.14。
+      **待用户真机确认**：`--requires-on-device` 两种模式在设备上均可跑（本次已在设备验证），以及录音失败文案的实际呈现。
 - [ ] **`Reset Reader Profile` 无独立入口** `[Agent]`
       PRD §13.3 要求；现只能靠「清除全部记忆」连带清除（`App/MyMind/MyMindModel.swift:156-161`）。
 - [ ] **App Store 元数据收尾** `[用户]`（文案可 `[Agent]` 起草）

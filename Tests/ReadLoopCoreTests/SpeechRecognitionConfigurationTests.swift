@@ -2,10 +2,11 @@ import Speech
 import SpeechCore
 import Testing
 
-/// These defaults are the pre-existing recognition behavior, written down. A
-/// change here changes how every recording is transcribed, so it should be a
-/// deliberate edit with a measurement behind it, not a drive-by tweak.
-@Test func defaultsMatchThePreviouslyHardcodedBehavior() {
+/// Pins the shipping defaults. A change here changes how every recording is
+/// transcribed, so it should be a deliberate edit with a measurement behind it,
+/// not a drive-by tweak — `requiresOnDeviceRecognition` was flipped to `true`
+/// on exactly that basis.
+@Test func defaultsAreTheOnesTheProductCommittedTo() {
     let configuration = SpeechRecognitionConfiguration()
 
     #expect(configuration.localeIdentifier == "zh-CN")
@@ -13,9 +14,24 @@ import Testing
     #expect(configuration.taskHint == .unspecified)
     #expect(configuration.addsPunctuation)
     #expect(configuration.shouldReportPartialResults)
-    // Off deliberately: the on-device Chinese model is smaller, so enabling this
-    // trades accuracy for privacy.
-    #expect(!configuration.requiresOnDeviceRecognition)
+    // On deliberately: recognition then never leaves the device. The measured
+    // accuracy cost was nil on the five-clip sample, and without this the
+    // contextual strings become an undisclosed outbound channel.
+    #expect(configuration.requiresOnDeviceRecognition)
+}
+
+@Test func aMissingOnDeviceModelSaysWhatToDoAndDoesNotOfferToUpload() {
+    let message = SpeechProviderError.onDeviceModelUnavailable("zh-CN").errorDescription ?? ""
+
+    // The locale, so the user knows which model is missing.
+    #expect(message.contains("zh-CN"))
+    // The actionable path. iOS fetches on-device models in the background, so
+    // without this the user would have no idea there is anything to wait for.
+    #expect(message.contains("下载"))
+    #expect(message.contains("输入文字"))
+    // The whole point of on-device: the user is told the audio stays put,
+    // rather than being offered a fallback that would upload it.
+    #expect(message.contains("音频不会上传"))
 }
 
 @Test func contextualStringsAreTrimmedDeduplicatedAndOrdered() {

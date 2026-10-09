@@ -24,6 +24,12 @@ public struct FileTranscriptionService: Sendable {
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
             throw SpeechProviderError.recognitionUnavailable
         }
+        // Checked up front: otherwise the request fails later with an opaque
+        // Apple error, and a measurement run would look like a mystery rather
+        // than a missing model.
+        if configuration.requiresOnDeviceRecognition, !recognizer.supportsOnDeviceRecognition {
+            throw SpeechProviderError.onDeviceModelUnavailable(configuration.localeIdentifier)
+        }
 
         let request = SFSpeechURLRecognitionRequest(url: url)
         configuration.apply(to: request)

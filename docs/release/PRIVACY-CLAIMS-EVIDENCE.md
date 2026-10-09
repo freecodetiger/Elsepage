@@ -30,11 +30,14 @@
 | 请求透明:「这次用了哪些内容」 | 反思证据在 UI 呈现(`App/Thoughts/ThoughtsView.swift`);本地请求追踪可查(`App/Settings/DiagnosticsModel.swift`) |
 | PRD 依据 | `ReadLoop_PRD.md` §13.1/§13.2(默认原则与请求前最小化流程) |
 
-## 4. 「语音转写为 Apple 系统能力」
+## 4. 「语音转写为 Apple 系统能力,且全程在本机完成」
 
 | 声明 | 证据 |
 |---|---|
 | 仅使用 Apple SFSpeechRecognizer,无云端 ASR Provider | `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift`;PRD §21.1 偏差记录(云端 ASR 移至 v2) |
+| **音频与偏置文本不外发** —— `requiresOnDeviceRecognition` 默认为 `true` | `Sources/SpeechCore/SpeechRecognitionConfiguration.swift`(`init` 默认值);测试 `Tests/ReadLoopCoreTests/SpeechRecognitionConfigurationTests.swift` 锁定该默认值 |
+| 模型缺失时明确提示而非上传音频 | `Sources/SpeechCore/VoiceReflectionState.swift` 的 `SpeechProviderError.onDeviceModelUnavailable`;在 `SystemSpeechTranscriptionProvider.start` 与 `FileTranscriptionService.transcribe` 中于请求前检查 `supportsOnDeviceRecognition` |
+| 识别设置可被测量与对照(端上/服务端可显式指定) | `Scripts/debug_loop.py` 的 `--requires-on-device`;实测记录见 `docs/testing/voice/2026-10-09-transcription-measurement.md` |
 | 根 Reflection 与每条追问均可挂音频;用户主动开始录音后默认保存,可提前关闭;波形仅是可重建的派生缓存;支持单条删除、存储占用查看、全部清理,并按消息/Reflection/书籍/全清生命周期删除 | `App/Reflection/VoiceReflectionRecorder.swift`、`App/Settings/DataSettingsModel.swift`、`Sources/AppInfrastructure/AudioFileStore.swift`;PRD §21.8 |
 | 权限用途文案 | `App/Info.plist`:`NSMicrophoneUsageDescription`、`NSSpeechRecognitionUsageDescription`(均为本机转写表述) |
 

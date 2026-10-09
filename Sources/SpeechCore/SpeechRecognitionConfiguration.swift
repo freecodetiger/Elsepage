@@ -23,8 +23,17 @@ public struct SpeechRecognitionConfiguration: Sendable, Equatable {
     public var taskHint: SFSpeechRecognitionTaskHint
     public var addsPunctuation: Bool
     public var shouldReportPartialResults: Bool
-    /// Off by default: the on-device Chinese model is smaller, so enabling this
-    /// trades accuracy for privacy. Flip it deliberately, and measure.
+    /// On by default, so recognition never leaves the device: the app's
+    /// local-first promise holds, no book text is sent to Apple, and
+    /// `contextualStrings` cannot become an undisclosed outbound channel.
+    ///
+    /// The measured accuracy cost was nil on the five-clip sample (see
+    /// `docs/testing/voice/2026-10-09-transcription-measurement.md`), but that
+    /// sample was short, quiet and single-speaker — long, noisy or accented
+    /// audio is where on-device models usually trail.
+    ///
+    /// A missing on-device model reports a clear failure instead of quietly
+    /// uploading the audio. See `SpeechProviderError.onDeviceModelUnavailable`.
     public var requiresOnDeviceRecognition: Bool
 
     public init(
@@ -33,7 +42,7 @@ public struct SpeechRecognitionConfiguration: Sendable, Equatable {
         taskHint: SFSpeechRecognitionTaskHint = .unspecified,
         addsPunctuation: Bool = true,
         shouldReportPartialResults: Bool = true,
-        requiresOnDeviceRecognition: Bool = false
+        requiresOnDeviceRecognition: Bool = true
     ) {
         self.localeIdentifier = localeIdentifier
         self.contextualStrings = Self.normalized(contextualStrings)

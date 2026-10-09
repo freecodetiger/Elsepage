@@ -342,6 +342,26 @@ class DriverEndToEndTests(unittest.TestCase):
         finally:
             device.stop()
 
+    def test_the_recognition_mode_is_forced_only_when_asked(self):
+        """The app now defaults to on-device. Omitting the flag must leave that
+        default alone rather than assert a value, or the harness would stop
+        measuring what ships and the server comparison would silently vanish."""
+        device = FakeDevice({"clip-1.m4a": "他说的 incentive 是制度设计的问题"})
+        try:
+            base = device.start()
+            with tempfile.TemporaryDirectory() as raw:
+                directory = Path(raw)
+                (directory / "clip-1.m4a").write_bytes(b"\x00\x00\x00\x18ftypM4A fake audio")
+                clips = [{"path": "clip-1.m4a", "file": "clip-1.m4a",
+                          "reference": "他说的 incentive 是制度设计的问题"}]
+                for extra in ([], ["--requires-on-device", "true"], ["--requires-on-device", "false"]):
+                    self.assertEqual(self.run_cli(base, directory, clips, extra=extra), 0)
+                self.assertNotIn("requiresOnDeviceRecognition", device.received[0])
+                self.assertIs(device.received[1]["requiresOnDeviceRecognition"], True)
+                self.assertIs(device.received[2]["requiresOnDeviceRecognition"], False)
+        finally:
+            device.stop()
+
     def test_a_missing_local_clip_fails_before_any_request(self):
         device = FakeDevice({})
         try:

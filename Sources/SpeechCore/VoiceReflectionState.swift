@@ -117,6 +117,9 @@ public extension LiveTranscriptionProvider {
 public enum SpeechProviderError: LocalizedError, Equatable, Sendable {
     case recognitionUnavailable
     case recordingCouldNotStart(String)
+    /// The locale's on-device model is not installed, and recognition is
+    /// configured to stay on the device.
+    case onDeviceModelUnavailable(String)
 
     public var errorDescription: String? {
         switch self {
@@ -124,6 +127,16 @@ public enum SpeechProviderError: LocalizedError, Equatable, Sendable {
             "当前无法使用语音识别。你仍然可以输入文字。"
         case .recordingCouldNotStart(let reason):
             "无法开始录音：\(reason)"
+        case .onDeviceModelUnavailable(let localeIdentifier):
+            // Deliberately does not offer to fall back: uploading the audio is
+            // the thing this configuration exists to avoid. The hint matters
+            // because iOS fetches on-device models in the background; without
+            // it the user would have no idea there is anything to wait for.
+            """
+            本机还没有「\(localeIdentifier)」的本地识别模型，所以无法转写，音频不会上传。\
+            保持联网并充电一段时间，系统会自动下载模型；也可以在「设置 → 通用 → 键盘 → 听写」\
+            中开启该语言的听写来触发下载。你仍然可以输入文字。
+            """
         }
     }
 }

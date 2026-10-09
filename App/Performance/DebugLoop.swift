@@ -215,12 +215,19 @@ final class DebugLoop {
                 url = resolved
             }
 
-            let configuration = SpeechRecognitionConfiguration(
+            // Omitting the field must leave the app's own default in place, not
+            // assert one. Hardcoding `?? false` here silently made every
+            // unflagged measurement run report the server configuration while
+            // the shipping app had already moved on-device — the measurement
+            // would have been of something that no longer ships.
+            var configuration = SpeechRecognitionConfiguration(
                 localeIdentifier: object["localeIdentifier"] as? String
                     ?? SpeechRecognitionConfiguration.defaultLocaleIdentifier,
-                contextualStrings: strings,
-                requiresOnDeviceRecognition: object["requiresOnDeviceRecognition"] as? Bool ?? false
+                contextualStrings: strings
             )
+            if let forced = object["requiresOnDeviceRecognition"] as? Bool {
+                configuration.requiresOnDeviceRecognition = forced
+            }
             emit("transcribe.started", action: "speech.transcribe")
             do {
                 let transcript = try await FileTranscriptionService().transcribe(url, configuration: configuration)

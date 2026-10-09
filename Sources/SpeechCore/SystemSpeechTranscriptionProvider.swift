@@ -123,6 +123,9 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         let locale = Locale(identifier: configuration.localeIdentifier)
         let recognizer = SFSpeechRecognizer(locale: locale)
         guard let recognizer, recognizer.isAvailable else { throw SpeechProviderError.recognitionUnavailable }
+        if configuration.requiresOnDeviceRecognition, !recognizer.supportsOnDeviceRecognition {
+            throw SpeechProviderError.onDeviceModelUnavailable(configuration.localeIdentifier)
+        }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         configuration.apply(to: request)
