@@ -22,7 +22,10 @@ final class DebugHTTPServer {
     var onStateChange: (@MainActor (Bool, String) -> Void)?
     private var listener: NWListener?
     private var clients: [UUID: Client] = [:]
-    private let maximumBody = 64 * 1024
+    /// Sized for base64 audio on the measurement route: a couple of minutes of
+    /// AAC is a few hundred KB, and the envelope adds a third. This is a
+    /// loopback-only, USB-only DEBUG service, so the bound costs nothing here.
+    private let maximumBody = 8 * 1024 * 1024
     private let maximumHeaders = 16 * 1024
 
     init(handler: @escaping Handler) {

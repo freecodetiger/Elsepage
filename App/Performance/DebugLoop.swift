@@ -178,16 +178,43 @@ final class DebugLoop {
             guard strings.count <= SpeechRecognitionConfiguration.maximumContextualStrings else {
                 return reply(400, ["error": "invalid_contextual_strings"])
             }
-            let available = savedAudioFileNames()
-            guard let file = requested.flatMap({ $0.isEmpty ? nil : $0 }) ?? available.first else {
-                return reply(404, ["error": "no_audio_file"])
+
+            // Two ways in. Uploading the clip keeps measurement audio entirely out
+            // of the app: it lands in the system temp directory and is removed on
+            // the way out, so it can never reach the audio library or the user's
+            // recordings. Naming an existing file is for re-running something the
+            // app already holds.
+            var temporaryURL: URL?
+            defer { if let temporaryURL { try? FileManager.default.removeItem(at: temporaryURL) } }
+            let file: String
+            let url: URL
+            if let encoded = object["audioBase64"] as? String, !encoded.isEmpty {
+                guard let data = Data(base64Encoded: encoded), !data.isEmpty else {
+                    return reply(400, ["error": "invalid_audio_base64"])
+                }
+                let temporary = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString.lowercased())
+                    .appendingPathExtension("m4a")
+                do { try data.write(to: temporary) } catch {
+                    return reply(500, ["error": "audio_write_failed"])
+                }
+                temporaryURL = temporary
+                file = object["fileName"] as? String ?? temporary.lastPathComponent
+                url = temporary
+            } else {
+                guard let name = requested.flatMap({ $0.isEmpty ? nil : $0 }) ?? savedAudioFileNames().first else {
+                    return reply(404, ["error": "no_audio_file"])
+                }
+                // The name arrives over the wire. `AudioFileStore.url(for:)` is the
+                // store's own safe resolver, so a name that escapes the directory
+                // throws here instead of being joined onto a path.
+                guard audioStore.fileExists(named: name), let resolved = try? audioStore.url(for: name) else {
+                    return reply(404, ["error": "unknown_audio_file"])
+                }
+                file = name
+                url = resolved
             }
-            // The name arrives over the wire. `AudioFileStore.url(for:)` is the
-            // store's own safe resolver, so a name that escapes the directory
-            // throws here instead of being joined onto a path.
-            guard audioStore.fileExists(named: file), let url = try? audioStore.url(for: file) else {
-                return reply(404, ["error": "unknown_audio_file"])
-            }
+
             let configuration = SpeechRecognitionConfiguration(
                 localeIdentifier: object["localeIdentifier"] as? String
                     ?? SpeechRecognitionConfiguration.defaultLocaleIdentifier,

@@ -240,9 +240,11 @@ class FakeDevice:
                 if self.path != "/transcribe":
                     outer.respond(self, {"error": "unknown_route"}, 404)
                     return
+                # An uploaded clip has no device-side name; the driver supplies one.
+                name = payload.get("file") or payload.get("fileName")
                 outer.respond(self, {
-                    "file": payload["file"],
-                    "transcript": outer.transcripts[payload["file"]],
+                    "file": name,
+                    "transcript": outer.transcripts[name],
                     "contextualStrings": payload["contextualStrings"] if outer.echo is None else outer.echo,
                 })
 
@@ -315,6 +317,41 @@ class DriverEndToEndTests(unittest.TestCase):
                 evidence, _ = self.results(raw)
                 self.assertEqual(evidence["verdict"], "FAIL")
                 self.assertIn("not the requested", evidence["error"])
+        finally:
+            device.stop()
+
+    def test_an_uploaded_clip_never_names_a_device_side_file(self):
+        """The point of uploading: measurement audio must not need to exist in the
+        app at all, so no recording and no database row is created for it."""
+        device = FakeDevice({"clip-1.m4a": "他说的 incentive 是制度设计的问题"})
+        try:
+            base = device.start()
+            with tempfile.TemporaryDirectory() as raw:
+                directory = Path(raw)
+                (directory / "clip-1.m4a").write_bytes(b"\x00\x00\x00\x18ftypM4A fake audio")
+                code = self.run_cli(base, directory, [
+                    {"path": "clip-1.m4a", "file": "clip-1.m4a",
+                     "reference": "他说的 incentive 是制度设计的问题"},
+                ], extra=["--contextual-strings", "置身事内"])
+                self.assertEqual(code, 0)
+                sent = device.received[0]
+                self.assertIn("audioBase64", sent)
+                self.assertNotIn("file", sent)
+                evidence, _ = self.results(directory)
+                self.assertEqual(evidence["transcription"]["exact_matches"], 1)
+        finally:
+            device.stop()
+
+    def test_a_missing_local_clip_fails_before_any_request(self):
+        device = FakeDevice({})
+        try:
+            base = device.start()
+            with tempfile.TemporaryDirectory() as raw:
+                code = self.run_cli(base, raw, [
+                    {"path": "absent.m4a", "reference": "随便"},
+                ])
+                self.assertEqual(code, 1)
+                self.assertEqual(device.received, [])
         finally:
             device.stop()
 

@@ -182,21 +182,34 @@ def run_transcribe(client, directory, reference_path, contextual_strings):
 
     results = []
     for clip in clips:
-        payload = {"file": clip["file"], "contextualStrings": contextual_strings}
+        label = clip.get("file") or clip.get("path") or "?"
+        payload = {"contextualStrings": contextual_strings}
         if clip.get("localeIdentifier"):
             payload["localeIdentifier"] = clip["localeIdentifier"]
+        if clip.get("path"):
+            # Uploading keeps the clip out of the app entirely: the device writes
+            # it to its temp directory and deletes it, so no recording and no
+            # database row is created for a measurement.
+            source = Path(clip["path"])
+            if not source.is_absolute():
+                source = Path(reference_path).parent / source
+            check(source.is_file(), "Clip %s not found at %s" % (label, source))
+            payload["audioBase64"] = base64.b64encode(source.read_bytes()).decode()
+            payload["fileName"] = label
+        else:
+            payload["file"] = label
         # A minute of audio plus a server round trip does not fit the 12s default.
         response = client.request("POST", "/transcribe", payload, timeout=90)
         check(isinstance(response, dict), "Transcribe response is not an object")
         transcript = response.get("transcript", "")
-        check(transcript.strip(), "Clip %s produced no transcript" % clip["file"])
+        check(transcript.strip(), "Clip %s produced no transcript" % label)
         echoed = {s.strip() for s in response.get("contextualStrings", [])}
         # The device trims, dedupes and caps, so compare as sets rather than
         # sequences; a dropped field is the failure this catches.
         check(echoed == requested,
-              "Clip %s was biased with %r, not the requested %r" % (clip["file"], echoed, requested))
+              "Clip %s was biased with %r, not the requested %r" % (label, echoed, requested))
         results.append({
-            "file": response.get("file", clip["file"]),
+            "file": response.get("file", label),
             "note": clip.get("note", ""),
             "reference": clip["reference"],
             "transcript": transcript,
