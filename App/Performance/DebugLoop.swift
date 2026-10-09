@@ -1,11 +1,13 @@
 #if DEBUG
 import AgentRuntime
+import AppInfrastructure
 import Foundation
 import Observation
 import Persistence
 import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
+import SpeechCore
 import UIKit
 
 /// Device-side business adapter. HTTP transport knows no ReadLoop concepts.
@@ -24,6 +26,26 @@ final class DebugLoop {
     private var sequence = 0
     private var operations: [String: [String: Any]] = [:]
     private var actionTexts: [String: String] = [:]
+    private let audioStore = AudioFileStore.live()
+
+    /// Saved voice clips, newest first. Drafts, staging and trash live in
+    /// dot-directories, so a plain listing of the root already excludes them.
+    private func savedAudioFileNames() -> [String] {
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: audioStore.rootDirectory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return entries
+            .filter { $0.pathExtension.lowercased() == "m4a" }
+            .sorted { lhs, rhs in
+                let left = (try? lhs.resourceValues(forKeys: Set(keys)).contentModificationDate) ?? .distantPast
+                let right = (try? rhs.resourceValues(forKeys: Set(keys)).contentModificationDate) ?? .distantPast
+                return left > right
+            }
+            .map(\.lastPathComponent)
+    }
 
     func start() {
         guard server == nil else { return }
@@ -129,7 +151,8 @@ final class DebugLoop {
             return reply(200, ["protocolVersion": 1, "authentication": "none-usb-loopback", "instrumentationVersion": 8,
                                "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
                                "runID": runID, "busy": busy, "environment": "isolated-memory-grdb",
-                               "actions": ["reflection.submit"], "scope": "reflection-save, ui-screenshot; no gesture automation"])
+                               "actions": ["reflection.submit", "speech.transcribe"],
+                               "scope": "reflection-save, speech-file-transcription, ui-screenshot; no gesture automation"])
         }
         if method == "GET", path == "/perf" { return reply(200, ["report": Perf.shared.report]) }
         if method == "GET", path == "/screenshot" {
@@ -141,6 +164,52 @@ final class DebugLoop {
                 return reply(500, ["error": "screenshot_failed"])
             }
             return reply(200, shot)
+        }
+        if method == "GET", path == "/audio" {
+            return reply(200, ["root": audioStore.rootDirectory.lastPathComponent,
+                               "files": savedAudioFileNames()])
+        }
+        if method == "POST", path == "/transcribe" {
+            guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+                return reply(400, ["error": "invalid_body"])
+            }
+            let requested = object["file"] as? String
+            let strings = (object["contextualStrings"] as? [String]) ?? []
+            guard strings.count <= SpeechRecognitionConfiguration.maximumContextualStrings else {
+                return reply(400, ["error": "invalid_contextual_strings"])
+            }
+            let available = savedAudioFileNames()
+            guard let file = requested.flatMap({ $0.isEmpty ? nil : $0 }) ?? available.first else {
+                return reply(404, ["error": "no_audio_file"])
+            }
+            // The name arrives over the wire. `AudioFileStore.url(for:)` is the
+            // store's own safe resolver, so a name that escapes the directory
+            // throws here instead of being joined onto a path.
+            guard audioStore.fileExists(named: file), let url = try? audioStore.url(for: file) else {
+                return reply(404, ["error": "unknown_audio_file"])
+            }
+            let configuration = SpeechRecognitionConfiguration(
+                localeIdentifier: object["localeIdentifier"] as? String
+                    ?? SpeechRecognitionConfiguration.defaultLocaleIdentifier,
+                contextualStrings: strings,
+                requiresOnDeviceRecognition: object["requiresOnDeviceRecognition"] as? Bool ?? false
+            )
+            emit("transcribe.started", action: "speech.transcribe")
+            do {
+                let transcript = try await FileTranscriptionService().transcribe(url, configuration: configuration)
+                emit("transcribe.completed", action: "speech.transcribe")
+                return reply(200, [
+                    "file": file,
+                    "transcript": transcript,
+                    "characterCount": transcript.count,
+                    "localeIdentifier": configuration.localeIdentifier,
+                    "contextualStrings": configuration.contextualStrings,
+                    "requiresOnDeviceRecognition": configuration.requiresOnDeviceRecognition
+                ])
+            } catch {
+                emit("transcribe.failed", action: "speech.transcribe")
+                return reply(500, ["error": "transcription_failed", "detail": error.localizedDescription])
+            }
         }
         if method == "GET", path == "/events" {
             let raw = url.queryItems?.first(where: { $0.name == "after" })?.value ?? "0"

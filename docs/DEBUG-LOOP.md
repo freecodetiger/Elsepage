@@ -13,6 +13,7 @@
 | 数据库磁盘重启恢复 | 未覆盖；内存数据库重读不能证明磁盘耐久性 |
 | 全链路因果观测 | 部分：动作关联和结果快照已有，缺通用事务、Provider、后台任务事件 |
 | UI 像素采集 | `GET /screenshot` 可随时拍下 App 自身窗口；拍的是当前画面，不能自己切页面 |
+| 语音文件重转写 | `GET /audio` 列出已保存音频，`POST /transcribe` 按指定配置重跑识别。**机制**已断言（非空转写、设备回显的配置与请求一致）；准确率数字是**报告而非断言**——尚无可确立的门槛。设备侧未验证，见 `docs/testing/voice/2026-10-09-transcription-measurement.md` |
 | UI 手势、真实帧率 | 未自动化，需真机手测/专用工具 |
 | 自动构建、安装、CI、多设备管理、MCP | 未实现；构建安装仍按项目分工由用户完成 |
 
@@ -42,6 +43,9 @@
 | `Scripts/test_debug_loop.py` | 执行器裁决与连接管理测试 |
 | `Tests/ReadLoopCoreTests/ReflectionTestEnvironmentTests.swift` | fixture、数据库与保存服务验证 |
 | `App/Performance/Perf.swift` | 交互性能采集；诊断页与 HTTP 共用 |
+| `Sources/SpeechCore/SpeechRecognitionConfiguration.swift` | 识别设置的单一来源（locale / contextualStrings / taskHint / 端上开关）；活跃路径与测量路径共用 |
+| `Sources/SpeechCore/FileTranscriptionService.swift` | 文件重转写，`speech.transcribe` 的核心 |
+| `docs/testing/voice/2026-10-09-transcription-measurement.md` | 五段固定素材与两轮对比协议 |
 
 ## 已实现
 

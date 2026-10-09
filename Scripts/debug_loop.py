@@ -19,11 +19,11 @@ class Client:
         self.base = base.rstrip("/")
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def request(self, method, path, payload=None):
+    def request(self, method, path, payload=None, timeout=12):
         data = json.dumps(payload).encode() if payload is not None else None
         request = urllib.request.Request(self.base + path, data=data, method=method,
             headers={"Content-Type": "application/json"})
-        with self.opener.open(request, timeout=12) as response:
+        with self.opener.open(request, timeout=timeout) as response:
             return json.load(response)
 
     def action(self, text):
@@ -109,6 +109,85 @@ def run_screenshot(client, directory, scale):
             "height": payload.get("height"), "bytes": len(raw), "path": str(path)}
 
 
+def normalize_text(text):
+    """Case and whitespace are presentation, not recognition. Everything else —
+    punctuation included — is kept, so a dropped or invented mark still counts."""
+    return " ".join(text.split()).lower()
+
+
+def character_error_rate(reference, hypothesis):
+    """Levenshtein distance over characters, divided by the reference length.
+
+    Characters rather than words because the failure being measured is a
+    Latin-script term coming back as Chinese homophones: a word-level metric
+    would score that mangling and a whole misheard clause as the same one error.
+    """
+    reference = normalize_text(reference)
+    hypothesis = normalize_text(hypothesis)
+    if not reference:
+        return 0.0 if not hypothesis else 1.0
+    previous = list(range(len(hypothesis) + 1))
+    for i, ref_char in enumerate(reference, start=1):
+        current = [i]
+        for j, hyp_char in enumerate(hypothesis, start=1):
+            current.append(min(
+                previous[j] + 1,
+                current[j - 1] + 1,
+                previous[j - 1] + (ref_char != hyp_char),
+            ))
+        previous = current
+    return previous[-1] / len(reference)
+
+
+def run_transcribe(client, directory, reference_path, contextual_strings):
+    """Re-recognises unchanged clips, so a configuration change can be attributed
+    to the configuration instead of to the speaker saying it differently.
+
+    The assertions cover the mechanism: every clip returned a transcript, and the
+    settings the device echoed back are the ones that were sent — that echo is the
+    only end-to-end proof the configuration reached the recognizer. The error
+    rates are reported, not asserted; no quality bar has been established yet, and
+    inventing one would turn a measurement back into a guess.
+    """
+    manifest = json.loads(Path(reference_path).read_text())
+    clips = manifest.get("clips") or []
+    check(clips, "Reference manifest has no clips")
+    requested = {s.strip() for s in contextual_strings if s.strip()}
+
+    results = []
+    for clip in clips:
+        payload = {"file": clip["file"], "contextualStrings": contextual_strings}
+        if clip.get("localeIdentifier"):
+            payload["localeIdentifier"] = clip["localeIdentifier"]
+        # A minute of audio plus a server round trip does not fit the 12s default.
+        response = client.request("POST", "/transcribe", payload, timeout=90)
+        check(isinstance(response, dict), "Transcribe response is not an object")
+        transcript = response.get("transcript", "")
+        check(transcript.strip(), "Clip %s produced no transcript" % clip["file"])
+        echoed = {s.strip() for s in response.get("contextualStrings", [])}
+        # The device trims, dedupes and caps, so compare as sets rather than
+        # sequences; a dropped field is the failure this catches.
+        check(echoed == requested,
+              "Clip %s was biased with %r, not the requested %r" % (clip["file"], echoed, requested))
+        results.append({
+            "file": response.get("file", clip["file"]),
+            "note": clip.get("note", ""),
+            "reference": clip["reference"],
+            "transcript": transcript,
+            "character_error_rate": round(character_error_rate(clip["reference"], transcript), 4),
+            "matched": normalize_text(clip["reference"]) == normalize_text(transcript),
+        })
+
+    (directory / "transcripts.json").write_text(json.dumps(results, ensure_ascii=False, indent=2))
+    return {
+        "contextualStrings": contextual_strings,
+        "results": results,
+        "mean_character_error_rate": round(sum(r["character_error_rate"] for r in results) / len(results), 4),
+        "exact_matches": sum(1 for r in results if r["matched"]),
+        "clip_count": len(results),
+    }
+
+
 def run_save(client, evidence):
     session = client.request("POST", "/session", {})
     evidence["session"] = session
@@ -145,14 +224,21 @@ def run_save(client, evidence):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "perf", "save", "screenshot"])
+    parser.add_argument("command", choices=["status", "perf", "save", "screenshot", "transcribe"])
     parser.add_argument("--base", default="http://127.0.0.1:18765")
     parser.add_argument("--output", type=Path, default=Path("/tmp/readloop-debug-runs"))
     parser.add_argument("--udid", help="Device to use when creating a new USB forward")
     parser.add_argument("--wait", type=float, default=15, help="Startup retry window in seconds")
     parser.add_argument("--scale", type=int, choices=[1, 2, 3], default=2,
                         help="Screenshot scale: 1 is point geometry, 3 is device pixels")
+    parser.add_argument("--reference", type=Path,
+                        help="transcribe: JSON manifest of clip file names and their spoken reference text")
+    parser.add_argument("--contextual-strings", default="",
+                        help="transcribe: comma-separated phrases to bias recognition toward")
     args = parser.parse_args()
+    if args.command == "transcribe" and not args.reference:
+        parser.exit(2, "transcribe needs --reference <clips.json>\n")
+    contextual_strings = [s.strip() for s in args.contextual_strings.split(",") if s.strip()]
     client = Client(args.base)
     try:
         if args.base.rstrip("/") == "http://127.0.0.1:18765":
@@ -172,6 +258,9 @@ def main():
         check(evidence["status"]["protocolVersion"] == 1, "Unsupported protocol")
         if args.command == "save":
             run_save(client, evidence)
+        elif args.command == "transcribe":
+            evidence["transcription"] = run_transcribe(
+                client, directory, args.reference, contextual_strings)
         else:
             evidence["screenshot"] = run_screenshot(client, directory, args.scale)
         evidence["verdict"] = "PASS"
@@ -189,6 +278,17 @@ def main():
         if args.command == "save":
             events = evidence.get("save_events", {}).get("events", []) + evidence.get("latest_events", {}).get("events", [])
             (directory / "events.jsonl").write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events))
+    summary = evidence.get("transcription")
+    if summary:
+        # The comparison is the deliverable here, not the directory path.
+        for result in summary["results"]:
+            print("%s  CER %.3f  %s%s" % ("=" if result["matched"] else " ", result["character_error_rate"],
+                                          result["file"], " (%s)" % result["note"] if result["note"] else ""))
+            print("    ref: " + result["reference"])
+            print("    got: " + result["transcript"])
+        print("mean CER %.3f over %d clips, %d exact" % (summary["mean_character_error_rate"],
+                                                         summary["clip_count"], summary["exact_matches"]))
+        print("bias: " + (", ".join(summary["contextualStrings"]) or "(none)"))
     print(evidence["verdict"], evidence.get("screenshot", {}).get("path") or directory)
     raise SystemExit(code)
 
