@@ -1085,6 +1085,7 @@ struct SessionReflectionSheet: View {
                             get: { model.audioDraftURLs },
                             set: { model.audioDraftURLs = $0 }
                         ),
+                        contextualStrings: speechContextualStrings(for: model.book),
                         canPolish: model.canPolish,
                         onPolish: { await model.applyOptimization() },
                         onAutoPolish: { await model.autoOptimizeAfterRecording() },
@@ -1101,6 +1102,7 @@ struct SessionReflectionSheet: View {
                         model: conversation,
                         header: AnyView(header),
                         openCitation: openCitation,
+                        contextualStrings: speechContextualStrings(for: model.book),
                         onConversationDeleted: { dismiss() }
                     )
                     .transition(.moment(reduceMotion))
@@ -1268,6 +1270,18 @@ struct SessionReflectionSheet: View {
     }
 }
 
+/// Phrases worth biasing speech recognition toward.
+///
+/// The recognizer decodes one locale at a time, so a book's Latin-script title or
+/// author is exactly the kind of word it renders as a Chinese homophone. Title
+/// and author are also the only reading context both recording surfaces already
+/// hold, so this needs no extra lookup. Terms drawn from the passage being read
+/// would bias better, but that needs a lookup and term extraction — worth doing
+/// only once measurement shows biasing moves the needle at all.
+func speechContextualStrings(for book: Book) -> [String] {
+    [book.title, book.author ?? ""]
+}
+
 struct ReflectionConversationView: View {
     @Bindable var model: ReflectionConversationModel
     var header: AnyView? = nil
@@ -1278,6 +1292,9 @@ struct ReflectionConversationView: View {
     var rootTextOverride: String? = nil
     var showsInlineProvenance: Bool = true
     var openCitation: ((AgentResponseEvidence) -> Void)?
+    /// Biasing phrases for the follow-up composer's recording. The caller holding
+    /// the Book supplies them; without it the composer records unbiased.
+    var contextualStrings: [String] = []
     var onConversationDeleted: @MainActor () -> Void = {}
     @State private var confirmsDeletion = false
     @State private var isVoiceInputActive = false
@@ -1669,6 +1686,7 @@ private struct ReflectionComposer: View {
                     ),
                     allowsAudioSaving: true,
                     style: .compactComposer,
+                    contextualStrings: contextualStrings,
                     onRecordingStart: { model.draft.select(.original) },
                     onRecordingStateChange: { active in
                         isVoiceInputActive = active

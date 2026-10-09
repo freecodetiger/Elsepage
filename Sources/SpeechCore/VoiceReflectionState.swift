@@ -97,7 +97,7 @@ public protocol LiveTranscriptionProvider: AnyObject {
     var authorizationStatus: SpeechAuthorization { get }
     var isAvailable: Bool { get }
     func requestAuthorization() async -> SpeechAuthorization
-    func start(localeIdentifier: String?) throws -> AsyncThrowingStream<TranscriptionEvent, Error>
+    func start(configuration: SpeechRecognitionConfiguration) throws -> AsyncThrowingStream<TranscriptionEvent, Error>
     func stop()
     func cancel()
     /// File extension the recorder should use for the saved audio destination.

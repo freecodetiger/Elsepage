@@ -17,6 +17,11 @@ final class VoiceReflectionRecorder {
     private(set) var state = VoiceReflectionState()
     private(set) var draftAudioURLs: [URL] = []
 
+    /// Recognition tuning for the next recording. The caller that knows the
+    /// reading context sets this before starting; the default reproduces the
+    /// pre-existing behavior (zh-CN, no biasing).
+    var recognitionConfiguration = SpeechRecognitionConfiguration()
+
     init(
         provider: (any LiveTranscriptionProvider)? = nil,
         audioStore: AudioFileStore = .live()
@@ -74,7 +79,7 @@ final class VoiceReflectionRecorder {
                 discardAudioDrafts()
                 try provider.prepareAudioRecording(at: nil)
             }
-            let stream = try provider.start(localeIdentifier: nil)
+            let stream = try provider.start(configuration: recognitionConfiguration)
             state.apply(.recordingStarted)
             streamTask = Task { [weak self] in
                 do {
@@ -159,6 +164,10 @@ struct VoiceReflectionControls: View {
     /// expose or persist a message-level audio file.
     var allowsAudioSaving = true
     var style: VoiceReflectionControlStyle = .fullDraft
+    /// Short phrases to bias recognition toward (book title, author, subject
+    /// terms). Empty by default, so a call site without reading context behaves
+    /// exactly as before. See `SpeechRecognitionConfiguration`.
+    var contextualStrings: [String] = []
     var canPolish = false
     var onPolish: (() async -> Void)? = nil
     /// Fired once per recording completion so the model can auto-optimize the
@@ -375,6 +384,11 @@ struct VoiceReflectionControls: View {
             audioDraftURLs = []
         }
         textBeforeRecording = editableText
+        // Built here rather than at construction: the reading context is known by
+        // the caller, and this control is reused where there is none.
+        recorder.recognitionConfiguration = SpeechRecognitionConfiguration(
+            contextualStrings: contextualStrings
+        )
         Task { await recorder.start() }
     }
 

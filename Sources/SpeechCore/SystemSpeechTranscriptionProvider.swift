@@ -118,15 +118,14 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         audioDestination = url
     }
 
-    public func start(localeIdentifier: String?) throws -> AsyncThrowingStream<TranscriptionEvent, Error> {
+    public func start(configuration: SpeechRecognitionConfiguration) throws -> AsyncThrowingStream<TranscriptionEvent, Error> {
         cancel()
-        let locale = Locale(identifier: localeIdentifier ?? Self.defaultLocaleIdentifier)
+        let locale = Locale(identifier: configuration.localeIdentifier)
         let recognizer = SFSpeechRecognizer(locale: locale)
         guard let recognizer, recognizer.isAvailable else { throw SpeechProviderError.recognitionUnavailable }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.addsPunctuation = true
+        configuration.apply(to: request)
 
         // Configure and activate the audio session before creating the engine.
         // On a real device the input route may be absent even when permission is

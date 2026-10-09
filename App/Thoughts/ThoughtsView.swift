@@ -281,6 +281,7 @@ private struct ThoughtRecordDetailView: View {
                         recordExtras: recordExtras,
                         rootTextOverride: entry.reflection.originalText,
                         showsInlineProvenance: true,
+                        contextualStrings: speechContextualStrings(for: entry.book),
                         openCitation: { evidence in
                             guard evidence.bookID == entry.book.id,
                                   let locator = evidence.locator else { return }
