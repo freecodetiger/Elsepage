@@ -1,0 +1,35 @@
+{
+  "_comment": "五段固定素材的参考文本(地面真值)。把音频按 path 命名后放在本文件同目录,然后: python3 Scripts/debug_loop.py transcribe --reference docs/testing/voice/2026-10-09-transcription-clips.json --contextual-strings \"置身事内,兰小欢\"。reference 必须与你实际念出来的完全一致;念的时候用平时说话的语速,不要刻意咬字。协议见 2026-10-09-transcription-measurement.md。",
+  "clips": [
+    {
+      "path": "01-pure-chinese.m4a",
+      "file": "01-pure-chinese.m4a",
+      "reference": "这本书讲的是地方财政如何影响城市发展",
+      "note": "纯中文 · 基线"
+    },
+    {
+      "path": "02-pure-english.m4a",
+      "file": "02-pure-english.m4a",
+      "reference": "the author argues that incentives shape outcomes",
+      "note": "纯英文 · 英文解码能力"
+    },
+    {
+      "path": "03-mixed.m4a",
+      "file": "03-mixed.m4a",
+      "reference": "他说的 incentive 其实是制度设计的问题",
+      "note": "中英混 · 核心痛点"
+    },
+    {
+      "path": "04-title-and-author.m4a",
+      "file": "04-title-and-author.m4a",
+      "reference": "我在读《置身事内》和兰小欢的写法",
+      "note": "书名作者 · 偏置命中的目标"
+    },
+    {
+      "path": "05-rare-term.m4a",
+      "file": "05-rare-term.m4a",
+      "reference": "凯恩斯和 Keynesian 是同一个词的另一面",
+      "note": "术语 · 未被偏置覆盖的稀有拉丁词"
+    }
+  ]
+}
