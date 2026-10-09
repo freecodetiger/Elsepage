@@ -1613,3 +1613,11 @@ ReadLoop 最终不是要证明：
 - 豁免理由：长期记忆是 P9 认定的产品护城河，而 F10 的记忆模型在首发前即已暴露语义不足（见 §21.12）；与其带着已知会重构的模型首发，不如在首发前一次收敛到位。Brain 为纯增量模块（BrainCore 不 import ReaderAgent），且维护路径异步、不阻塞 ReaderAgent，未挤占首发关键路径。
 - 边界：本里程碑不改变 P1–P9 任何产品不变量；Brain 页面的「继续想想」等入口属既有 Reflection 链路的复用，不引入新的一级入口。
 - 依据：`docs/brain.md` §20 阶段划分；`.planning/ROADMAP.md` v1.1 Personal Brain。
+
+## 21.14 识别请求的外发范围与 contextualStrings
+
+- 事实：语音识别请求携带 `contextualStrings`（当前为书名与作者），且 `requiresOnDeviceRecognition` 未设置 —— 即**允许**走 Apple 服务端。因此音频与偏置文本会离开设备，而 §13.1 只说「发送必要上下文到**用户选择的 Provider**」，Apple 不在其中；隐私政策原文也只描述 App 保留了什么，未披露识别请求本身外发。
+- 连带：§21.1 的豁免理由写「系统转写**本地优先**，与 §13 隐私默认一致」。该句与实现不符，本次一并修正。
+- 决定（依据 2026-10-09 的实机对比测量，见 `docs/testing/voice/2026-10-09-transcription-measurement.md`）：**默认改为端上识别**（`requiresOnDeviceRecognition = true`）。五段真人素材上，端上与服务端的均值 CER 为 0.249 与 0.244（无偏置）、0.149 与 0.149（带偏置），代价在这批素材上测不出来；且 `contextualStrings` 的收益在端上完整保留。改动后识别全程不出设备，§13 的承诺与隐私政策无需新增外发披露，§21.1 的措辞随之成立。
+- 待定（实现前需定）：强制端上后，若目标 locale 的端上模型未下载，识别会直接失败而非退回服务端。回退策略（报错并提示 / 允许退回服务端并披露 / 引导下载模型）属产品决策，未定案前不合并该开关。
+- 未来若把「当前阅读文本」纳入 `contextualStrings`（`docs/testing/voice/2026-10-09-transcription-measurement.md` 的下一步），须先按本条确认外发范围已收敛，再加入 —— 因为那会显著放大随请求外发的文本量。

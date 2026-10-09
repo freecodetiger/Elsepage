@@ -163,7 +163,7 @@ def validate_contextual_strings(contextual_strings):
           % (MAX_CONTEXTUAL_STRINGS, MAX_CONTEXTUAL_STRINGS))
 
 
-def run_transcribe(client, directory, reference_path, contextual_strings):
+def run_transcribe(client, directory, reference_path, contextual_strings, requires_on_device=False):
     """Re-recognises unchanged clips, so a configuration change can be attributed
     to the configuration instead of to the speaker saying it differently.
 
@@ -184,6 +184,8 @@ def run_transcribe(client, directory, reference_path, contextual_strings):
     for clip in clips:
         label = clip.get("file") or clip.get("path") or "?"
         payload = {"contextualStrings": contextual_strings}
+        if requires_on_device:
+            payload["requiresOnDeviceRecognition"] = True
         if clip.get("localeIdentifier"):
             payload["localeIdentifier"] = clip["localeIdentifier"]
         if clip.get("path"):
@@ -220,6 +222,7 @@ def run_transcribe(client, directory, reference_path, contextual_strings):
     (directory / "transcripts.json").write_text(json.dumps(results, ensure_ascii=False, indent=2))
     return {
         "contextualStrings": contextual_strings,
+        "requiresOnDeviceRecognition": requires_on_device,
         "results": results,
         "mean_character_error_rate": round(sum(r["character_error_rate"] for r in results) / len(results), 4),
         "exact_matches": sum(1 for r in results if r["matched"]),
@@ -274,6 +277,8 @@ def main():
                         help="transcribe: JSON manifest of clip file names and their spoken reference text")
     parser.add_argument("--contextual-strings", default="",
                         help="transcribe: comma-separated phrases to bias recognition toward")
+    parser.add_argument("--on-device", action="store_true",
+                        help="transcribe: require on-device recognition instead of allowing Apple's servers")
     args = parser.parse_args()
     if args.command == "transcribe" and not args.reference:
         parser.exit(2, "transcribe needs --reference <clips.json>\n")
@@ -299,7 +304,8 @@ def main():
             run_save(client, evidence)
         elif args.command == "transcribe":
             evidence["transcription"] = run_transcribe(
-                client, directory, args.reference, contextual_strings)
+                client, directory, args.reference, contextual_strings,
+                requires_on_device=args.on_device)
         else:
             evidence["screenshot"] = run_screenshot(client, directory, args.scale)
         evidence["verdict"] = "PASS"
