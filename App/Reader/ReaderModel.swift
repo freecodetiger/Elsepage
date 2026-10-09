@@ -944,11 +944,13 @@ final class ReaderModel {
                 session = try await sessions.start(bookID: book.id, at: locator)
                 activeSession = session
             }
+            let sessionHighlights = highlights(in: session)
             contextReflection = SessionReflectionModel(
                 book: book,
                 summary: SessionEndingSummary(session: session),
                 locator: locator,
-                linkedHighlightIDs: highlights(in: session).map(\.id),
+                linkedHighlightIDs: sessionHighlights.map(\.id),
+                highlightTexts: sessionHighlights.compactMap { $0.locator.textHighlight },
                 reflectionRepository: reflectionRepository,
                 readerAgent: readerAgent,
                 makePolishService: makePolishService,

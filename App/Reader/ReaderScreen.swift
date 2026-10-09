@@ -253,11 +253,16 @@ struct ReaderScreen: View {
                 return
             }
             dismissAfterReflection = true
+            let sessionHighlights = model.highlights(in: summary.session)
             reflectionPrompt = SessionReflectionModel(
                 book: model.book,
                 summary: summary,
                 locator: locator,
-                linkedHighlightIDs: model.highlights(in: summary.session).map(\.id),
+                linkedHighlightIDs: sessionHighlights.map(\.id),
+                // Biases recognition toward the words this reader just
+                // highlighted, which is where the vocabulary they will say
+                // actually comes from.
+                highlightTexts: sessionHighlights.compactMap { $0.locator.textHighlight },
                 reflectionRepository: model.reflectionRepository,
                 readerAgent: model.readerAgent,
                 makePolishService: model.makePolishService,

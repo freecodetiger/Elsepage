@@ -7,6 +7,7 @@ import ReaderCore
 import ReaderAgent
 import ReadingSessionCore
 import ReflectionCore
+import SpeechCore
 import SwiftUI
 import UIKit
 
@@ -405,6 +406,7 @@ final class SessionReflectionModel: Identifiable {
     let summary: SessionEndingSummary
     let locator: BookLocator
     let linkedHighlightIDs: [UUID]
+    let highlightTexts: [String]
     private let submission: TextReflectionSubmissionService
     private let voiceSubmission: VoiceReflectionSubmissionService
     private let reflectionRepository: any ReflectionRepository
@@ -453,6 +455,10 @@ final class SessionReflectionModel: Identifiable {
         summary: SessionEndingSummary,
         locator: BookLocator,
         linkedHighlightIDs: [UUID] = [],
+        /// The text of this session's highlights. Speech recognition is biased
+        /// toward the terms in them, because the Latin words the reader is
+        /// looking at are exactly the ones a single-locale recognizer mangles.
+        highlightTexts: [String] = [],
         reflectionRepository: any ReflectionRepository,
         readerAgent: ReaderAgent,
         makePolishService: (@MainActor () async -> TranscriptPolishService?)? = nil,
@@ -463,6 +469,7 @@ final class SessionReflectionModel: Identifiable {
         self.summary = summary
         self.locator = locator
         self.linkedHighlightIDs = linkedHighlightIDs
+        self.highlightTexts = highlightTexts
         self.reflectionRepository = reflectionRepository
         self.readerAgent = readerAgent
         self.makePolishService = makePolishService
@@ -1085,7 +1092,10 @@ struct SessionReflectionSheet: View {
                             get: { model.audioDraftURLs },
                             set: { model.audioDraftURLs = $0 }
                         ),
-                        contextualStrings: speechContextualStrings(for: model.book),
+                        contextualStrings: speechContextualStrings(
+                            for: model.book,
+                            highlightTexts: model.highlightTexts
+                        ),
                         canPolish: model.canPolish,
                         onPolish: { await model.applyOptimization() },
                         onAutoPolish: { await model.autoOptimizeAfterRecording() },
@@ -1278,8 +1288,13 @@ struct SessionReflectionSheet: View {
 /// hold, so this needs no extra lookup. Terms drawn from the passage being read
 /// would bias better, but that needs a lookup and term extraction — worth doing
 /// only once measurement shows biasing moves the needle at all.
-func speechContextualStrings(for book: Book) -> [String] {
-    [book.title, book.author ?? ""]
+func speechContextualStrings(for book: Book, highlightTexts: [String] = []) -> [String] {
+    // Ordering and the cap live in `SpeechBiasTerms` so they can be tested; this
+    // only supplies the book's own fields.
+    SpeechBiasTerms.terms(
+        alwaysInclude: [book.title, book.author ?? ""],
+        highlightedTexts: highlightTexts
+    )
 }
 
 struct ReflectionConversationView: View {

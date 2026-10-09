@@ -20,6 +20,61 @@ import Testing
     #expect(configuration.requiresOnDeviceRecognition)
 }
 
+@Test func theTermsThatGetMangledAreTheOnesExtracted() {
+    // The headline case: a Chinese passage whose Latin word the recognizer
+    // turned into a homophone. It can only be corrected if it is in the list.
+    let highlight = "他说的 incentive 其实是制度设计的问题，也就是 post-modern 的那一套。"
+    #expect(SpeechBiasTerms.latinTerms(in: highlight) == ["incentive", "post-modern"])
+}
+
+@Test func termExtractionKeepsRealTermsWholeAndDropsWhatCarriesNothing() {
+    // Joiners keep a term in one piece, and a trailing one is trimmed.
+    let passage = "Man's Search for 2026: a well- known re-reading"
+    #expect(SpeechBiasTerms.latinTerms(in: passage)
+        == ["Man's", "Search", "for", "well", "known", "re-reading"])
+    // `for` survives because the floor is length, not a stopword list. An
+    // English passage therefore yields ordinary words — harmless at the measured
+    // scale, but the reason callers put the always-relevant entries first.
+    #expect(SpeechBiasTerms.latinTerms(in: "the and of to is").isEmpty == false)
+}
+
+@Test func theBookFieldsAlwaysSurviveALongHighlightList() {
+    // The ordering guarantee: title and author are the entries the measurement
+    // moved, so a passage that yields more than the cap must not be able to
+    // evict them. Without this, adding passage terms could silently undo the
+    // correction the harness measured.
+    let flood = (0..<60).map { "term\($0)" }.joined(separator: " ")
+    let list = SpeechBiasTerms.terms(alwaysInclude: ["置身事内", "兰小欢"], highlightedTexts: [flood])
+
+    #expect(list.count == SpeechBiasTerms.maximumTerms)
+    #expect(list.prefix(2) == ["置身事内", "兰小欢"])
+    #expect(list.contains("term0"))
+    #expect(!list.contains("term59"))
+}
+
+@Test func theBiasListIsTheBookFieldsPlusPassageTermsInOrder() {
+    let list = SpeechBiasTerms.terms(
+        alwaysInclude: ["置身事内", "兰小欢"],
+        highlightedTexts: ["他说的 incentive 是制度设计的问题", "post-modern 的写法"]
+    )
+    #expect(list == ["置身事内", "兰小欢", "incentive", "post-modern"])
+    // No highlights is the previous behavior, unchanged.
+    #expect(SpeechBiasTerms.terms(alwaysInclude: ["置身事内", "兰小欢"], highlightedTexts: []) == ["置身事内", "兰小欢"])
+}
+
+@Test func chineseTextIsNotHarvested() {
+    // Chinese terms need segmentation; a character-run sweep would return most
+    // of the sentence and crowd out the terms that matter.
+    #expect(SpeechBiasTerms.latinTerms(in: "这本书讲的是地方财政如何影响城市发展") == [])
+}
+
+@Test func termExtractionRespectsItsLimitAndHandlesEmptyInput() {
+    #expect(SpeechBiasTerms.latinTerms(in: "alpha beta gamma", limit: 2) == ["alpha", "beta"])
+    #expect(SpeechBiasTerms.latinTerms(in: "alpha beta", limit: 0) == [])
+    #expect(SpeechBiasTerms.latinTerms(in: "") == [])
+    #expect(SpeechBiasTerms.latinTerms(in: "，。！？ ") == [])
+}
+
 @Test func availabilityReportsUnavailableWhenNoRecognizerCanBeBuilt() {
     // The one branch of the rule that is testable without a device: the other
     // depends on which models the host has installed.
