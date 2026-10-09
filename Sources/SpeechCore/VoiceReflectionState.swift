@@ -121,6 +121,32 @@ public enum SpeechProviderError: LocalizedError, Equatable, Sendable {
     /// configured to stay on the device.
     case onDeviceModelUnavailable(String)
 
+    /// The dictation service reports a missing on-device asset as
+    /// `kAFAssistantErrorDomain` code 1101 — which, raw, tells the user nothing.
+    public static let assistantErrorDomain = "kAFAssistantErrorDomain"
+    public static let missingOnDeviceAssetCode = 1101
+
+    /// Classifies an error that reached us at recognition time.
+    ///
+    /// `SpeechRecognitionAvailability` catches the common case before starting,
+    /// but `supportsOnDeviceRecognition` can report `true` while the asset is
+    /// actually missing, so this is the net underneath it.
+    public static func from(
+        _ error: Error,
+        configuration: SpeechRecognitionConfiguration
+    ) -> SpeechProviderError {
+        let nsError = error as NSError
+        // Only blame a missing model when on-device was actually required.
+        // Otherwise a failure that had a server path available would be reported
+        // as an on-device problem, sending the user to fix the wrong thing.
+        if configuration.requiresOnDeviceRecognition,
+           nsError.domain == assistantErrorDomain,
+           nsError.code == missingOnDeviceAssetCode {
+            return .onDeviceModelUnavailable(configuration.localeIdentifier)
+        }
+        return .recordingCouldNotStart(error.localizedDescription)
+    }
+
     public var errorDescription: String? {
         switch self {
         case .recognitionUnavailable:

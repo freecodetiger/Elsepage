@@ -20,6 +20,67 @@ import Testing
     #expect(configuration.requiresOnDeviceRecognition)
 }
 
+@Test func availabilityReportsUnavailableWhenNoRecognizerCanBeBuilt() {
+    // The one branch of the rule that is testable without a device: the other
+    // depends on which models the host has installed.
+    #expect(SpeechRecognitionAvailability.evaluate(
+        recognizer: nil,
+        configuration: SpeechRecognitionConfiguration()
+    ) == .unavailable(localeIdentifier: "zh-CN"))
+}
+
+@Test func theAvailabilityMessageCarriesTheLocaleOnlyWhenItIsActionable() {
+    #expect(SpeechRecognitionAvailability.available.message == nil)
+    // The user can install this one, so it names the language.
+    #expect(SpeechRecognitionAvailability.onDeviceModelMissing(localeIdentifier: "zh-CN")
+        .message?.contains("zh-CN") == true)
+    // Nothing the user can do about a missing recognizer; naming the language
+    // would just add noise, so this must be the plain copy.
+    #expect(SpeechRecognitionAvailability.unavailable(localeIdentifier: "zh-CN").message
+        == SpeechProviderError.recognitionUnavailable.errorDescription)
+}
+
+private func assistantError(code: Int) -> NSError {
+    NSError(domain: SpeechProviderError.assistantErrorDomain, code: code)
+}
+
+@Test func aMissingOnDeviceAssetIsReportedAsSomethingTheUserCanFix() {
+    // 1101 in the dictation domain is how a missing on-device asset actually
+    // arrives — opaque on its own, and the case the pre-flight check can miss.
+    let classified = SpeechProviderError.from(
+        assistantError(code: SpeechProviderError.missingOnDeviceAssetCode),
+        configuration: SpeechRecognitionConfiguration()
+    )
+    #expect(classified == .onDeviceModelUnavailable("zh-CN"))
+}
+
+@Test func theSameErrorBlamesTheModelOnlyWhenOnDeviceWasRequired() {
+    // With a server path available, the model is not the problem, and sending
+    // the user to install one would send them to fix the wrong thing.
+    let classified = SpeechProviderError.from(
+        assistantError(code: SpeechProviderError.missingOnDeviceAssetCode),
+        configuration: SpeechRecognitionConfiguration(requiresOnDeviceRecognition: false)
+    )
+    if case .recordingCouldNotStart = classified {} else {
+        Issue.record("Expected the raw failure, got \(classified)")
+    }
+}
+
+@Test func unrelatedFailuresAreNotDressedUpAsModelProblems() {
+    // Same code, different domain.
+    let foreign = NSError(domain: "kAFAssistantErrorDomain.somethingElse",
+                          code: SpeechProviderError.missingOnDeviceAssetCode)
+    if case .recordingCouldNotStart = SpeechProviderError.from(foreign, configuration: .init()) {} else {
+        Issue.record("A foreign domain must not be read as a missing model")
+    }
+    // Same domain, different code.
+    if case .recordingCouldNotStart = SpeechProviderError.from(
+        assistantError(code: 1107), configuration: .init()
+    ) {} else {
+        Issue.record("Only the missing-asset code means a missing asset")
+    }
+}
+
 @Test func aMissingOnDeviceModelSaysWhatToDoAndDoesNotOfferToUpload() {
     let message = SpeechProviderError.onDeviceModelUnavailable("zh-CN").errorDescription ?? ""
 

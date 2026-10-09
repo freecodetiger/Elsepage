@@ -179,6 +179,11 @@ struct VoiceReflectionControls: View {
     var onRecordingStateChange: (Bool) -> Void = { _ in }
     var onFailureMessageChange: (String?) -> Void = { _ in }
     @State private var recorder = VoiceReflectionRecorder()
+    /// Asked once per appearance, never cached: iOS installs on-device models in
+    /// the background, so the answer changes while the app runs. Reopening the
+    /// sheet re-checks, which is what makes the feature come back on its own
+    /// once the user installs the model.
+    @State private var speechAvailability: SpeechRecognitionAvailability = .available
     @State private var textBeforeRecording = ""
     @State private var pressTask: Task<Void, Never>?
     @State private var isHoldingLongPress = false
@@ -188,12 +193,23 @@ struct VoiceReflectionControls: View {
     @ScaledMetric(relativeTo: .body) private var fullIconSize: CGFloat = 30
     @ScaledMetric(relativeTo: .body) private var compactIconSize: CGFloat = 17
 
+    /// The configuration this control records with. Availability is asked of the
+    /// same value recording uses, so the microphone cannot be offered under one
+    /// configuration and start under another.
+    private var recognitionConfiguration: SpeechRecognitionConfiguration {
+        SpeechRecognitionConfiguration(contextualStrings: contextualStrings)
+    }
+
     var body: some View {
         VStack(spacing: ElsepageTheme.Spacing.medium) {
             if style == .fullDraft {
                 statusLine
             }
-            micButton
+            if speechAvailability.isAvailable {
+                micButton
+            } else {
+                unavailableHint
+            }
             if style == .fullDraft, allowsAudioSaving || canPolish {
                 HStack(spacing: 12) {
                     if allowsAudioSaving {
@@ -245,6 +261,10 @@ struct VoiceReflectionControls: View {
             }
         }
         .frame(maxWidth: style == .fullDraft ? .infinity : nil)
+        .task {
+            // Once per appearance; see `speechAvailability`.
+            speechAvailability = recognitionConfiguration.availability
+        }
         .onChange(of: recorder.latestTranscript) { _, transcript in
             let prefix = textBeforeRecording.trimmingCharacters(in: .whitespacesAndNewlines)
             editableText = transcript.isEmpty ? textBeforeRecording : [prefix, transcript].filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -376,6 +396,21 @@ struct VoiceReflectionControls: View {
             }
     }
 
+    /// Stands where the microphone would be.
+    ///
+    /// Hiding the control silently was rejected: the missing model is a one-time
+    /// setting the user *can* install, so going quiet would turn "unavailable
+    /// right now" into "never existed" and leave no way to find out otherwise.
+    /// Text input remains, so nothing is blocked — only one input method is.
+    private var unavailableHint: some View {
+        Text(speechAvailability.message ?? "")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func beginRecording() {
         onRecordingStart()
         if !allowsAudioSaving {
@@ -386,9 +421,7 @@ struct VoiceReflectionControls: View {
         textBeforeRecording = editableText
         // Built here rather than at construction: the reading context is known by
         // the caller, and this control is reused where there is none.
-        recorder.recognitionConfiguration = SpeechRecognitionConfiguration(
-            contextualStrings: contextualStrings
-        )
+        recorder.recognitionConfiguration = recognitionConfiguration
         Task { await recorder.start() }
     }
 

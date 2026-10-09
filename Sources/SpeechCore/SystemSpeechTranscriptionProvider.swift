@@ -122,9 +122,16 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
         cancel()
         let locale = Locale(identifier: configuration.localeIdentifier)
         let recognizer = SFSpeechRecognizer(locale: locale)
-        guard let recognizer, recognizer.isAvailable else { throw SpeechProviderError.recognitionUnavailable }
-        if configuration.requiresOnDeviceRecognition, !recognizer.supportsOnDeviceRecognition {
-            throw SpeechProviderError.onDeviceModelUnavailable(configuration.localeIdentifier)
+        guard let recognizer else { throw SpeechProviderError.recognitionUnavailable }
+        // Same rule the UI asks before offering a microphone, so the two cannot
+        // disagree about whether this is usable.
+        switch SpeechRecognitionAvailability.evaluate(recognizer: recognizer, configuration: configuration) {
+        case .available:
+            break
+        case .unavailable:
+            throw SpeechProviderError.recognitionUnavailable
+        case .onDeviceModelMissing(let localeIdentifier):
+            throw SpeechProviderError.onDeviceModelUnavailable(localeIdentifier)
         }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -194,7 +201,10 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
             recognitionTask = recognizer.recognitionTask(with: request) { result, error in
                 let text = result?.bestTranscription.formattedString
                 let isFinal = result?.isFinal == true
-                let failure = error?.localizedDescription
+                // Classified rather than passed through raw: a missing on-device
+                // asset arrives as an opaque 1101, and it is the one failure the
+                // user can actually act on.
+                let failure = error.map { SpeechProviderError.from($0, configuration: configuration) }
                 Task { @MainActor [weak self] in
                     guard let self, self.activeRecordingID == recordingID else { return }
                     if let text {
@@ -205,7 +215,7 @@ public final class SystemSpeechTranscriptionProvider: LiveTranscriptionProvider 
                         continuation.finish()
                     } else if let failure {
                         self.finishAudio()
-                        continuation.finish(throwing: SpeechProviderError.recordingCouldNotStart(failure))
+                        continuation.finish(throwing: failure)
                     }
                 }
             }

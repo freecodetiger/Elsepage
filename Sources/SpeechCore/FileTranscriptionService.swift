@@ -27,8 +27,13 @@ public struct FileTranscriptionService: Sendable {
         // Checked up front: otherwise the request fails later with an opaque
         // Apple error, and a measurement run would look like a mystery rather
         // than a missing model.
-        if configuration.requiresOnDeviceRecognition, !recognizer.supportsOnDeviceRecognition {
-            throw SpeechProviderError.onDeviceModelUnavailable(configuration.localeIdentifier)
+        switch SpeechRecognitionAvailability.evaluate(recognizer: recognizer, configuration: configuration) {
+        case .available:
+            break
+        case .unavailable:
+            throw SpeechProviderError.recognitionUnavailable
+        case .onDeviceModelMissing(let localeIdentifier):
+            throw SpeechProviderError.onDeviceModelUnavailable(localeIdentifier)
         }
 
         let request = SFSpeechURLRecognitionRequest(url: url)
@@ -47,7 +52,10 @@ public struct FileTranscriptionService: Sendable {
                     if let result, result.isFinal {
                         verdict = .success(result.bestTranscription.formattedString)
                     } else if let error {
-                        verdict = .failure(error)
+                        // Classified rather than passed through raw: the
+                        // capability check above misses the case where the
+                        // system reports support but the asset is absent.
+                        verdict = .failure(SpeechProviderError.from(error, configuration: configuration))
                     } else {
                         verdict = nil
                     }

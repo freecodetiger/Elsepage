@@ -124,11 +124,26 @@ python3 Scripts/debug_loop.py transcribe --reference clips.json \
 
 **但这条结论的边界要说清楚**：五段、短句、安静环境、本人设备。端上模型相对服务端的差距通常出现在**长音频、嘈杂环境、口音、罕见词汇**上 —— 这些都没有被这批素材覆盖。所以这不是「端上等于服务端」的证明，而是一个足够支持决策的信号：方向明确，且该改动可回退。
 
-**一个新增的失败模式（已定案处理）**：强制端上后，若目标 locale 的端上模型未下载，识别会**直接失败**，不退回服务端。
+**一个新增的失败模式（已定案处理）**：强制端上后，若目标 locale 的端上模型未安装，识别**直接失败**，不退回服务端。
 
-已实现：`SystemSpeechTranscriptionProvider.start` 与 `FileTranscriptionService.transcribe` 在发起请求前检查 `supportsOnDeviceRecognition`，缺失时抛 `SpeechProviderError.onDeviceModelUnavailable`，文案给出可行动路径且声明音频不会上传（PRD §21.14）。
+实测确认这是**真实可达状态**，不是理论边界 —— 同一台设备上：
 
-**未消除的已知风险**：iOS 的端上模型按需下载，而触发下载通常依赖一次服务端识别 —— 硬失败因此可能形成死锁。zh-CN 实测已存在，所以目标场景不受影响；若出现真实死锁，处置方案记在 PRD §21.14。
+| locale | 端上模型 |
+|---|---|
+| zh-CN | 有 |
+| en-US | 有 |
+| ja-JP | **无** |
+| zh-TW | **无** |
+
+（端上模型由系统键盘与听写设置决定，App 无法触发下载，所以逐语言存在与否并不一致。）
+
+已实现：
+
+- 规则单点化 —— `SpeechRecognitionAvailability.evaluate(recognizer:configuration:)`。UI 用它决定要不要显示麦克风，provider 与文件转写用它决定要不要启动，两处不可能各判各的。
+- 模型不可用时**不渲染麦克风**，原位保留一句说明与可行动路径；每次打开界面重查，模型装上后自动恢复。**不做**静默隐藏（会把可修复的暂时状态变成永久不可知）。
+- 识别期兜底 —— `supportsOnDeviceRecognition` 是能力检查而非已安装检查，漏网失败以 `kAFAssistantErrorDomain` 1101 到达，由 `SpeechProviderError.from` 映射为同一条可行动文案；且仅在确实要求端上时才归因于模型。
+
+**未消除的已知风险**：端上模型按需下载而触发下载通常依赖一次服务端识别 —— 硬失败因此可能形成死锁。zh-CN 实测已存在，目标场景不受影响；处置方案记在 PRD §21.14。
 
 ### 对下一步的影响
 
