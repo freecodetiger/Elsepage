@@ -125,4 +125,10 @@ public enum RagCorpusIO {
         let decoder = JSONDecoder()
         return try data.split(separator: 0x0A).map { try decoder.decode(T.self, from: Data($0)) }
     }
+
+    /// Content hash, so a report can name the exact corpus and query set it
+    /// describes instead of trusting that they have not moved since.
+    public static func sha256Hex(of url: URL) throws -> String {
+        SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined()
+    }
 }

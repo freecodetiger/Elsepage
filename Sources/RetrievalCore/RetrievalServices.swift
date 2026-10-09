@@ -56,7 +56,13 @@ public struct LocalBookRetriever: BookRetriever {
         self.expander = expander
     }
 
-    public func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence] {
+    /// The ranked retrieval children, before small-to-big expansion.
+    ///
+    /// Split out of `retrieve` so a benchmark can measure the ranking this
+    /// production path actually produces. Scoring child-level recall against a
+    /// re-implemented fusion would measure the benchmark, not the retriever —
+    /// and a second implementation drifts silently.
+    public func rankedChildren(_ query: RetrievalQuery) async throws -> [(BookChunk, Double)] {
         let lexical = try await repository.lexicalSearch(bookID: query.bookID, query: query.text, boundary: query.boundary, limit: max(12, query.limit * 3), scope: query.scope)
         var ranked = lexical.map { ($0.0.id, $0.1) }
         var chunks = Dictionary(uniqueKeysWithValues: lexical.map { ($0.0.id, $0.0) })
@@ -97,25 +103,25 @@ public struct LocalBookRetriever: BookRetriever {
                     .sorted { $0.1 > $1.1 }
             }
         }
+        return ranked.compactMap { id, score in chunks[id].map { ($0, score) } }
+    }
+
+    public func retrieve(_ query: RetrievalQuery) async throws -> [BookEvidence] {
+        let rankedChildren = try await rankedChildren(query)
         // Small-to-big: query.limit now means parent count, so expand the ranked
         // children into one parent-anchored window per parent (dedup by parentID),
         // then keep the top `limit` windows. Window tails are re-checked against
         // the boundary inside the expander.
         let expanded: [(BookChunk, Double)]
         do {
-            let rankedChildren = ranked.compactMap { id, score -> (BookChunk, Double)? in
-                guard let chunk = chunks[id] else { return nil }
-                return (chunk, score)
-            }
             expanded = try await expander.expand(
                 rankedChildren,
                 boundary: query.boundary, using: repository,
                 bookID: query.bookID, version: BookIndexPipeline.currentVersion
             )
         } catch {
-            expanded = ranked.prefix(query.limit).compactMap { id, score in
-                guard let chunk = chunks[id],
-                      query.boundary?.contains(chunk) ?? true else { return nil }
+            expanded = rankedChildren.prefix(query.limit).compactMap { chunk, score in
+                guard query.boundary?.contains(chunk) ?? true else { return nil }
                 return (chunk, score)
             }
         }

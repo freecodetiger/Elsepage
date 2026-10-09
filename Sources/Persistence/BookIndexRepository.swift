@@ -288,7 +288,10 @@ public final class GRDBBookIndexRepository: BookIndexRepository, @unchecked Send
     /// capped for FTS5 trigram query limits), latin words ≥3 chars → exact quoted
     /// phrases. Empty when no token qualifies, in which case the caller uses the
     /// instr() substring fallback (covers 2-char CJK words, e.g. 时间).
-    private static func ftsTerms(for query: String) -> [String] {
+    /// The FTS terms a query actually turns into. Public so a benchmark can ask
+    /// whether a query is *attainable* by the lexical lane without building a
+    /// second, subtly different tokenizer.
+    public static func ftsTerms(for query: String) -> [String] {
         let folded = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
         var terms: [String] = []
         for token in folded.split { !$0.isLetter && !$0.isNumber }.map(String.init) {

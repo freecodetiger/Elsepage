@@ -43,24 +43,54 @@ public struct RagCorpus {
     public func seed(bookKey: String, database: AppDatabase) async throws -> GRDBBookIndexRepository {
         guard let bookID = bookID(forBook: bookKey) else { throw RagCorpusError.unknownBook(bookKey) }
         let books = GRDBBookRepository(database: database)
-        try await books.insert(Book(
-            id: bookID,
-            fingerprint: .init(rawValue: "ragcorpus-\(bookKey)"),
-            title: bookKey,
-            fileName: "\(bookKey).epub",
-            fileSize: 0
-        ))
+        // Idempotent: the builder and the ablation both seed, and a corpus book
+        // is identified by its key, so a second call must be a no-op rather
+        // than a UNIQUE(fileName) violation.
+        if try await books.book(id: bookID) == nil {
+            try await books.insert(Book(
+                id: bookID,
+                fingerprint: .init(rawValue: "ragcorpus-\(bookKey)"),
+                title: bookKey,
+                fileName: "\(bookKey).epub",
+                fileSize: 0
+            ))
+        }
         let index = GRDBBookIndexRepository(database: database)
-        try await index.replace(
-            chunks: chunks(forBook: bookKey),
-            for: bookID,
-            version: BookIndexPipeline.currentVersion
-        )
+        let chunks = chunks(forBook: bookKey)
+        // Seeding is idempotent, and not merely for tidiness: `replace(chunks:)`
+        // deletes the book's chunk rows, and `bookChunkEmbeddings` cascades off
+        // them. Re-seeding after an embedding pass would silently discard every
+        // vector, leaving the semantic arm measuring the lexical one.
+        if try await index.chunks(for: bookID, version: BookIndexPipeline.currentVersion).isEmpty {
+            try await index.replace(
+                chunks: chunks,
+                for: bookID,
+                version: BookIndexPipeline.currentVersion
+            )
+            // The state production leaves behind once the lexical phase is done.
+            // Without it `BookIndexPipeline.embed` no-ops on its state guard.
+            try await index.save(job: BookIndexJob(
+                bookID: bookID,
+                indexVersion: BookIndexPipeline.currentVersion,
+                state: .lexicalReady,
+                nextResourceOrdinal: (chunks.map(\.resourceOrdinal).max() ?? 0) + 1
+            ))
+        }
         return index
     }
 }
 
-public enum RagCorpusError: Error {
+public enum RagCorpusError: Error, CustomStringConvertible {
     case unknownBook(String)
     case unknownChunk(String)
+    case embeddingEmpty(String, stored: Int)
+
+    public var description: String {
+        switch self {
+        case let .unknownBook(key): "no corpus book named \(key)"
+        case let .unknownChunk(id): "no corpus chunk with id \(id)"
+        case let .embeddingEmpty(key, stored):
+            "\(key): embedding pass left \(stored) vectors; the semantic arm would have measured the lexical one"
+        }
+    }
 }
