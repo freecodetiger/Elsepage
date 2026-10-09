@@ -47,7 +47,8 @@
       机制侧确认无需改动：懒补发（`App/Thoughts/ThoughtsModel.swift:95-112`）符合 PRD §14「离线产生的数据待未来联网后再处理，但不能阻塞用户阅读」，文案已指明续接位置。
       **未采纳的完整解**：重开一条缺回应的 Reflection 会话页时没有手动「重试回应」按钮（网络类失败的文案「现在网络不可用，表达仍已保存在本机。」本身诚实，不误导）。留作 P2。
 - [ ] **`requiresOnDeviceRecognition` 决策** `[Agent]` + `[用户]`
-      `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift:124-127` 未设置，实际可能走 Apple 服务端。开了更诚实（但识别质量与语言覆盖下降），关了就按现状修正隐私文案措辞。
+      `Sources/SpeechCore/SystemSpeechTranscriptionProvider.swift` 未设置该属性，即允许走 Apple 服务端。这是**隐私 vs 准确率的取舍，不是免费修正**：端上 zh-CN 模型更小，开了可能更差。**现在可以量了** —— `speech.transcribe` DEBUG 动作支持传入该开关重跑同一段音频，协议见 `docs/testing/voice/2026-10-09-transcription-measurement.md`。先测再定，别顺手打开。
+      相关：§21.1 的豁免理由写「系统转写本地优先」，这句话在当前代码里不成立，无论怎么定案都要同步改一处。
 - [ ] **`Reset Reader Profile` 无独立入口** `[Agent]`
       PRD §13.3 要求；现只能靠「清除全部记忆」连带清除（`App/MyMind/MyMindModel.swift:156-161`）。
 - [ ] **App Store 元数据收尾** `[用户]`（文案可 `[Agent]` 起草）
