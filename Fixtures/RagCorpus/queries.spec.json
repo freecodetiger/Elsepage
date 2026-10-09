@@ -1,0 +1,507 @@
+{
+  "queries": [
+    {
+      "id": "b1-legit-01",
+      "book": "book-01",
+      "intent": "legit",
+      "split": "dev",
+      "text": "慢波睡眠到底有什么特点",
+      "gold": "再往深处去，波形变得更慢、更大、",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "说梦是排练，最流行的版本是威胁演"
+      },
+      "note": "slow-wave sleep described in ch01, reader is in ch04"
+    },
+    {
+      "id": "b1-legit-02",
+      "book": "book-01",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "记忆的编码是不是也分深浅",
+      "gold": "编码也分深浅。只把字形或声音过一",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这个次序很反直觉。我们习惯把困等"
+      },
+      "note": "encoding depth in ch02, reader is in ch05"
+    },
+    {
+      "id": "b1-legit-03",
+      "book": "book-01",
+      "intent": "legit",
+      "split": "dev",
+      "text": "重放最后是送到大脑皮层吗",
+      "gold": "终点是大脑皮层。那是一层铺在外面",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "最有名的一种叫精神运动警觉测验，"
+      },
+      "note": "cortex as replay destination in ch03, reader is in ch05"
+    },
+    {
+      "id": "b1-legit-04",
+      "book": "book-01",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "婴儿为什么需要睡那么久",
+      "gold": "婴儿为什么需要那么长的睡眠，用排",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这个重新固定的窗口只有几十分钟到"
+      },
+      "note": "sleep need in infancy in ch01, reader is in ch06"
+    },
+    {
+      "id": "b1-legit-05",
+      "book": "book-01",
+      "intent": "legit",
+      "split": "dev",
+      "text": "搬运没做完会怎么样",
+      "gold": "那么搬运没做完会怎样。最轻的表现",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "顺着这条曲线看，复习的第一个好处"
+      },
+      "note": "incomplete consolidation in ch03, reader is in ch06"
+    },
+    {
+      "id": "b1-legit-06",
+      "book": "book-01",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "提取这一关为什么最难",
+      "gold": "第三道关是提取。存下来不等于取得",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "变强这件事，在清醒时几乎是默认方"
+      },
+      "note": "retrieval as the third stage in ch02, reader is in ch07"
+    },
+    {
+      "id": "b1-paraphrase-01",
+      "book": "book-01",
+      "intent": "paraphrase",
+      "split": "dev",
+      "text": "把白天的碎片挪进长期仓库",
+      "gold": "把白天的碎片挪进长期仓库",
+      "paraphrase": "让新痕迹在旧网络上重新固定",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "慢波在这里是关键。深睡时那种又大"
+      },
+      "note": "W1 in ch02 and W2 in ch06 share no trigram; both are behind a ch07 cursor"
+    },
+    {
+      "id": "b1-adversarial-01",
+      "book": "book-01",
+      "intent": "adversarial",
+      "split": "dev",
+      "text": "突触稳态假说",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "涟漪的时机挑得很准。皮层的慢波有"
+      },
+      "mustStayUnreachable": [
+        "人醒着的每一刻，大脑都在接收输入，并",
+        "突触稳态假说这个名字里的稳态，指的就",
+        "突触稳态假说对记忆的作用，和主流的记",
+        "完成这件事。突触稳态假说给出的，是这"
+      ],
+      "note": "the ch07 term exists, the reader is in ch03, all four children must be hidden"
+    },
+    {
+      "id": "b1-adversarial-02",
+      "book": "book-01",
+      "intent": "adversarial",
+      "split": "holdout",
+      "text": "胶质淋巴系统",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "读梦的历史长得惊人。几千年前的人"
+      },
+      "mustStayUnreachable": [
+        "后来被命名为胶质淋巴系统，名字一望可",
+        "的搏动变弱，胶质淋巴系统依赖的那套通",
+        "过程的速度，胶质淋巴系统也确实是一群"
+      ],
+      "note": "the ch08 term exists, the reader is in ch04, all three children must be hidden"
+    },
+    {
+      "id": "b1-edge-01",
+      "book": "book-01",
+      "intent": "edge",
+      "split": "dev",
+      "text": "有人会问，九十分钟这个数字是铁律吗。",
+      "gold": "有人会问，九十分钟这个数字是铁律吗。",
+      "cursor": {
+        "kind": "insideChunk",
+        "marker": "有人会问，九十分钟这个数字是铁律吗。",
+        "fraction": 0.5
+      },
+      "note": "cursor strictly inside a multi-block span: the anchor must be the active chunk"
+    },
+    {
+      "id": "b1-edge-02",
+      "book": "book-01",
+      "intent": "edge",
+      "split": "holdout",
+      "text": "酒精则更麻烦。它确实能让人更快入睡，",
+      "gold": "酒精则更麻烦。它确实能让人更快入睡，",
+      "cursor": {
+        "kind": "gapAfterChunk",
+        "marker": "酒精则更麻烦。它确实能让人更快入睡，"
+      },
+      "note": "cursor in the gap between two spans: no chunk may be reported as active"
+    },
+    {
+      "id": "b1-edge-03",
+      "book": "book-01",
+      "intent": "edge",
+      "split": "dev",
+      "text": "那么困意到底从哪儿来。一部分是欠账。",
+      "gold": "那么困意到底从哪儿来。一部分是欠账。",
+      "cursor": {
+        "kind": "atZeroWidthChunk",
+        "marker": "那么困意到底从哪儿来。一部分是欠账。"
+      },
+      "note": "cursor on a zero-width span: the point is readable, the next span is not"
+    },
+    {
+      "id": "b2-legit-01",
+      "book": "book-02",
+      "intent": "legit",
+      "split": "dev",
+      "text": "这种不安从哪来",
+      "gold": "这种不安并不来自危险本身，而来自",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "阴影不只是避暑。它也是一条线索，"
+      },
+      "note": "street safety as social in ch01, reader is in ch04"
+    },
+    {
+      "id": "b2-legit-02",
+      "book": "book-02",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "人的体力为什么会不够用",
+      "gold": "这不是夸张。人的体力是有价格的，",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "边界之所以好用，是因为它同时朝两"
+      },
+      "note": "the cost of standing in ch02, reader is in ch05"
+    },
+    {
+      "id": "b2-legit-03",
+      "book": "book-02",
+      "intent": "legit",
+      "split": "dev",
+      "text": "街区长度到底是怎么定的",
+      "gold": "最基础的一个量是街区长度。街区指",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "一道软边界最典型的例子是台阶。台"
+      },
+      "note": "block length in ch03, reader is in ch05"
+    },
+    {
+      "id": "b2-legit-04",
+      "book": "book-02",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "街道分成两类是怎么回事",
+      "gold": "于是街道渐渐分成两类。一类是通道",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "社会学家把这种关系叫作弱联系。它"
+      },
+      "note": "through-street versus place in ch01, reader is in ch06"
+    },
+    {
+      "id": "b2-legit-05",
+      "book": "book-02",
+      "intent": "legit",
+      "split": "dev",
+      "text": "除了扶手还有别的办法吗",
+      "gold": "除了扶手，还有别的办法。有的地方",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这两种街区的差别，不在于住着什么"
+      },
+      "note": "alternatives to hostile seating in ch02, reader is in ch06"
+    },
+    {
+      "id": "b2-legit-06",
+      "book": "book-02",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "为什么距离感会变",
+      "gold": "距离感为什么会变，这件事其实很值",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "问题在于，同一时期美国几乎所有大"
+      },
+      "note": "how distance is perceived in ch03, reader is in ch07"
+    },
+    {
+      "id": "b2-paraphrase-01",
+      "book": "book-02",
+      "intent": "paraphrase",
+      "split": "dev",
+      "text": "让人愿意停下脚步的余地",
+      "gold": "让人愿意停下脚步的余地",
+      "paraphrase": "把路过的人留成在场的人",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "问题在于，同一时期美国几乎所有大"
+      },
+      "note": "W1 in ch02 and W2 in ch06 share no trigram; both are behind a ch07 cursor"
+    },
+    {
+      "id": "b2-adversarial-01",
+      "book": "book-02",
+      "intent": "adversarial",
+      "split": "dev",
+      "text": "破窗理论",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "最基础的一个量是街区长度。街区指"
+      },
+      "mustStayUnreachable": [
+        "一个名字，叫破窗理论。它真正谈论的不",
+        "的一项政策。破窗理论在这里遇到了它最",
+        "品交易聚集。破窗理论看到了其中一条线",
+        "而不是犯罪。破窗理论对这条回路的描述",
+        "说到底，破窗理论给对了一个提醒，给错"
+      ],
+      "note": "the ch07 term exists, the reader is in ch03, all five children must be hidden"
+    },
+    {
+      "id": "b2-adversarial-02",
+      "book": "book-02",
+      "intent": "adversarial",
+      "split": "holdout",
+      "text": "场所精神",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "阴影不只是避暑。它也是一条线索，"
+      },
+      "mustStayUnreachable": [
+        "牌子上的字很少有人读完。一块挂在墙上",
+        "是这一点，让场所精神难以被搬迁。有人",
+        "地方，恰恰是场所精神最容易扎根的土。"
+      ],
+      "note": "the ch08 term exists, the reader is in ch04, all three children must be hidden"
+    },
+    {
+      "id": "b2-edge-01",
+      "book": "book-02",
+      "intent": "edge",
+      "split": "dev",
+      "text": "留下来的空间也变了形状。楼前原本属于",
+      "gold": "留下来的空间也变了形状。楼前原本属于",
+      "cursor": {
+        "kind": "insideChunk",
+        "marker": "留下来的空间也变了形状。楼前原本属于",
+        "fraction": 0.5
+      },
+      "note": "cursor strictly inside a multi-block span: the anchor must be the active chunk"
+    },
+    {
+      "id": "b2-edge-02",
+      "book": "book-02",
+      "intent": "edge",
+      "split": "holdout",
+      "text": "一个不容易被提起的事实是：一条街用得",
+      "gold": "一个不容易被提起的事实是：一条街用得",
+      "cursor": {
+        "kind": "gapAfterChunk",
+        "marker": "一个不容易被提起的事实是：一条街用得"
+      },
+      "note": "cursor in the gap between two spans: no chunk may be reported as active"
+    },
+    {
+      "id": "b2-edge-03",
+      "book": "book-02",
+      "intent": "edge",
+      "split": "dev",
+      "text": "有意思的是，人行道最初并不是为社交修",
+      "gold": "有意思的是，人行道最初并不是为社交修",
+      "cursor": {
+        "kind": "atZeroWidthChunk",
+        "marker": "有意思的是，人行道最初并不是为社交修"
+      },
+      "note": "cursor on a zero-width span: the point is readable, the next span is not"
+    },
+    {
+      "id": "b3-legit-01",
+      "book": "book-03",
+      "intent": "legit",
+      "split": "dev",
+      "text": "译本为什么不能算原文",
+      "gold": "所以更准确的说法是：译本不是原文",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这种隐身有一种安静的代价。原文里"
+      },
+      "note": "translation as a second writing in ch01, reader is in ch04"
+    },
+    {
+      "id": "b3-legit-02",
+      "book": "book-03",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "词为什么不能单独过日子",
+      "gold": "更麻烦的是，词并不单独过日子。一",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "最先丢失的往往是节奏。原文句子的"
+      },
+      "note": "words carry their company in ch02, reader is in ch05"
+    },
+    {
+      "id": "b3-legit-03",
+      "book": "book-03",
+      "intent": "legit",
+      "split": "dev",
+      "text": "没有实物的词要怎么译",
+      "gold": "麻烦的是那些没有实物的词。一种制",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "笑话的死法最能说明问题。幽默往往"
+      },
+      "note": "transliteration without a referent in ch03, reader is in ch05"
+    },
+    {
+      "id": "b3-legit-04",
+      "book": "book-03",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "礼貌的小词该怎么处理",
+      "gold": "表示礼貌的小词更微妙。有的语言里",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "最直观的例子是句子节奏。上世纪二"
+      },
+      "note": "politeness particles in ch02, reader is in ch06"
+    },
+    {
+      "id": "b3-legit-05",
+      "book": "book-03",
+      "intent": "legit",
+      "split": "dev",
+      "text": "译者隐身有什么代价",
+      "gold": "这种隐身有一种安静的代价。原文里",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "还有一层是判断。早年的译者未必知"
+      },
+      "note": "the cost of an invisible translator in ch04, reader is in ch06"
+    },
+    {
+      "id": "b3-legit-06",
+      "book": "book-03",
+      "intent": "legit",
+      "split": "holdout",
+      "text": "翻译最先丢掉的是什么",
+      "gold": "最先丢失的往往是节奏。原文句子的",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这一步叠合，悄悄搬动了权威的位置"
+      },
+      "note": "rhythm lost in translation in ch05, reader is in ch07"
+    },
+    {
+      "id": "b3-paraphrase-01",
+      "book": "book-03",
+      "intent": "paraphrase",
+      "split": "dev",
+      "text": "两种语言之间没有并排的座位",
+      "gold": "两种语言之间没有并排的座位",
+      "paraphrase": "意义在换轨的地方会掉落一点",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这一步叠合，悄悄搬动了权威的位置"
+      },
+      "note": "W1 in ch02 and W2 in ch06 share no trigram; both are behind a ch07 cursor"
+    },
+    {
+      "id": "b3-adversarial-01",
+      "book": "book-03",
+      "intent": "adversarial",
+      "split": "dev",
+      "text": "动态对等",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "麻烦的是那些没有实物的词。一种制"
+      },
+      "mustStayUnreachable": [
+        "一个名字，叫动态对等。意思是说，译文",
+        "拿动态对等去看一些具体的句子，效果确",
+        "于是动态对等给了译者一项很大的权力。",
+        "也许是这样：动态对等是一把好用的尺子",
+        "换个角度看，动态对等其实承认了一件很"
+      ],
+      "note": "the ch07 term exists, the reader is in ch03, all five children must be hidden"
+    },
+    {
+      "id": "b3-adversarial-02",
+      "book": "book-03",
+      "intent": "adversarial",
+      "split": "holdout",
+      "text": "译本的生命周期",
+      "cursor": {
+        "kind": "atChunkEnd",
+        "marker": "这种隐身有一种安静的代价。原文里"
+      },
+      "mustStayUnreachable": [
+        "译本的生命周期正是在这里显出第一层意",
+        "于是新译本常要做两件事。一是尽量贴近",
+        "译本的生命周期因此有明显的阶段性。先"
+      ],
+      "note": "the ch08 term exists, the reader is in ch04, all three children must be hidden"
+    },
+    {
+      "id": "b3-edge-01",
+      "book": "book-03",
+      "intent": "edge",
+      "split": "dev",
+      "text": "举个例子。原文里一句话用了被动，中文",
+      "gold": "举个例子。原文里一句话用了被动，中文",
+      "cursor": {
+        "kind": "insideChunk",
+        "marker": "举个例子。原文里一句话用了被动，中文",
+        "fraction": 0.5
+      },
+      "note": "cursor strictly inside a multi-block span: the anchor must be the active chunk"
+    },
+    {
+      "id": "b3-edge-02",
+      "book": "book-03",
+      "intent": "edge",
+      "split": "holdout",
+      "text": "时态也是同一类问题。有的语言靠动词变",
+      "gold": "时态也是同一类问题。有的语言靠动词变",
+      "cursor": {
+        "kind": "gapAfterChunk",
+        "marker": "时态也是同一类问题。有的语言靠动词变"
+      },
+      "note": "cursor in the gap between two spans: no chunk may be reported as active"
+    },
+    {
+      "id": "b3-edge-03",
+      "book": "book-03",
+      "intent": "edge",
+      "split": "dev",
+      "text": "其中一方的处境更被动。读者读的是译文",
+      "gold": "其中一方的处境更被动。读者读的是译文",
+      "cursor": {
+        "kind": "atZeroWidthChunk",
+        "marker": "其中一方的处境更被动。读者读的是译文"
+      },
+      "note": "cursor on a zero-width span: the point is readable, the next span is not"
+    }
+  ]
+}
