@@ -172,6 +172,10 @@ targets:
         product: Persistence
       - package: ReadLoopCore
         product: RetrievalCore
+      - package: ReadLoopCore
+        product: ReflectionCore
+      - package: ReadLoopCore
+        product: RagBenchCore
       - package: Readium
         product: ReadiumShared
       - package: Readium

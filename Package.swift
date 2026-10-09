@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "Persistence", targets: ["Persistence"]),
         .library(name: "AppInfrastructure", targets: ["AppInfrastructure"]),
         .library(name: "BenchCore", targets: ["BenchCore"]),
+        .library(name: "RagBenchCore", targets: ["RagBenchCore"]),
         .executable(name: "readloop-bench", targets: ["readloop-bench"]),
         .executable(name: "readloop-bench-compare", targets: ["readloop-bench-compare"]),
     ],
@@ -55,6 +56,11 @@ let package = Package(
                 "AgentRuntime", "BrainCore", "ContextEngineering", "ContextRouting", "LibraryCore",
                 "ModelProviders", "ReaderAgent", "ReaderCore", "ReflectionCore", "RetrievalCore",
             ]
+        ),
+        .target(
+            name: "RagBenchCore",
+            dependencies: ["LibraryCore", "ReaderCore", "RetrievalCore", "Persistence",
+                           .product(name: "GRDB", package: "GRDB.swift")]
         ),
         .executableTarget(name: "readloop-bench", dependencies: ["BenchCore"]),
         .executableTarget(name: "readloop-bench-compare", dependencies: ["BenchCore"]),
