@@ -1451,7 +1451,8 @@ struct ReflectionConversationView: View {
                     ReflectionComposer(
                         model: model,
                         isVoiceInputActive: $isVoiceInputActive,
-                        isFocused: $isComposerFocused
+                        isFocused: $isComposerFocused,
+                        contextualStrings: contextualStrings
                     )
 
                     Color.clear.frame(height: 1).id("reflection-conversation-bottom")
@@ -1634,6 +1635,9 @@ private struct ReflectionComposer: View {
     @Bindable var model: ReflectionConversationModel
     @Binding var isVoiceInputActive: Bool
     @Binding var isFocused: Bool
+    /// Passed through from the conversation so a recorded follow-up is biased the
+    /// same way the initial Reflection was.
+    var contextualStrings: [String] = []
     @State private var hasMarkedText = false
     @State private var voiceNotice: String?
     @State private var clearedDraft: ReflectionTextDraft?
