@@ -12,10 +12,20 @@
     <item id="ch01" href="ch01.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch02" href="ch02.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch03" href="ch03.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch04" href="ch04.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch05" href="ch05.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch06" href="ch06.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch07" href="ch07.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch08" href="ch08.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
   <spine>
     <itemref idref="ch01"/>
     <itemref idref="ch02"/>
     <itemref idref="ch03"/>
+    <itemref idref="ch04"/>
+    <itemref idref="ch05"/>
+    <itemref idref="ch06"/>
+    <itemref idref="ch07"/>
+    <itemref idref="ch08"/>
   </spine>
 </package>
