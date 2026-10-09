@@ -139,6 +139,30 @@ def character_error_rate(reference, hypothesis):
     return previous[-1] / len(reference)
 
 
+# Must track `SpeechRecognitionConfiguration` in Sources/SpeechCore. The device
+# silently trims, dedupes and caps the list, so a request that breaks these rules
+# comes back different — which below would be misread as a device fault.
+MAX_CONTEXTUAL_STRINGS = 100
+MAX_CONTEXTUAL_STRING_LENGTH = 40
+
+
+def validate_contextual_strings(contextual_strings):
+    """Rejects a request the device is documented to alter, naming the entry at
+    fault. Without this, a client-side mistake surfaces as 'the device was biased
+    with something else', which sends the investigation to the wrong side."""
+    for phrase in contextual_strings:
+        check(len(phrase) <= MAX_CONTEXTUAL_STRING_LENGTH,
+              "Contextual string %r exceeds %d characters, so the device drops it; "
+              "shorten it or remove it" % (phrase, MAX_CONTEXTUAL_STRING_LENGTH))
+    lowered = [phrase.lower() for phrase in contextual_strings]
+    check(len(set(lowered)) == len(lowered),
+          "Contextual strings repeat an entry (case-insensitively), and the device collapses it: %r"
+          % contextual_strings)
+    check(len(contextual_strings) <= MAX_CONTEXTUAL_STRINGS,
+          "More than %d contextual strings; the device keeps only the first %d"
+          % (MAX_CONTEXTUAL_STRINGS, MAX_CONTEXTUAL_STRINGS))
+
+
 def run_transcribe(client, directory, reference_path, contextual_strings):
     """Re-recognises unchanged clips, so a configuration change can be attributed
     to the configuration instead of to the speaker saying it differently.
@@ -152,7 +176,9 @@ def run_transcribe(client, directory, reference_path, contextual_strings):
     manifest = json.loads(Path(reference_path).read_text())
     clips = manifest.get("clips") or []
     check(clips, "Reference manifest has no clips")
-    requested = {s.strip() for s in contextual_strings if s.strip()}
+    requested_strings = [s.strip() for s in contextual_strings if s.strip()]
+    validate_contextual_strings(requested_strings)
+    requested = set(requested_strings)
 
     results = []
     for clip in clips:

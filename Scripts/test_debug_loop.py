@@ -1,13 +1,19 @@
 """Tests that the host verdict rejects false business success."""
 import base64
+import contextlib
+import http.server
+import io
 import json
+import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 import urllib.error
-from debug_loop import (character_error_rate, decode_screenshot, normalize_text, run_save,
-                        run_screenshot, run_transcribe, wait_ready, forward_usb)
+from debug_loop import (character_error_rate, decode_screenshot, main, normalize_text, run_save,
+                        run_screenshot, run_transcribe, validate_contextual_strings,
+                        wait_ready, forward_usb)
 
 
 class ScenarioClient:
@@ -187,6 +193,142 @@ class TranscribeScenarioTests(unittest.TestCase):
             stub = TranscribeStub({})
             with self.assertRaises(AssertionError):
                 run_transcribe(stub, Path(directory), manifest(directory, []), [])
+
+
+class ContextualStringValidationTests(unittest.TestCase):
+    """The device alters an out-of-spec list, and the echo check would then blame
+    the device for a client-side mistake, so the request is validated here."""
+
+    def test_a_normal_list_passes(self):
+        validate_contextual_strings(["置身事内", "兰小欢"])
+
+    def test_an_over_long_entry_is_rejected_by_name(self):
+        with self.assertRaises(AssertionError) as raised:
+            validate_contextual_strings(["置身事内", "字" * 41])
+        self.assertIn("字" * 41, str(raised.exception))
+
+    def test_a_case_insensitive_duplicate_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            validate_contextual_strings(["Keynesian", "keynesian"])
+
+    def test_too_many_entries_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            validate_contextual_strings(["术语%d" % i for i in range(101)])
+
+
+class FakeDevice:
+    """Serves the two routes the transcribe scenario touches."""
+
+    def __init__(self, transcripts, echo=None):
+        self.transcripts = transcripts
+        self.echo = echo
+        self.received = []
+
+    def start(self):
+        outer = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/status":
+                    outer.respond(self, {"protocolVersion": 1, "actions": ["speech.transcribe"]})
+                else:
+                    outer.respond(self, {"error": "unknown_route"}, 404)
+
+            def do_POST(self):
+                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                outer.received.append(payload)
+                if self.path != "/transcribe":
+                    outer.respond(self, {"error": "unknown_route"}, 404)
+                    return
+                outer.respond(self, {
+                    "file": payload["file"],
+                    "transcript": outer.transcripts[payload["file"]],
+                    "contextualStrings": payload["contextualStrings"] if outer.echo is None else outer.echo,
+                })
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        return "http://127.0.0.1:%d" % self.server.server_address[1]
+
+    def respond(self, handler, value, code=200):
+        body = json.dumps(value).encode()
+        handler.send_response(code)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+class DriverEndToEndTests(unittest.TestCase):
+    """Runs the real CLI against a fake device. The stub tests above bypass
+    urllib, argument parsing and the run directory — which is where a driver
+    actually breaks — and this half runs on this machine, so it should be proven
+    before anyone spends an evening recording five clips."""
+
+    clips = [{"file": "latest", "reference": "他说的 incentive 是制度设计的问题", "note": "中英混"}]
+
+    def run_cli(self, base, directory, clips, extra=()):
+        argv = ["debug_loop.py", "transcribe", "--base", base, "--output", str(directory),
+                "--reference", str(manifest(directory, clips)), *extra]
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as exit_reason:
+                main()
+        return exit_reason.exception.code
+
+    def results(self, directory):
+        found = list(Path(directory).glob("*/result.json"))
+        self.assertEqual(len(found), 1, "Expected exactly one run directory")
+        return json.loads(found[0].read_text()), found[0].parent
+
+    def test_a_clean_run_records_evidence_and_exits_zero(self):
+        device = FakeDevice({"latest": "他说的 incentive 是制度设计的问题"})
+        try:
+            base = device.start()
+            with tempfile.TemporaryDirectory() as raw:
+                code = self.run_cli(base, raw, self.clips,
+                                    extra=["--contextual-strings", "置身事内,兰小欢"])
+                self.assertEqual(code, 0)
+                evidence, run_directory = self.results(raw)
+                self.assertEqual(evidence["verdict"], "PASS")
+                self.assertEqual(evidence["transcription"]["exact_matches"], 1)
+                self.assertTrue((run_directory / "transcripts.json").exists())
+                # The bias must survive the wire, not just be echoed back.
+                self.assertEqual(device.received[0]["contextualStrings"], ["置身事内", "兰小欢"])
+        finally:
+            device.stop()
+
+    def test_a_device_that_drops_the_bias_exits_nonzero(self):
+        device = FakeDevice({"latest": "他说的 incentive 是制度设计的问题"}, echo=[])
+        try:
+            base = device.start()
+            with tempfile.TemporaryDirectory() as raw:
+                code = self.run_cli(base, raw, self.clips,
+                                    extra=["--contextual-strings", "置身事内,兰小欢"])
+                self.assertEqual(code, 1)
+                evidence, _ = self.results(raw)
+                self.assertEqual(evidence["verdict"], "FAIL")
+                self.assertIn("not the requested", evidence["error"])
+        finally:
+            device.stop()
+
+    def test_an_out_of_spec_bias_is_rejected_before_any_request(self):
+        device = FakeDevice({"latest": "他说的 incentive 是制度设计的问题"})
+        try:
+            base = device.start()
+            with tempfile.TemporaryDirectory() as raw:
+                code = self.run_cli(base, raw, self.clips,
+                                    extra=["--contextual-strings", "字" * 41])
+                self.assertEqual(code, 1)
+                self.assertEqual(device.received, [], "An out-of-spec request reached the device")
+        finally:
+            device.stop()
 
 
 if __name__ == "__main__":
