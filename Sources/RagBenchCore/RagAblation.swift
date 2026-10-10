@@ -19,9 +19,14 @@ public struct RagArm: Codable, Hashable, Sendable {
     /// (a budget of one character admits no sibling), so both settings run
     /// production code rather than a bypass.
     public var expand: Bool
+    /// Rerank relevance floor. A floor of zero keeps every candidate the
+    /// reranker scored, so the arm isolates *reordering* from *filtering* —
+    /// two effects the single default value conflates.
+    public var minimumRelevance: Double
 
-    public init(name: String, semantic: Bool, rerank: Bool, expand: Bool) {
+    public init(name: String, semantic: Bool, rerank: Bool, expand: Bool, minimumRelevance: Double = 0.25) {
         self.name = name; self.semantic = semantic; self.rerank = rerank; self.expand = expand
+        self.minimumRelevance = minimumRelevance
     }
 
     /// The standard ladder. `lexical` is the control: refusion, rerank and
@@ -150,6 +155,7 @@ public struct RagAblation {
                 embeddingProvider: arm.semantic ? providers.embedding : nil,
                 reranker: arm.rerank ? providers.reranker : nil,
                 rerankCandidateCount: max(10, k),
+                minimumRelevance: arm.minimumRelevance,
                 expander: arm.expand
                     ? SmallToBigExpander()
                     : SmallToBigExpander(windowCharacterBudget: 1, maxSiblingsPerSide: 1)

@@ -80,8 +80,12 @@ resources. 0 overlapping adjacent spans, 202 gaps, 51 zero-width spans, at most
 ## The ablation
 
 ```
-swift run readloop-rag-bench [--k N] [--arms a,b,c]
+swift run readloop-rag-bench [--k N] [--arms a,b,c] [--rerank-floors f1,f2,...]
 ```
+
+`--rerank-floors` replaces the ladder's rerank arm with one arm per floor, so a
+single run shows whether a reranker's harm comes from its ordering or from the
+relevance threshold it filters with.
 
 Four arms, each a configuration of the production `LocalBookRetriever`:
 
@@ -128,34 +132,90 @@ arms.
 
 ### Findings
 
+**Read the per-query basis before reading the aggregate.** 27 of the 30
+gold-bearing queries have the *same gold rank* in `lexical` as in `hybrid`, and
+the median gold rank is 1 in every arm. Columns differ by one or two queries:
+
+| change | queries that moved at all | queries whose hit/miss flipped |
+|---|---|---|
+| `lexical → hybrid` | 3 of 30 | 1 (b3-legit-01, 0.000 → 1.000) |
+| `hybrid → rerank` | 6 of 30 | 2 (b1-legit-03, b2-legit-02, 1.000 → 0.000) |
+
+So none of the aggregate deltas are estimates of a rate. They are the effect of
+a handful of queries, and they are reported here as such.
+
 1. **Small-to-big changes the evidence, not the ranking.** The two lexical arms
    are identical on recall, parent recall, MRR, nDCG and edge correctness. Only
-   evidence size moves, 792 → 2078 characters. Expansion decides what the
-   window says, not which passages win.
+   evidence size moves, 792 → 2078 characters. This one is a property of the
+   code, not a discovery: the expander runs downstream of ranking, and evidence
+   ids are parent ids whatever the window size. It is kept as a regression
+   guard.
 
-2. **Semantic fusion buys a little recall and costs a little rank.** recall@5
-   0.883 → 0.917 (+0.034), MRR 0.908 → 0.893 (−0.015), nDCG unchanged. The
-   delta is above the measured drift, so it is resolvable rather than noise —
-   but it is small.
+2. **Semantic fusion rescues lexical failures and nothing else.** Every query
+   where the two arms differ is one the lexical lane missed outright. On the 27
+   queries lexical already ranks first, fusion changes nothing. The pattern is
+   stable across k rather than a single-point artifact:
 
-3. **The reranker hurts on this corpus.** recall 0.917 → 0.850 (−0.067), parent
-   recall 0.850 → 0.783, nDCG 0.897 → 0.858, and evidence drops from 3694 to
-   1211 characters. `minimumRelevance = 0.25` is discarding passages the fused
-   ranking had right. The gate is tuned against bge-reranker's score
-   distribution, which this run suggests is too high.
+   | k | lexical recall | hybrid recall | lexical MRR | hybrid MRR |
+   |---|---|---|---|---|
+   | 3 | 0.850 | 0.867 | 0.900 | 0.878 |
+   | 5 | 0.883 | 0.917 | 0.908 | 0.893 |
+   | 10 | 0.883 | 0.917 | 0.908 | 0.893 |
+   | 20 | 0.883 | **0.967** | 0.908 | 0.895 |
 
-4. **The paraphrase bucket's premise fails.** All four arms score recall@5 =
-   0.500 on paraphrase queries: the differently-worded twin (grade 1) is never
-   retrieved. The obvious explanation — RRF fusion over a full-length semantic
-   list pushes it just below the top-k cut — was tested by re-running at k=10
-   and **rejected**: the twin is not in the top 10 either. On this corpus,
-   bge-m3 does not connect `把白天的碎片挪进长期仓库` with
-   `让新痕迹在旧网络上重新固定`. The bucket still measures something real; what
-   it measures is that the design's assumption does not hold here.
+   Lexical saturates at k=5 and never improves again; the semantic lane keeps
+   finding gold as k grows. But MRR is *worse* at every k. The lane buys tail
+   recall with head precision — and the product's context budget is
+   `evidenceLimit = 4`, which is the head.
+
+3. **The reranker is a net loss, and the threshold is not the reason.** Sweeping
+   the relevance floor separates reordering from filtering:
+
+   | arm | recall@5 | parent | MRR | nDCG | evidence |
+   |---|---|---|---|---|---|
+   | `hybrid` (no rerank) | 0.917 | 0.850 | 0.893 | 0.897 | 3694 ch |
+   | `rerank@0.00` | 0.883 | 0.817 | 0.873 | 0.871 | 3737 ch |
+   | `rerank@0.10` | 0.883 | 0.783 | 0.873 | 0.871 | 1624 ch |
+   | `rerank@0.20` | 0.883 | 0.783 | 0.873 | 0.871 | 1323 ch |
+   | `rerank@0.30` | 0.850 | 0.783 | 0.867 | 0.858 | 1186 ch |
+   | `rerank@0.50` | 0.850 | 0.783 | 0.867 | 0.858 | 893 ch |
+
+   At floor 0 the reranker filters nothing at all — evidence is 3737 characters
+   against the baseline's 3694 — and recall still falls 0.917 → 0.883. So the
+   harm is the cross-encoder's *ordering*, and tuning `minimumRelevance` can
+   only recover the part the floor added. The reranker sees the fused top 10; it
+   has no access to the rank-11–20 rescues that are the semantic lane's whole
+   contribution, and its reordering costs a gold that RRF had placed at rank 5.
+
+4. **The paraphrase bucket: the twin is reachable, but deep.** At k=5 no arm
+   retrieves any of the three twins (recall 0.500 in all four arms). At k=20 the
+   semantic lane retrieves one of them (b2-paraphrase-01, 0.500 → 1.000). So the
+   embedding does connect the two wordings — weakly, at rank 11–20. An earlier
+   version of this document called the connection impossible on the strength of
+   a k=10 run; that was one point on a curve and it was wrong to generalise from
+   it. What holds: on this corpus the paraphrase twin is never a top-5 result,
+   so the bucket measures the semantic lane's ceiling rather than its typical
+   behaviour.
 
 5. **Nothing leaked.** Across every arm and every query, no returned excerpt
    carried text from ahead of the reader's cursor, under either the policy
    predicate or the storage predicate.
+
+### What the corpus cannot tell you
+
+The queries were authored by someone who knew where the gold was, and the gate
+*requires* every legit query to share a trigram with its gold. Both push the
+corpus toward lexical success. "Lexical recall 0.883" is therefore not an
+estimate of production retrieval quality, and quoting it as one would repeat the
+error that got the previous corpus withdrawn.
+
+The deeper problem is difficulty, not sample size. Gold rank is 1 for 27 of 30
+queries: the corpus has no headroom at the top, so no ordering strategy can show
+an improvement there. Where queries are hard enough to discriminate — the
+paraphrase bucket — they are hard enough that little succeeds. There is almost
+no middle. What this harness needs next is not more queries but *harder* ones:
+queries anchored semantically rather than lexically, whose wording does not
+appear in the passage that answers them.
 
 ## Reproducibility
 
@@ -176,12 +236,9 @@ Measured, not assumed:
 
 ## Known limits
 
-- 36 queries is enough to separate the arms on recall, not enough to be
-  confident about small deltas in any single slice — the `holdout` slice has 12
-  gold-bearing queries.
 - One embedding model and one reranker were measured. The findings are about
   those models, not about the techniques.
 - `edge` correctness is 1.000 in every arm, so it currently discriminates
   nothing; it is kept as a regression guard for boundary changes.
-- The corpus is three books by one author working from one design table. It is
-  controlled, not representative.
+- The corpus is three books working from one design table. It is controlled,
+  not representative.

@@ -32,6 +32,10 @@ struct CLIArguments {
     var queriesURL = URL(fileURLWithPath: "Fixtures/RagCorpus/queries.jsonl")
     var k = 5
     var armNames: [String]?
+    /// Sweep the rerank relevance floor instead of using the ladder's default.
+    /// Floor 0 keeps every scored candidate, so the sweep separates reordering
+    /// from filtering.
+    var rerankFloors: [Double]?
 
     static let helpText = """
     readloop-rag-bench [--corpus PATH] [--spec PATH] [--out PATH] [--queries PATH] [--k N] [--arms a,b,c]
@@ -67,6 +71,15 @@ struct CLIArguments {
             case "--arms":
                 guard let raw = value("--arms") else { return .failure(CLIError(message: "--arms 需要一个逗号分隔的参数")) }
                 parsed.armNames = raw.split(separator: ",").map(String.init)
+            case "--rerank-floors":
+                guard let raw = value("--rerank-floors") else {
+                    return .failure(CLIError(message: "--rerank-floors 需要一个逗号分隔的数字参数"))
+                }
+                let floors = raw.split(separator: ",").compactMap { Double($0) }
+                guard floors.count == raw.split(separator: ",").count else {
+                    return .failure(CLIError(message: "--rerank-floors 含无法解析的数字: \(raw)"))
+                }
+                parsed.rerankFloors = floors
             case "--help", "-h":
                 return .failure(CLIError(message: helpText))
             default:
@@ -141,9 +154,18 @@ func main() async throws {
         try await ablation.embedCorpus(providers: resolved.providers)
     }
 
-    let arms = parsed.armNames.map { names in
+    var arms = parsed.armNames.map { names in
         names.compactMap { name in RagArm.ladder.first { $0.name == name } }
     } ?? RagArm.ladder
+    if let floors = parsed.rerankFloors {
+        // Keep the local arms as the reference line, then one rerank arm per
+        // floor so the sweep is read against the same baseline every time.
+        arms = RagArm.ladder.filter { !$0.rerank }
+        arms += floors.map {
+            RagArm(name: String(format: "rerank@%.2f", $0), semantic: true, rerank: true,
+                   expand: true, minimumRelevance: $0)
+        }
+    }
     let reports = try await ablation.run(queries: queries, arms: arms, providers: resolved.providers)
 
     for report in reports {
