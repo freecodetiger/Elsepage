@@ -216,7 +216,9 @@ In the description: **user-visible behavior**, **layer touched**, **how you veri
 
 ## License
 
-License file not yet published. Engineering codename: **ReadLoop** · App title: **Reader** · Product: **Elsepage**.
+Copyright (C) 2026 freecodetiger and contributors.
+
+Licensed under the [GNU General Public License, version 3](LICENSE) (`GPL-3.0-only`), without additional exceptions or restrictions. Separately licensed files and third-party dependencies retain their respective licenses.
 
 ---
 

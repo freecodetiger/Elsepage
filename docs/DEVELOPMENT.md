@@ -61,6 +61,6 @@ open ReadLoop.xcodeproj
 - `ReadLoop_Technical_Design.md`、`docs/brain.md` 是重要设计资料，但包含早期方案表述；它们不是每项能力都已实现的证明。
 - `.planning/WORKTREES.md` 有维护者机器的绝对路径及旧验证约定，不能直接照搬；验证分工以当前 AGENTS.md 为准。
 - `CLAUDE.md` 目前指定现维护者的 Git 提交身份；新增协作者的署名策略需要维护者另行调整，不要直接沿用他人的身份。
-- 仓库还没有根 LICENSE；协作可以先明确内部授权，公开分发时由维护者确定许可证。
+- 项目采用未经修改的 [GNU GPL version 3](../LICENSE)（`GPL-3.0-only`），未附加例外或限制；单独标注许可证的文件及第三方依赖保留各自许可。提交贡献前应确认有权按项目许可证提供这些代码。
 
 `.agents/`、`.swiftpm/` 和 Xcode `xcuserdata/` 是被忽略的本地工具/偏好目录，不交付给协作者。`.build/`、`DerivedData/` 是可再生成缓存；清除后首次测试/构建会更慢，可能需要重新下载依赖。分享项目优先使用 Git checkout，避免把整个本地目录连缓存和个人设置一起打包。
