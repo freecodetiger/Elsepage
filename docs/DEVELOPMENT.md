@@ -10,6 +10,8 @@
 4. [DEBUG 测试闭环](DEBUG-LOOP.md)：业务改动、交互性能、DEBUG 服务及测试脚本的维护规则与能力边界。
 5. [仓库清理报告](maintenance/repository-hygiene-2026-10-22.md)：历史文档、分支差异及仍需团队决定的事项。
 
+准备提交代码或文档时，参阅根目录 [CONTRIBUTING.md](../CONTRIBUTING.md)，其中列出了 Issue/PR 流程、验证范围和贡献许可。
+
 ## 环境与验证
 
 - Swift 6；iOS App 需要 Xcode 与 iOS 18 SDK。

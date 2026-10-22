@@ -1,230 +1,158 @@
 <p align="center">
-  <img src="docs/assets/branding/logo-transparent.png" alt="Elsepage" width="128" height="128">
+  <img src="docs/assets/branding/logo-transparent.png" alt="Elsepage logo" width="128" height="128">
 </p>
 
-<h1 align="center">Elsepage</h1>
+<h1 align="center">Elsepage · 页外</h1>
 
 <p align="center">
-  <strong>An iOS reader for people who read to think — not just to finish books.</strong><br>
-  Local-first. BYOK. Your words are the product; the book is the evidence.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/iOS-18%2B-5f6e5f?style=for-the-badge" alt="iOS 18+">
-  <img src="https://img.shields.io/badge/Swift-6.0-F05138?style=for-the-badge&logo=swift&logoColor=white" alt="Swift 6.0">
-  <img src="https://img.shields.io/badge/Local%20first-No%20backend-9cb099?style=for-the-badge" alt="Local first">
-  <img src="https://img.shields.io/badge/BYOK-Your%20key%2C%20your%20data-5f6e5f?style=for-the-badge" alt="BYOK">
+  <strong>Read, reflect, and build a record of how you think.</strong><br>
+  让阅读留下自己的思考。<br>
+  Native iOS · Local-first · Bring your own AI key
 </p>
 
 <p align="center">
-  <a href="#why-elsepage">Why</a> ·
-  <a href="#what-you-get">What you get</a> ·
-  <a href="#hard-lines-we-wont-cross">Hard lines</a> ·
-  <a href="#status">Status</a> ·
+  <img src="https://img.shields.io/badge/iOS-18%2B-5f6e5f?style=flat-square" alt="iOS 18+">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square" alt="Swift 6">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-5f6e5f?style=flat-square" alt="GPL-3.0 license">
+</p>
+
+<p align="center">
+  <a href="#the-idea">The idea</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#project-status">Status</a> ·
   <a href="#build-from-source">Build</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#contributing">Contributing</a>
+  <a href="#contributing">Contributing</a> ·
+  <a href="#license">License</a>
 </p>
 
----
+## The idea
 
-Elsepage is a **native iOS EPUB reader with a personal thinking loop**: read, end a session, say what it made you think — text or voice — keep the words on-device, and when you want, get a grounded AI response that cites the book instead of generic ChatGPT glow.
+Elsepage is an open-source iOS EPUB reader and personal thinking companion. Read a passage, write or speak what it brings to mind, and invite an AI response grounded in your reading and past reflections. Over time, those entries become a personal archive of ideas, questions, and changes in perspective.
 
-It does **not** own your progress bar and call it a day. It does not summarize the book for you by default. It does not phone home.
+Your original reflection is saved locally before an AI reply is requested. AI feedback, summaries, and personal memory are derived records; your own words remain the foundation.
 
-> **Bring your own key (BYOK).** Provider-agnostic — OpenAI, DeepSeek, Gemini-compatible, or Anthropic behind one small `ModelClient` contract. The key lives only in Keychain. No Elsepage backend, no account, no cloud vector database.
+The interface is primarily Chinese. **ReadLoop** is the engineering name used by the Swift package and Xcode project.
 
----
+## Features
 
-开发与测试：项目已有 [AI DEBUG 测试闭环](docs/DEBUG-LOOP.md)，支持 USB 自动连接、性能报告读取和隔离数据库中的 Reflection 保存验证。业务改动与测试扩展遵循 [Agent 维护约定](AGENTS.md)。当前能力与尚未覆盖的流程见测试文档。
+| Area | Current implementation |
+| --- | --- |
+| EPUB reading | Readium-based reader, reading position restoration, themes, highlights, notes, search, and user-initiated passage help. |
+| Reflection | Text and voice input after reading, local save, follow-up discussion, and retry for a missing Agent reply. |
+| Voice | On-device `zh-CN` recognition, editable partial transcripts, optional saved audio with playback, and separate BYOK text polish. Recognition requires an available on-device model. |
+| Grounded feedback | Reading-session context, book evidence retrieval, links to cited passages, and connections to past reflections. |
+| Personal Brain | Thoughts, questions, and memories with source evidence, revisions, editing, and deletion. |
+| Data control | Local book/data storage, export, and deletion controls. App API keys are stored in Keychain. |
 
-新加入的开发者请先读 [开发与协作入口](docs/DEVELOPMENT.md)。文件整理范围和待处理事项见 [2026-10-22 仓库清理报告](docs/maintenance/repository-hygiene-2026-10-22.md)。
+### AI and privacy
 
-## Why Elsepage?
+- Reading and saving text reflections work without a model connection.
+- AI features use your own provider configuration and key. Provider presets include OpenAI, DeepSeek, Anthropic, and Gemini through their respective adapters; custom OpenAI-compatible endpoints are supported.
+- Chat, optional embedding, and reranking requests go directly to configured providers. Requests can contain relevant book excerpts, reflections, and personal context. Those providers' policies apply to the data they receive.
+- Elsepage has no proprietary backend or required Elsepage account. The current Chat adapters use non-streaming HTTP responses.
+- The Agent stays quiet during reading unless you invoke it. See the [product requirements](ReadLoop_PRD.md) for the full product invariants and accepted implementation deviations.
 
-Reading apps fail in two boring ways:
+## Project status
 
-1. **Finish the book, get nothing.** The app tracks progress, streaks, and "completed" — and the two minutes after closing the book, the part that actually makes a book yours, is left to evaporate.
-2. **AI summary machines.** The book gets digested before you've formed a view, so the reading is outsourced and your own thoughts never get to exist.
+**Under active development.** The reading → reflection → saved response → journal flow and the Personal Brain domain are implemented. Implementation does not imply that every device, provider, or failure path has passed acceptance.
 
-Elsepage is built so both stay rare:
+Current verification and release gaps are recorded in:
 
-| Pillar | What it means in practice |
-|--------|---------------------------|
-| **Your words are first-class** | The raw reflection is saved before any AI touch and is never overwritten (PRD P2). |
-| **Local-first to the core** | EPUB, highlights, reflections and the SQLite store live on your device. Reading and reflecting work with no network. |
-| **Grounded AI** | Agent replies carry clickable citations that jump back to the exact passage — not "trust me, I read it". |
-| **BYOK, provider-agnostic** | One `ModelClient` interface; swap OpenAI / DeepSeek / Gemini / Anthropic without touching the loop. |
-| **Voice that's actually usable** | Tap-to-talk or hold-to-talk, live editable transcription, optional AAC/M4A audio, and one-tap AI polish that keeps your meaning. |
-| **Thinking is the product** | Session context, same-book past thoughts, and a structured Journal — the book is evidence, not the end. |
+- [DEBUG test loop](docs/DEBUG-LOOP.md): available device scenarios and their limits; full application E2E automation is still incomplete.
+- [Launch readiness](.planning/LAUNCH-READINESS.md): release work and outstanding acceptance items.
+- [Provider verification matrix](docs/providers/VERIFICATION-MATRIX.md): live provider checks requiring real keys.
 
-If you want an iOS reader that treats **what you thought** as the deliverable, you're in the right repo.
-
----
-
-## What you get
-
-### The reading loop
-
-- **Real EPUB reading** — Readium engine; stable position, highlights, notes, search.
-- **Explicit session end** — "这一段约 N 分钟", then an invitation to leave something behind.
-- **Reflection that saves first** — raw text/voice is persisted locally before any network work; an AI failure never loses your words.
-- **A grounded Agent** — knows what you just read (session context), can retrieve the current book, connects past thoughts from the same book, and cites evidence you can tap back to the page.
-
-### Voice
-
-- **Tap-to-talk or hold-to-talk**, with live (partial) transcription you can edit.
-- **Audio file** — AAC/M4A saved by default when you start a voice recording; you can turn it off before or after recording. Opening the page never starts the microphone.
-- **One-tap AI polish** — tidies your spoken words without changing meaning; the raw words stay stored.
-
-### Journal & transparency
-
-- **Structured Journal** — session duration, chapters, linked highlights, what you think, open questions, citations.
-- **Router transparency** — every reply records the proposed vs validated context plan, fallback cause, and per-stage timing; the UI tells you "this used N passages of what you've read".
-
-### Hard lines we won't cross
-
-- No Elsepage backend, account, or cloud vector database
-- No default "summarize the whole book" behavior
-- No overwriting your original expression with AI output
-- No API keys outside Keychain
-- No reflection leaves your device except to the provider you explicitly chose
-
----
-
-## Status
-
-The implemented product loop covers read → reflect → save → grounded reply → Journal. Run `swift test` for the current portable test result; device acceptance and its remaining gaps are tracked in [the DEBUG loop](docs/DEBUG-LOOP.md) and the feature acceptance documents.
-
-| Area | State |
-|------|-------|
-| Reader foundation | ~85% |
-| Reflection loop | ~80% |
-| Book context / Agent | ~90% — citations grounded; **small-to-big** child retrieval (≈350-char retrieval units → parent-anchored evidence windows), hybrid lexical + semantic recall for reflections/memories, cross-encoder rerank gate |
-| Context engineering | planner-grade context plan (dense/lexical split) → source-specific retrieval → candidate ranking/dedup/budget → `ContextBundle`; anti-spoiler enforced at retrieval **and** expansion |
-| Voice reflection | shipped: root and follow-up requests both support default AAC/M4A recording, editable transcript, PCM-derived waveform seek, per-recording delete, storage summary, AI polish |
-| Memory / personal context | 0.3 core shipped: memory store, My Mind, cross-book recall, semantic memory matching |
-| Habit / onboarding / release polish | early (Reading/Thinking streak live; onboarding/achievements pending) |
-
-Open backlog and ideas: [Issues](https://github.com/freecodetiger/Elsepage/issues).
-
----
+Test counts and completion percentages are intentionally not fixed in this README. Check the results for the commit you are reviewing.
 
 ## Build from source
 
 ### Requirements
 
-| Tool | Notes |
-|------|--------|
-| **Xcode 16+** | iOS 18 SDK |
-| **XcodeGen** | `brew install xcodegen` |
-| **Readium** | resolved as an Xcode package (`swift-toolkit` 3.11.0, pinned in `project.yml`) |
+| Tool | Requirement |
+| --- | --- |
+| macOS / Swift | Swift 6; portable package targets declare macOS 14+. |
+| Xcode | Xcode 16+ with the iOS 18 SDK for the iOS App target. |
+| XcodeGen | Install with `brew install xcodegen`. |
+| Dependencies | GRDB 7.11.1 and Readium 3.11.0, pinned in [Package.swift](Package.swift) and [project.yml](project.yml). Initial dependency resolution needs network access. |
 
-```bash
-xcodegen generate
-open ReadLoop.xcodeproj    # resolve packages, run the ReadLoop scheme
-```
-
-The portable suite uses the Swift 6 toolchain and does not build the iOS App target:
-
-```bash
+```sh
+git clone https://github.com/freecodetiger/Elsepage.git
+cd Elsepage
 swift test
 ```
 
-A device/simulator run needs the full Xcode install — Readium's navigator is UIKit-based. Manual-device checks are tracked in `docs/READER_FOUNDATION_XCODE_GATE.md`.
+`swift test` runs the four package test targets. It does **not** compile `App/` or run the Readium iOS integration tests. It may rewrite `Package.resolved`; record its state before testing and preserve existing changes when reviewing dependency-pin differences.
 
----
+For a human developer building the iOS App:
+
+```sh
+xcodegen generate
+open ReadLoop.xcodeproj
+```
+
+Select your signing team, resolve packages, and run the `ReadLoop` scheme. Keep personal signing settings out of shared commits. Configure a provider in the App to try AI feedback; a real API key is not needed for the portable test suite.
+
+See the [development guide](docs/DEVELOPMENT.md) for environment details and the [contribution guide](CONTRIBUTING.md) for verification responsibilities.
 
 ## Architecture
 
-One loop. One owner per concern.
-
 ```text
-EPUB
-  → Readium                  book rendering, positions, highlights, search
-  → ReadingSessionService    explicit session lifecycle ("这一段约 N 分钟")
-  → Reflection + Evidence    your words, saved first (locator / session / highlights)
-  → Context Planning         planner-grade plan: sources, dense/lexical split, budgets
-  → Context Engineering      deterministic: source retrieval → rank/dedup/budget → bundle
-  → ReaderAgent              grounded reply, locally verified citations, disclosure
-  → Journal / Thoughts       what survives the two minutes after the book
+EPUB → Readium → reading session → locally saved reflection
+                                      ↓
+                         context planning and validation
+                                      ↓
+                      retrieval, ranking, and context assembly
+                                      ↓
+                         bounded Agent execution → saved reply
+                                      ↓
+                          journal and Brain maintenance
 ```
 
-| Concern | Owner |
-|---------|--------|
-| EPUB / reading | `ReaderCore` + Readium |
-| Session lifecycle | `ReadingSessionCore` |
-| Reflection & evidence | `ReflectionCore` + `Persistence` |
-| Local book retrieval | `RetrievalCore` — child retrieval (FTS5 trigram + BYOK semantic embeddings), RRF fusion, rerank gate, small-to-big expansion |
-| Context planning | `ContextRouting` — planner-grade plan (dense/lexical split, retrieval knobs), proposed vs validated, deterministic fallback |
-| Context engineering | `ContextEngineering` — candidate ranking/dedup/budget, `ContextBundle`, reflection/memory hybrid retrieval |
-| Agent runtime | `AgentRuntime` / `ReaderAgent` |
-| Voice | `SpeechCore` (system Speech; AAC/M4A persistence) |
-| AI polish | `TranscriptPolishService` (standalone, BYOK) |
-| Providers | `ModelProviders` (one `ModelClient` contract) |
+| Code | Responsibility |
+| --- | --- |
+| [App/](App/) | SwiftUI screens, dependency assembly, Readium integration, and DEBUG diagnostics. |
+| [ReaderCore](Sources/ReaderCore/) / [ReadingSessionCore](Sources/ReadingSessionCore/) | Reading locations, annotations, and sessions. |
+| [ReflectionCore](Sources/ReflectionCore/) / [BrainCore](Sources/BrainCore/) | Original reflections, journal records, thoughts, questions, and memories. |
+| [RetrievalCore](Sources/RetrievalCore/) | Book indexing, lexical/semantic retrieval, optional reranking, bounded evidence expansion, and reading-boundary checks. |
+| [ContextRouting](Sources/ContextRouting/) / [ContextEngineering](Sources/ContextEngineering/) | Model-proposed context needs, deterministic policy, candidate ranking, and context budgets. |
+| [ReaderAgent](Sources/ReaderAgent/) / [AgentRuntime](Sources/AgentRuntime/) | Product workflow and bounded model-call execution. |
+| [ModelProviders](Sources/ModelProviders/) / [Persistence](Sources/Persistence/) | BYOK adapters, Keychain secret storage, and GRDB persistence. |
+| [SpeechCore](Sources/SpeechCore/) / [AppInfrastructure](Sources/AppInfrastructure/) | Speech recognition, file handling, and shared App services. |
+| [BenchCore](Sources/BenchCore/) | Agent evaluation and regression comparison CLI. |
 
-```text
-Sources/
-  ReaderCore / ReadingSessionCore / ReflectionCore   domain
-  RetrievalCore                                      child retrieval + small-to-big
-  ContextRouting / ContextEngineering                planning + context assembly
-  ReaderAgent / AgentRuntime                         the thinking loop
-  ModelProviders / SpeechCore                        BYOK providers & voice
-  Persistence / LibraryCore / AppInfrastructure      storage & app plumbing
+The Agent orchestrates routing, retrieval, replies, and derived records. Model calls run with explicit budgets; citations and proposed Brain changes are checked by code.
 
-App/     SwiftUI: Library, Reader, Thoughts (Journal), My Mind, Settings
-Tests/   portable package tests + Readium iOS integration tests
-```
-
----
+[ARCHITECTURE.md](ARCHITECTURE.md) is a historical Agent architecture snapshot. Use it with current source and the relevant [feature specifications](docs/), rather than treating every old diagram or plan as current behavior.
 
 ## Contributing
 
-**Contributions are welcome** — from a repro for a reader edge case to the Memory phase.
+Contributions are welcome: reproducible bugs, documentation, accessibility improvements, reader reliability, reflection UX, retrieval quality, and evidence-backed personal memory.
 
-| You care about… | Jump in on… |
-|-----------------|-------------|
-| Reader reliability | Long-book performance, rotation, VoiceOver, background restore |
-| The reflection loop | Journal structure, voice flow, polish quality |
-| Grounded AI | Citation UX, session context, router transparency |
-| Memory (next phase) | Evidence-backed personal context — not bolted onto `ReflectionRepository` |
-| Docs & onboarding | The honest gaps in this README, build tips, screenshots |
+**Start with [CONTRIBUTING.md](CONTRIBUTING.md) / [贡献指南](CONTRIBUTING.md).** Issues and PRs may be written in Chinese or English.
 
-### PR checklist
+1. Open an [issue](https://github.com/freecodetiger/Elsepage/issues) for a bug or discuss a substantial feature before implementation. Small fixes can go straight to a PR.
+2. Work on a focused branch in your fork, or a repository branch if you have write access.
+3. Run checks appropriate to the change and state what was actually verified. Package tests, device scenarios, and manual acceptance have different coverage.
+4. Open a [pull request](https://github.com/freecodetiger/Elsepage/pulls) targeting `main`, describing the problem, resulting behavior, and validation evidence.
 
-```bash
-swift test                                  # portable suite
-xcodegen generate && xcodebuild …           # App-layer changes
-```
+For priorities, follow the PRD:
 
-In the description: **user-visible behavior**, **layer touched**, **how you verified** (portable tests vs device gate). Commits: Conventional Commits.
+> Reflection Quality > Memory Quality > Reader Agent Quality > Habit Loop > Reader Feature Breadth
 
----
+Contributions are provided under the project's GPL-3.0-only license. Preserve existing copyright notices and third-party license information.
 
-## Community
+## Documentation
 
-- [Issues](https://github.com/freecodetiger/Elsepage/issues) — bugs & ideas
-- ⭐ **Star the repo** if Elsepage is your thinking reader — it helps the next person find it.
-
-<p align="center">
-  <a href="https://github.com/freecodetiger/Elsepage/stargazers"><strong>Star</strong></a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/freecodetiger/Elsepage/issues/new"><strong>Report / request</strong></a>
-</p>
-
----
+- [Development and repository map](docs/DEVELOPMENT.md)
+- [Product requirements and implementation deviations](ReadLoop_PRD.md)
+- [DEBUG verification workflow](docs/DEBUG-LOOP.md)
+- [ReaderAgent Bench](docs/bench/README.md) and [regression requirements](docs/bench/REGRESSION.md)
+- [Release acceptance checklist](docs/release/UAT-CHECKLIST.md)
+- [Historical UI prototypes](docs/prototypes/README.md) and [brand assets](docs/assets/branding/README.md)
 
 ## License
 
 Copyright (C) 2026 freecodetiger and contributors.
 
-Licensed under the [GNU General Public License, version 3](LICENSE) (`GPL-3.0-only`), without additional exceptions or restrictions. Separately licensed files and third-party dependencies retain their respective licenses.
-
----
-
-<p align="center">
-  <sub>
-    Swift 6 · Readium · local-first · made for the two minutes after the book<br>
-    中文界面 · English docs for the global community
-  </sub>
-</p>
+Licensed under the unmodified [GNU General Public License, version 3](LICENSE) (`GPL-3.0-only`), without additional exceptions or restrictions. Separately licensed files and third-party dependencies retain their respective licenses.

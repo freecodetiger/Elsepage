@@ -82,6 +82,8 @@ Resume file: .planning/phases/19-brain-observability/19-SUMMARY.md
 
 ## Quick Tasks Completed
 
+- 2026-10-22：README 与贡献入口更新完成（`.planning/quick/261022-ks4-refresh-readme-and-add-a-contributor-gui/261022-ks4-SUMMARY.md`）；按当前代码整理英文主页，新增中文 `CONTRIBUTING.md` 并接入开发指南，说明分支/PR、验证职责与 GPL-3.0 贡献许可。63 处本地链接/锚点、配置版本和测试目标说明校验通过；许可证与业务/构建输入未变，未运行 Swift/Xcode 验收。
+
 - 2026-10-22：按用户选择采用未经修改的 GPL-3.0（`GPL-3.0-only`），根目录 `LICENSE` 与 SPDX 标准文本逐字节一致，无额外例外或限制；README 添加版权与许可说明，开发入口同步更新。记录见 `.planning/quick/261022-koj-adopt-the-unmodified-gpl-3-0-license-and/261022-koj-SUMMARY.md`；仅许可证与文档变更，未运行 Swift/Xcode 验收。
 
 - 2026-10-22：协作前仓库清理完成（`.planning/quick/261022-k3q-audit-repository-hygiene-for-collaborato/261022-k3q-SUMMARY.md`）；删除重复 Logo、约 4.74 GiB 被忽略的构建缓存和 4 个 Finder 元数据文件，归拢品牌素材/旧原型，新增开发入口与文件审计报告。6 个迁移文件内容不变、18 个 AppIcon 引用和 30 个文档本地链接检查通过；无业务/构建输入变更，未运行 Swift 或 Xcode 验收。
