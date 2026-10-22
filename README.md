@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-transparent.png" alt="Elsepage" width="128" height="128">
+  <img src="docs/assets/branding/logo-transparent.png" alt="Elsepage" width="128" height="128">
 </p>
 
 <h1 align="center">Elsepage</h1>
@@ -14,7 +14,6 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?style=for-the-badge&logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/Local%20first-No%20backend-9cb099?style=for-the-badge" alt="Local first">
   <img src="https://img.shields.io/badge/BYOK-Your%20key%2C%20your%20data-5f6e5f?style=for-the-badge" alt="BYOK">
-  <img src="https://img.shields.io/badge/tests-356%20passing-9cb099?style=for-the-badge" alt="356 tests">
 </p>
 
 <p align="center">
@@ -38,6 +37,8 @@ It does **not** own your progress bar and call it a day. It does not summarize t
 ---
 
 开发与测试：项目已有 [AI DEBUG 测试闭环](docs/DEBUG-LOOP.md)，支持 USB 自动连接、性能报告读取和隔离数据库中的 Reflection 保存验证。业务改动与测试扩展遵循 [Agent 维护约定](AGENTS.md)。当前能力与尚未覆盖的流程见测试文档。
+
+新加入的开发者请先读 [开发与协作入口](docs/DEVELOPMENT.md)。文件整理范围和待处理事项见 [2026-10-22 仓库清理报告](docs/maintenance/repository-hygiene-2026-10-22.md)。
 
 ## Why Elsepage?
 
@@ -93,7 +94,7 @@ If you want an iOS reader that treats **what you thought** as the deliverable, y
 
 ## Status
 
-A real product loop, not a demo: read → reflect → save → grounded reply → Journal work end-to-end, **356 tests green**, and an unsigned iOS build gate passes.
+The implemented product loop covers read → reflect → save → grounded reply → Journal. Run `swift test` for the current portable test result; device acceptance and its remaining gaps are tracked in [the DEBUG loop](docs/DEBUG-LOOP.md) and the feature acceptance documents.
 
 | Area | State |
 |------|-------|
@@ -117,17 +118,17 @@ Open backlog and ideas: [Issues](https://github.com/freecodetiger/Elsepage/issue
 |------|--------|
 | **Xcode 16+** | iOS 18 SDK |
 | **XcodeGen** | `brew install xcodegen` |
-| **Readium** | resolved as an Xcode package (`swift-toolkit` 3.3.0) |
+| **Readium** | resolved as an Xcode package (`swift-toolkit` 3.11.0, pinned in `project.yml`) |
 
 ```bash
 xcodegen generate
 open ReadLoop.xcodeproj    # resolve packages, run the ReadLoop scheme
 ```
 
-The portable suite needs no Xcode:
+The portable suite uses the Swift 6 toolchain and does not build the iOS App target:
 
 ```bash
-swift test                 # 207 tests
+swift test
 ```
 
 A device/simulator run needs the full Xcode install — Readium's navigator is UIKit-based. Manual-device checks are tracked in `docs/READER_FOUNDATION_XCODE_GATE.md`.
@@ -171,8 +172,8 @@ Sources/
   ModelProviders / SpeechCore                        BYOK providers & voice
   Persistence / LibraryCore / AppInfrastructure      storage & app plumbing
 
-App/     SwiftUI: Reader, Today, Thoughts (Journal), My Mind, Settings
-Tests/   swift-testing (207 tests)
+App/     SwiftUI: Library, Reader, Thoughts (Journal), My Mind, Settings
+Tests/   portable package tests + Readium iOS integration tests
 ```
 
 ---

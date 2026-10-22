@@ -107,7 +107,7 @@ AI 功能采用 BYOK:在设置里选择服务商(OpenAI、Anthropic、DeepSeek�
 
 - 已就绪:`App/Assets.xcassets/AppIcon.appiconset` 全尺寸齐备,含 1024×1024 市场图标(`AppIcon-ios-marketing-1024x1024-1x.png`),工程设置 `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon`;
 - 无 Alpha 通道检查:提交前用 `xcrun assetutil --info` 或导出工具复核 1024 图无 alpha(PNG 透明会导致上传失败);
-- 仓库根目录的 logo-*.png/svg 为素材源文件,不直接参与构建。
+- [品牌素材目录](../assets/branding/README.md)中的 PNG/SVG 为素材源文件,不直接参与构建；正式 App 图标以 AppIcon asset catalog 为准。
 
 ## 8. 首发提交前补齐清单
 
