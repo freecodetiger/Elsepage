@@ -59,7 +59,7 @@ button{cursor:default}
 .section-title{font-size:20px;font-weight:600;line-height:25px;margin:8px 16px 12px}
 .section-title--grid{margin-top:32px}
 
-.current{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:center;padding:0 16px}
+.current{position:relative;display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:center;padding:0 16px}
 .current .cover{height:180px}
 .current-copy{min-width:0}
 .current-title{font-size:22px;font-weight:600;line-height:28px}
@@ -69,9 +69,9 @@ button{cursor:default}
 .progress-label{font-size:13px;line-height:18px;color:var(--secondary);margin-top:6px}
 .numeric{font-variant-numeric:tabular-nums}
 
-.prompt-row{padding:14px 16px 0}
 .prompt{height:34px;padding:0 14px;border-radius:17px;background:var(--fill);color:var(--label);display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);font-size:15px;font-weight:600;line-height:20px}
 .prompt svg{width:15px;height:15px;stroke-width:2.1}
+.prompt--overlay{position:absolute;right:16px;bottom:0}
 
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:12px;row-gap:24px;padding:0 16px}
 .cell{min-width:0}
@@ -293,14 +293,11 @@ button{cursor:default}
             <div class="progress"><span style="width:62%"></span></div>
             <p class="progress-label numeric">第 4 章 · 62%</p>
           </div>
-        </article>
-
-        <div class="prompt-row">
-          <span class="prompt">
+          <span class="prompt prompt--overlay">
             <svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17zM14 7.5l2.5 2.5"/></svg>
             补写想法
           </span>
-        </div>
+        </article>
 
         <h2 class="section-title section-title--grid">全部书籍</h2>
         <div class="grid">
@@ -348,12 +345,12 @@ button{cursor:default}
       </nav>
       <span class="home" aria-hidden="true"></span>
     </section>
-    <figcaption>有未写想法：唯一的次要操作，仅在此时出现</figcaption>
+    <figcaption>有未写想法：胶囊放进当前行右下的空闲区，行高不变</figcaption>
   </figure>
 
 </main>
 
-<p class="note"><b>相对方案 1 的收敛</b>：去掉重复的两枚大按钮与自绘顶栏；搜索交给系统 .searchable，排序/导入/设置回到工具栏；字号只使用系统文本样式（34/22/20/17/15/13），页边距 16，封面三列 112。无自定义字距、无入场动画。</p>
+<p class="note"><b>相对方案 1 的收敛</b>：去掉重复的两枚大按钮与自绘顶栏；搜索交给系统 .searchable，排序/导入/设置回到工具栏；字号只使用系统文本样式（34/22/20/17/15/13），页边距 16，封面三列 112。无自定义字距、无入场动画。补写胶囊放在当前行右下，出现或消失都不改变页面高度。</p>
 
 </body>
 </html>

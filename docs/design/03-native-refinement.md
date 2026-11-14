@@ -10,7 +10,7 @@
 
 | 方案 1 | 原生收敛 | 原因 |
 | --- | --- | --- |
-| 两枚 52pt 大按钮（继续阅读 / 补写想法） | 当前书整行可点；“补写想法”只在有未写想法时出现 | 行本身就是继续阅读，第二个大按钮重复同一动作；没有上下文的补写不该常驻 |
+| 两枚 52pt 大按钮（继续阅读 / 补写想法） | 当前书整行可点；“补写想法”只在有未写想法时出现，并叠在当前行右下角 | 行本身就是继续阅读，第二个大按钮重复同一动作；没有上下文的补写不该常驻，也不该把下面的网格推下去 |
 | 自绘状态栏、标签栏、搜索框、手机外框 | 系统状态栏、`TabView`、`.searchable` | 自绘 chrome 是 demo 味的主要来源；系统组件自带材质、滚动边缘行为、Dynamic Type 和 VoiceOver |
 | 36 / 26 / 20 / 16 / 15 / 14 六档混合字号，负字距 | 34 / 22 / 20 / 17 / 15 / 13 系统文本样式，无字距 | 36、26、14 不在 Apple 文本样式表上；负字距是网页排版习惯，中文不需要 |
 | 24pt 页边距，15 / 13 / 30 等混排间距 | 16pt 页边距，4 / 8 / 12 / 16 / 24 / 32 的 8pt 网格 | iOS 内容默认 16；随意值让版面显得“摆”出来而不是长出来 |
@@ -47,11 +47,18 @@ NavigationStack {
     ScrollView {
         LazyVStack(alignment: .leading, spacing: 0) {
             sectionHeader("继续阅读")
-            CurrentReadingRow(book: book, progress: progress)   // 整行是一个 Button
+            ZStack(alignment: .bottomTrailing) {
+                Button { open(book) } label: {
+                    CurrentReadingContent(book: book, progress: progress)
+                }
                 .buttonStyle(.plain)
-            if pendingReflection != nil {
-                writeReflectionChip                              // 兄弟节点，不嵌在行按钮里
+
+                if pendingReflection != nil {
+                    WriteReflectionChip()                        // 兄弟节点，不嵌在行按钮里
+                        .padding(.trailing, 16)
+                }
             }
+            .frame(height: 180)                                  // 行高由封面固定，胶囊不参与
             sectionHeader("全部书籍").padding(.top, 32)
             LazyVGrid(columns: columns, spacing: 24) { /* 三列封面 */ }
         }
@@ -66,12 +73,12 @@ NavigationStack {
 - 三列用 `GridItem(.flexible(), spacing: 12)`；Accessibility 字号退化为一列，保留现有逻辑。
 - 所有文字使用语义字体，不写 `.system(size:)` 和 `.tracking`。
 - 封面是图片，不参与 UI 字体；封面阴影沿用现有 `ElsepageBookCoverMetrics`。
-- 补写入口复用现有 `pendingReflection` 数据，只改变位置：从网格格子内移到当前阅读行下方。现有代码已经把它做成行按钮的兄弟节点，这条约束继续保留。
+- 补写入口复用现有 `pendingReflection` 数据，只改变位置：从网格格子内移到当前阅读行右下角，作为 `ZStack` 里的兄弟 overlay。行高固定 180，胶囊出现或消失都不改变行高、网格位置和内容高度。现有代码已经把它做成行按钮的兄弟节点，这条约束继续保留。
 
 ## 状态
 
 - 默认：当前阅读行 + 全部书籍网格。
-- 有未写想法：当前行下方多一枚 `.bordered` 小胶囊，其他不变。
+- 有未写想法：当前行右下多一枚 `.bordered` 小胶囊；行高固定，全部书籍与内容高度不变。
 - 空书架、搜索无结果、导入中：沿用现有 `ContentUnavailableView`、`ContentUnavailableView.search` 和底部导入状态。
 - 排序：工具栏 `Menu`，与现有实现一致。
 - 本轮不覆盖阅读器、想法、我的和设置页。
@@ -81,12 +88,13 @@ NavigationStack {
 - `LibraryView`：大标题、搜索和工具栏已经符合原生结构；新增“继续阅读”行与两个区块标题，当前书从网格移出。
 - `LibraryGridView`：页边距 20 → 16；书名从 `.title3` 衬线改为 `.subheadline.semibold`；作者从 `.caption` 改为 `.footnote`；移除每格状态行和进度条；三列保留。
 - `ElsepageTheme.Spacing`：本轮不改全局 6 / 10 / 20 / 28，书架局部使用 16 / 12 / 24 / 32，避免连带其它页面。
-- 待写想法入口：位置变化，数据与保存路径不变。
+- 待写想法入口：位置改为当前行右下的 overlay，不参与布局；数据与保存路径不变。
 
 ## 验证
 
 - 单文件：0 个 `<script>`，0 个外部 `href` / `src`。
 - Chrome 实际渲染（393×852，2x）：大标题 34/700 无字距；区块标题 20/600；当前书名 22/600；作者 15；进度 13；页边距 16；网格三列 112.33，列距 12、行距 24；封面 2:3、圆角 4；标签栏 83；Home Indicator 134×5；内容无横向溢出；内容按系统行为延伸到标签栏下方。
+- 两帧的当前行高均为 180，`.section-title--grid` 顶部均为 460，内容滚动高度均为 856；胶囊为 `position: absolute`，出现时不改变任何一项。
 - 对比度：主文字 16.87:1，次要文字 5.13:1，未选中 Tab 4.84:1，六张封面 5.5:1 以上，均达到 WCAG AA。
 - 限制：静态样张不是 App 截图；未在 SwiftUI 或真机验证 Dynamic Type、VoiceOver、滚动边缘材质；封面是演示排版，不是真实书封；本轮没有 Swift 改动，未运行 `swift test`。
 
