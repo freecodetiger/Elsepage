@@ -304,7 +304,7 @@ struct LibraryView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .accessibilityLabel("补写上一次阅读的想法")
-                .padding(.trailing, 48)
+                .padding(.trailing, 128)
             }
         }
         .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
