@@ -52,16 +52,37 @@ struct MyMindView: View {
 
     var body: some View {
         NavigationStack {
-            stateView
-                .background(Color.elsepageBackground)
-                // 看法沉淀 (PRD §10.3): the first memories forming (and the empty state
-                // handing over to them) land as a quiet cross-fade.
-                .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.memories.isEmpty)
-                .navigationTitle("我的")
-                .navigationBarTitleDisplayMode(.large)
-                .navigationDestination(isPresented: $showsAchievements) { achievementsDestination }
-                .task { await model.reload() }
-                .toolbar { toolbarContent }
+            VStack(spacing: 0) {
+                ElsepageRootHeader(title: "我的") {
+                    Button { showsAchievements = true } label: {
+                        Image(systemName: "rosette")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.elsepageTextPrimary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("成就")
+                    Button { showsSettings = true } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.elsepageTextPrimary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("设置")
+                }
+                stateView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(Color.elsepageBackground.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            // 看法沉淀 (PRD §10.3): the first memories forming (and the empty state
+            // handing over to them) land as a quiet cross-fade.
+            .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.memories.isEmpty)
+            .navigationDestination(isPresented: $showsAchievements) { achievementsDestination }
+            .task { await model.reload() }
         }
         .sheet(isPresented: $showsSettings) {
             SettingsView(model: settings)
@@ -103,19 +124,6 @@ struct MyMindView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            Button { showsAchievements = true } label: {
-                Image(systemName: "rosette")
-            }
-            .accessibilityLabel("成就")
-            Button { showsSettings = true } label: {
-                Image(systemName: "gearshape")
-            }
-            .accessibilityLabel("设置")
-        }
-    }
 
     private var thoughtEditor: some View {
         Group {
@@ -351,6 +359,7 @@ struct MyMindView: View {
         }
         .navigationTitle("成就")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
     }
 
     private func brainThoughtDestination(_ thought: Thought) -> some View {
@@ -377,6 +386,7 @@ struct MyMindView: View {
                 }
             }
         )
+        .toolbar(.visible, for: .navigationBar)
     }
 
     private func brainQuestionDestination(_ question: Question) -> some View {
@@ -405,6 +415,7 @@ struct MyMindView: View {
                 }
             }
         )
+        .toolbar(.visible, for: .navigationBar)
     }
 
     private func row(for memory: BrainMemory) -> some View {

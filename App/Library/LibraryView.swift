@@ -36,41 +36,28 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.elsepageBackground.ignoresSafeArea()
-                if model.books.isEmpty { emptyLibrary } else { bookList(model) }
-            }
-            .navigationTitle("书架")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    Menu {
-                        Picker("排序", selection: $model.sortOrder) {
-                            ForEach(LibrarySortOrder.allCases) { order in
-                                Text(order.title).tag(order)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                    }
-                    .accessibilityLabel("排序书架")
-                    // 导入与排序同风格的原生工具栏按钮;导入中显示进度圈。
-                    if model.isImporting {
-                        ProgressView().accessibilityLabel("正在导入 EPUB")
-                    } else {
-                        Button { importing = true } label: {
-                            Image(systemName: "square.and.arrow.down")
-                        }
-                        .accessibilityLabel("导入 EPUB")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+            VStack(spacing: 0) {
+                ElsepageRootHeader(title: "书架") {
                     Button { showsSettings = true } label: {
                         Image(systemName: "gearshape")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.elsepageTextPrimary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("设置")
                 }
+                ElsepageSearchField(text: $model.searchQuery, prompt: "搜索书名或作者")
+                    .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+                    .padding(.bottom, 12)
+                ZStack {
+                    Color.elsepageBackground.ignoresSafeArea()
+                    if model.books.isEmpty { emptyLibrary } else { bookList(model) }
+                }
             }
+            .background(Color.elsepageBackground.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
             .fileImporter(isPresented: $importing, allowedContentTypes: [UTType.epub], allowsMultipleSelection: false) { result in
                 if case .success(let urls) = result, let url = urls.first {
                     Task {
@@ -117,7 +104,6 @@ struct LibraryView: View {
                     )
                 )
             }
-            .searchable(text: $model.searchQuery, prompt: "搜索书名或作者")
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
             .alert("这本书已经在书库中", isPresented: Binding(get: { model.duplicateTitle != nil }, set: { if !$0 { model.duplicateTitle = nil } })) { Button("好") {} } message: { Text(model.duplicateTitle ?? "") }
             .alert("从书架移除这本书？", isPresented: Binding(

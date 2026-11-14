@@ -20,21 +20,8 @@ struct ThoughtsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if model.isLoading && model.entries.isEmpty {
-                    ProgressView("正在整理你的记录…")
-                } else if model.entries.isEmpty {
-                    emptyRecords
-                } else {
-                    records
-                }
-            }
-            .background(Color.elsepageBackground)
-            .navigationTitle("想法")
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: "搜索记录、书名或回应")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+            VStack(spacing: 0) {
+                ElsepageRootHeader(title: "想法") {
                     Menu {
                         Picker("分组", selection: $grouping) {
                             ForEach(ThoughtsGrouping.allCases) { option in
@@ -47,10 +34,29 @@ struct ThoughtsView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.elsepageTextPrimary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("更多")
                 }
+                ElsepageSearchField(text: $searchText, prompt: "搜索记录、书名或回应")
+                    .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+                    .padding(.bottom, 12)
+                Group {
+                    if model.isLoading && model.entries.isEmpty {
+                        ProgressView("正在整理你的记录…")
+                    } else if model.entries.isEmpty {
+                        emptyRecords
+                    } else {
+                        records
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .background(Color.elsepageBackground.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
             .task { await model.reload() }
             .sheet(isPresented: $showsSettings) {
                 SettingsView(model: settings)

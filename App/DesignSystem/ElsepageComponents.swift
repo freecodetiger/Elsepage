@@ -152,3 +152,111 @@ struct ElsepageBookCover: View {
         .accessibilityHidden(true)
     }
 }
+
+
+
+
+/// The top row shared by 书架 / 想法 / 我的: the large title and the trailing
+/// glass capsule on one line. The title no longer sits in a second row below
+/// the toolbar; the content starts below the search field (if any).
+struct ElsepageRootHeader<Actions: View>: View {
+    let title: String
+    let actions: Actions
+
+    init(title: String, @ViewBuilder actions: () -> Actions) {
+        self.title = title
+        self.actions = actions()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .font(.largeTitle.bold())
+                .foregroundStyle(Color.elsepageTextPrimary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            HStack(spacing: 0) {
+                actions
+            }
+            .frame(height: 44)
+            .elsepageHeaderGlass()
+        }
+        .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+}
+
+/// The native-looking search field used below the header. The system
+/// `.searchable` bar is tied to the navigation bar, so the custom header owns
+/// this field instead.
+struct ElsepageSearchField: View {
+    @Binding var text: String
+    let prompt: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.elsepageTextSecondary)
+            TextField(
+                "",
+                text: $text,
+                prompt: Text(prompt).foregroundStyle(Color.elsepageTextSecondary)
+            )
+            .font(.body)
+            .foregroundStyle(Color.elsepageTextPrimary)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .submitLabel(.search)
+            .focused($isFocused)
+            .onSubmit { isFocused = false }
+            .accessibilityLabel(prompt)
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.elsepageTextTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 36)
+        .background(
+            Color(uiColor: .tertiarySystemFill),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+    }
+}
+
+private struct HeaderGlass: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content
+                .background(Color.elsepageSurface, in: Capsule())
+                .overlay(Capsule().stroke(Color.elsepageBorder, lineWidth: 0.5))
+        } else if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(Color.elsepageBorder.opacity(0.6), lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.08), radius: 10, y: 3)
+        }
+    }
+}
+
+private extension View {
+    func elsepageHeaderGlass() -> some View {
+        modifier(HeaderGlass())
+    }
+}
