@@ -10,6 +10,10 @@ enum ElsepageTheme {
         static let large: CGFloat = 20
         static let xLarge: CGFloat = 28
         static let page: CGFloat = 20
+        /// The 16pt content inset used by the native bookshelf, Thoughts and
+        /// My Mind screens. `page` stays for screens that have not been
+        /// converged yet.
+        static let pageInset: CGFloat = 16
     }
 
     enum Radius {

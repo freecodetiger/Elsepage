@@ -36,8 +36,6 @@ final class MyMindModel {
     private(set) var memories: [BrainMemory] = []
     private(set) var thoughts: [Thought] = []
     private(set) var questions: [Question] = []
-    private(set) var readingStreak = ReadingStreak(days: 0)
-    private(set) var thinkingStreak = ThinkingStreak(days: 0)
     private(set) var isLoading = false
     var errorMessage: String?
 
@@ -90,18 +88,6 @@ final class MyMindModel {
                 if case .question(let question) = item { return question } else { return nil }
             }.sorted { $0.updatedAt > $1.updatedAt }
 
-            let now = Date()
-            let calendar = Calendar.current
-            readingStreak = StreakCalculator.readingStreak(
-                sessionStartDates: try await sessions.allSessions().map(\.startedAt),
-                now: now,
-                calendar: calendar
-            )
-            thinkingStreak = StreakCalculator.thinkingStreak(
-                reflectionDates: try await reflections.allReflections().map(\.createdAt),
-                now: now,
-                calendar: calendar
-            )
             errorMessage = nil
         } catch is CancellationError {
             return

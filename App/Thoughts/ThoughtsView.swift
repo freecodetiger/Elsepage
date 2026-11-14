@@ -95,7 +95,7 @@ struct ThoughtsView: View {
 
     private var records: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.large) {
+            LazyVStack(alignment: .leading, spacing: 32) {
                 if visibleEntries.isEmpty {
                     searchEmptyState
                 } else if grouping == .timeline {
@@ -104,7 +104,9 @@ struct ThoughtsView: View {
                     bookSections
                 }
             }
-            .padding(ElsepageTheme.Spacing.page)
+            .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
         .refreshable { await model.reload() }
     }
@@ -113,7 +115,7 @@ struct ThoughtsView: View {
         ForEach(ThoughtsArchiveProjection.monthSections(visibleEntries)) { section in
             archiveSection(
                 title: ElsepageDateFormat.monthTitle(section.month),
-                subtitle: "\(section.entries.count) 条记录"
+                subtitle: "\(section.entries.count) 条"
             ) {
                 entryCards(section.entries, showsBook: true)
             }
@@ -124,7 +126,7 @@ struct ThoughtsView: View {
         ForEach(ThoughtsArchiveProjection.bookSections(visibleEntries)) { section in
             archiveSection(
                 title: section.book.title,
-                subtitle: "\(section.entries.count) 条记录"
+                subtitle: "\(section.entries.count) 条"
             ) {
                 entryCards(section.entries, showsBook: false)
             }
@@ -136,27 +138,34 @@ struct ThoughtsView: View {
         subtitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.elsepageTextPrimary)
                 Spacer()
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(Color.elsepageTextTertiary)
             }
+            .padding(.bottom, 8)
             content()
         }
     }
 
     private func entryCards(_ entries: [ReflectionArchiveEntry], showsBook: Bool) -> some View {
-        ForEach(entries) { entry in
-            Button {
-                selectedEntry = entry
-            } label: {
-                ThoughtCard(entry: entry, showsBook: showsBook)
+        VStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                Button {
+                    selectedEntry = entry
+                } label: {
+                    ThoughtCard(entry: entry, showsBook: showsBook)
+                }
+                .buttonStyle(.plain)
+                if index < entries.count - 1 {
+                    Divider()
+                }
             }
-            .buttonStyle(.plain)
         }
     }
 }
@@ -189,48 +198,35 @@ private struct ThoughtCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+        VStack(alignment: .leading, spacing: 4) {
             metadata
             Text(summaryText)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(Color.elsepageTextPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ElsepageTheme.Spacing.medium)
-        .background(
-            Color.elsepageSurface,
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.elsepageBorder)
-        }
+        .padding(.vertical, 16)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("打开这条阅读记录")
     }
 
     private var metadata: some View {
-        HStack(alignment: .firstTextBaseline, spacing: ElsepageTheme.Spacing.xSmall) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             if showsBook {
                 Text(entry.book.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.elsepageTextSecondary)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.elsepageTextPrimary)
                     .lineLimit(1)
                 Text("·")
-                    .font(.system(size: 12))
+                    .font(.footnote)
                     .foregroundStyle(Color.elsepageTextTertiary)
             }
             Text(ElsepageDateFormat.shortDate(entry.reflection.createdAt))
-                .font(.system(size: 12))
+                .font(.footnote)
                 .foregroundStyle(Color.elsepageTextTertiary)
-            Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.elsepageTextTertiary)
-                .accessibilityHidden(true)
         }
     }
 

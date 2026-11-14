@@ -4,23 +4,15 @@ import SwiftUI
 import UIKit
 
 /// The library's cover grid. Covers are the primary object: no spine metaphor,
-/// no per-book decorative colour, no separate hero card above the grid. The one
-/// card carrying state — the book you are reading, or one whose session is
-/// waiting for a reflection — says so in a single quiet line.
+/// no per-book decorative colour, no hero card. The book on the desk and its
+/// progress live in the current-reading row above the grid; a grid cell carries
+/// only the cover, title and author.
 struct LibraryGridView: View {
     let books: [Book]
     let cover: (Book) -> UIImage?
-    let progress: (Book) -> Double?
-    /// The quiet third line ("第 3 章", "读过 24 分钟 · 划线 3"), or nil to leave
-    /// the slot empty.
-    let statusLine: (Book) -> String?
-    /// The book whose session awaits a reflection; its status line is replaced
-    /// by the 补写想法 affordance.
-    let pendingReflectionBookID: BookID?
     let transitionNamespace: Namespace.ID
     let openBook: (Book) -> Void
     let loadCover: (Book) async -> Void
-    let writeReflection: (Book) -> Void
     let requestDelete: (Book) -> Void
     let accessibilityLabel: (Book) -> String
     /// The width the grid may use. Covers are given an explicit size rather than
@@ -31,11 +23,14 @@ struct LibraryGridView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private let pageInset: CGFloat = 16
+    private let columnSpacing: CGFloat = 12
+    private let rowSpacing: CGFloat = 24
+
     /// A fixed three columns, not `.adaptive`: adaptive negotiates the item
     /// width against the content's own sizing and settles wider than its
     /// `maximum`, which drops the grid to two oversized columns. Three equal
-    /// flexible columns are deterministic — 110pt covers on a 402pt screen,
-    /// 101pt on a 375pt one.
+    /// flexible columns are deterministic — 112pt covers on a 393pt screen.
     private var columns: [GridItem] {
         // A11Y-01: covers this small are unreadable at accessibility sizes; one
         // full-width column keeps the title legible instead of squeezed.
@@ -43,77 +38,59 @@ struct LibraryGridView: View {
             return [GridItem(.flexible())]
         }
         return Array(
-            repeating: GridItem(.flexible(), spacing: ElsepageTheme.Spacing.medium),
+            repeating: GridItem(.flexible(), spacing: columnSpacing),
             count: 3
         )
     }
 
     /// Exactly the column width, so each cover fills its cell edge to edge.
     private var coverWidth: CGFloat {
-        let usable = containerWidth - ElsepageTheme.Spacing.page * 2
+        let usable = containerWidth - pageInset * 2
         guard !dynamicTypeSize.isAccessibilitySize else { return usable }
-        return (usable - ElsepageTheme.Spacing.medium * 2) / 3
+        return (usable - columnSpacing * 2) / 3
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: ElsepageTheme.Spacing.large) {
+        LazyVGrid(columns: columns, spacing: rowSpacing) {
             ForEach(books) { book in
                 card(book)
             }
         }
-        .padding(ElsepageTheme.Spacing.page)
+        .padding(.horizontal, pageInset)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
     }
 
     private func card(_ book: Book) -> some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            Button {
-                Haptics.bookPulled()
-                openBook(book)
-            } label: {
-                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
-                    coverArt(book)
-                    if let progress = progress(book), progress > 0 {
-                        ProgressView(value: progress)
-                            .tint(.elsepageInteractive)
-                    }
+        Button {
+            Haptics.bookPulled()
+            openBook(book)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                coverArt(book)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(book.title)
-                        .font(ElsepageTheme.Typography.itemTitle)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.elsepageTextPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Text(authorName(book))
-                        .font(ElsepageTheme.Typography.metadata)
+                        .font(.footnote)
                         .foregroundStyle(Color.elsepageTextSecondary)
                         .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(BookPressButtonStyle(reduceMotion: reduceMotion))
-            .contextMenu {
-                Button(role: .destructive) { requestDelete(book) } label: {
-                    Label("从书架移除", systemImage: "trash")
-                }
-            }
-            .accessibilityLabel(accessibilityLabel(book))
-            .accessibilityHint("打开并继续阅读")
-
-            // A sibling of the cover button, never nested inside it, so opening
-            // the book and writing the reflection keep separate hit targets.
-            if pendingReflectionBookID == book.id {
-                Button("补写想法") { writeReflection(book) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.elsepageInteractive)
-                    .foregroundStyle(Color.elsepageOnInteractive)
-            } else if let line = statusLine(book) {
-                Text(line)
-                    .font(ElsepageTheme.Typography.metadata)
-                    .foregroundStyle(Color.elsepageTextTertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(BookPressButtonStyle(reduceMotion: reduceMotion))
+        .contextMenu {
+            Button(role: .destructive) { requestDelete(book) } label: {
+                Label("从书架移除", systemImage: "trash")
             }
         }
+        .accessibilityLabel(accessibilityLabel(book))
+        .accessibilityHint("打开并继续阅读")
     }
 
     private func coverArt(_ book: Book) -> some View {

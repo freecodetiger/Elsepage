@@ -1,6 +1,6 @@
 # 书架：方案 1 的原生收敛
 
-2026-11-14。用户在三个版式中认为方案 1 更接近目标，但仍有“demo 味”，要求以 iOS 原生 / SwiftUI 最佳实践和奥卡姆剃刀重做。本轮只重做书架首屏的版式、组件和字级，没有修改 App 实现。
+2026-11-14。用户在三个版式中认为方案 1 更接近目标，但仍有“demo 味”，要求以 iOS 原生 / SwiftUI 最佳实践和奥卡姆剃刀重做。本轮只重做书架首屏的版式、组件和字级。2026-11-14 更新：书架已落到 App；阅读器未改。
 
 [打开静态样张](../prototypes/elsepage-native-refinement.html)。单文件、无 JavaScript、无网络请求；393×852 两帧只区分“默认”和“有未写想法”，不是可交互演示。书名、作者、进度和封面均为演示数据。
 
@@ -83,7 +83,7 @@ NavigationStack {
 - 排序：工具栏 `Menu`，与现有实现一致。
 - 本轮不覆盖阅读器、想法、我的和设置页。
 
-## 与现有实现的差异（尚未实现）
+## 与现有实现的差异（已落地）
 
 - `LibraryView`：大标题、搜索和工具栏已经符合原生结构；新增“继续阅读”行与两个区块标题，当前书从网格移出。
 - `LibraryGridView`：页边距 20 → 16；书名从 `.title3` 衬线改为 `.subheadline.semibold`；作者从 `.caption` 改为 `.footnote`；移除每格状态行和进度条；三列保留。
@@ -98,4 +98,4 @@ NavigationStack {
 - 对比度：主文字 16.87:1，次要文字 5.13:1，未选中 Tab 4.84:1，六张封面 5.5:1 以上，均达到 WCAG AA。
 - 限制：静态样张不是 App 截图；未在 SwiftUI 或真机验证 Dynamic Type、VoiceOver、滚动边缘材质；封面是演示排版，不是真实书封；本轮没有 Swift 改动，未运行 `swift test`。
 
-下一步是用户确认这版收敛方向，再把当前阅读行、网格文字和间距落到 `LibraryView` / `LibraryGridView`。
+已落到 `LibraryView` / `LibraryGridView`；阅读器未改。

@@ -24,22 +24,18 @@ struct MyMindView: View {
     @State private var editText = ""
     @State private var showsClearAll = false
     @State private var showsSettings = false
+    @State private var showsAchievements = false
     @State private var evidenceByMemory: [BrainItemID: MemoryEvidence] = [:]
     @State private var selectedThought: Thought?
     @State private var selectedQuestion: Question?
     @State private var discussingItem: BrainItem?
     @State private var editingThought: Thought?
     @State private var editingQuestion: Question?
-    @State private var showsAllThoughts = false
-    @State private var showsAllQuestions = false
-    @State private var showsAllMemories = false
+    @State private var selectedFacet: MindFacet = .thoughts
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isEmpty: Bool {
-        model.memories.isEmpty
-            && !model.hasBrainItems
-            && model.readingStreak.days == 0
-            && model.thinkingStreak.days == 0
+        model.memories.isEmpty && !model.hasBrainItems
     }
 
     init(
@@ -63,6 +59,7 @@ struct MyMindView: View {
                 .animation(ElsepageTheme.Motion.moment(reduceMotion), value: model.memories.isEmpty)
                 .navigationTitle("我的")
                 .navigationBarTitleDisplayMode(.large)
+                .navigationDestination(isPresented: $showsAchievements) { achievementsDestination }
                 .task { await model.reload() }
                 .toolbar { toolbarContent }
         }
@@ -96,10 +93,10 @@ struct MyMindView: View {
         Group {
             if model.isLoading && isEmpty {
                 ProgressView("正在整理对你的理解…")
-            } else if isEmpty {
-                emptyState
-                    .transition(.moment(reduceMotion))
             } else {
+                // The three facets are the page's structure, not a reward for
+                // having data. Show the picker even when all three are empty;
+                // each facet owns its one-line empty message.
                 content
                     .transition(.moment(reduceMotion))
             }
@@ -108,19 +105,15 @@ struct MyMindView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { showsAchievements = true } label: {
+                Image(systemName: "rosette")
+            }
+            .accessibilityLabel("成就")
             Button { showsSettings = true } label: {
                 Image(systemName: "gearshape")
             }
             .accessibilityLabel("设置")
-        }
-        if !model.memories.isEmpty {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .destructive) { showsClearAll = true } label: {
-                    Image(systemName: "trash")
-                }
-                .accessibilityLabel("清除全部记忆")
-            }
         }
     }
 
@@ -173,7 +166,15 @@ struct MyMindView: View {
 
     private var content: some View {
         ScrollView {
-            sectionsList
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    facetContent
+                        .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+                        .padding(.bottom, 24)
+                } header: {
+                    facetPicker
+                }
+            }
         }
         .navigationDestination(item: $selectedThought) { brainThoughtDestination($0) }
         .navigationDestination(item: $selectedQuestion) { brainQuestionDestination($0) }
@@ -182,15 +183,174 @@ struct MyMindView: View {
         .refreshable { await model.reload() }
     }
 
-    private var sectionsList: some View {
-        LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xLarge) {
-            habitsSection
-            thoughtsSection
-            questionsSection
-            memoriesSection
-            achievementsSection
+    /// The three facets are peers. A vertical feed made the top one primary by
+    /// accident and pushed the rest away as it grew; a segmented control keeps
+    /// the top fixed and gives each list its own scroll.
+    private var facetPicker: some View {
+        Picker("内容", selection: $selectedFacet) {
+            Text("看法 \(model.thoughts.count)").tag(MindFacet.thoughts)
+            Text("问题 \(model.questions.count)").tag(MindFacet.questions)
+            Text("记忆 \(model.activeMemories.count)").tag(MindFacet.memories)
         }
-        .padding(ElsepageTheme.Spacing.page)
+        .pickerStyle(.segmented)
+        .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .background(Color.elsepageBackground)
+    }
+
+    @ViewBuilder private var facetContent: some View {
+        switch selectedFacet {
+        case .thoughts:
+            thoughtsFacet
+        case .questions:
+            questionsFacet
+        case .memories:
+            memoriesFacet
+        }
+    }
+
+    @ViewBuilder private var thoughtsFacet: some View {
+        if model.thoughts.isEmpty {
+            facetEmpty("你的想法还在阅读里，会随讨论逐渐成形。")
+        } else {
+            grouped {
+                ForEach(Array(model.thoughts.enumerated()), id: \.element.id) { index, thought in
+                    MindRow(
+                        title: thought.title,
+                        preview: thought.statement,
+                        meta: "\(brainStageLabel(thought.stage)) · \(ElsepageDateFormat.shortDate(thought.updatedAt))"
+                    ) {
+                        Haptics.cardExpanded()
+                        selectedThought = thought
+                    }
+                    if index < model.thoughts.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var questionsFacet: some View {
+        if model.questions.isEmpty {
+            facetEmpty("还没有正在追踪的问题。")
+        } else {
+            grouped {
+                ForEach(Array(model.questions.enumerated()), id: \.element.id) { index, question in
+                    MindRow(
+                        title: question.question,
+                        preview: nil,
+                        meta: "\(brainStateLabel(question.state)) · \(ElsepageDateFormat.shortDate(question.updatedAt))"
+                    ) {
+                        Haptics.cardExpanded()
+                        selectedQuestion = question
+                    }
+                    if index < model.questions.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var memoriesFacet: some View {
+        if model.activeMemories.isEmpty && model.retiredMemories.isEmpty {
+            facetEmpty("这是我目前从阅读与讨论中形成的理解，会随你的反馈调整。")
+        } else {
+            VStack(alignment: .leading, spacing: 24) {
+                if !model.activeMemories.isEmpty {
+                    grouped {
+                        ForEach(Array(model.activeMemories.enumerated()), id: \.element.id) { index, memory in
+                            row(for: memory)
+                            if index < model.activeMemories.count - 1 {
+                                Divider().padding(.leading, 16)
+                            }
+                        }
+                    }
+                }
+                if !model.retiredMemories.isEmpty {
+                    DisclosureGroup("已失效 \(model.retiredMemories.count) 条") {
+                        grouped {
+                            ForEach(Array(model.retiredMemories.enumerated()), id: \.element.id) { index, memory in
+                                row(for: memory)
+                                if index < model.retiredMemories.count - 1 {
+                                    Divider().padding(.leading, 16)
+                                }
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+                if !model.memories.isEmpty {
+                    Button("清除全部记忆", role: .destructive) {
+                        showsClearAll = true
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.elsepageDanger)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func grouped<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(
+            Color.elsepageSurface,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+    }
+
+    private func facetEmpty(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(Color.elsepageTextSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+    }
+
+    private var achievementsDestination: some View {
+        Group {
+            if achievements.unlocked.isEmpty {
+                ContentUnavailableView(
+                    "还没有解锁成就",
+                    systemImage: "rosette",
+                    description: Text("读完并留下想法后，会开始解锁一些有意义的徽章。")
+                )
+            } else {
+                List {
+                    ForEach(Achievement.all.filter { definition in
+                        achievements.unlocked.contains { $0.id == definition.id }
+                    }) { definition in
+                        HStack(spacing: 12) {
+                            Image(systemName: definition.systemImage)
+                                .font(.title3)
+                                .foregroundStyle(Color.elsepageInteractive)
+                                .frame(width: 38, height: 38)
+                                .background(Color.elsepageInteractive.opacity(0.08), in: Circle())
+                            Text(definition.title)
+                                .font(.subheadline.weight(.semibold))
+                            Spacer(minLength: 8)
+                            if let record = achievements.unlocked.first(where: { $0.id == definition.id }) {
+                                Text(ElsepageDateFormat.shortDate(record.unlockedAt))
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.elsepageTextTertiary)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("成就")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func brainThoughtDestination(_ thought: Thought) -> some View {
@@ -247,233 +407,6 @@ struct MyMindView: View {
         )
     }
 
-    private var habitsSection: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("阅读与思考")
-                    .font(.headline.weight(.semibold))
-                Spacer()
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: ElsepageTheme.Spacing.medium) {
-                    streakBadge(label: "连续阅读", days: model.readingStreak.days)
-                    streakBadge(label: "连续思考", days: model.thinkingStreak.days)
-                }
-                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    streakBadge(label: "连续阅读", days: model.readingStreak.days)
-                    streakBadge(label: "连续思考", days: model.thinkingStreak.days)
-                }
-            }
-        }
-    }
-
-    private func streakBadge(label: String, days: Int) -> some View {
-        HStack(spacing: ElsepageTheme.Spacing.xSmall) {
-            Image(systemName: label == "连续阅读" ? "book" : "lightbulb")
-                .accessibilityHidden(true)
-            Text("\(label) \(days) 天")
-                .font(.subheadline.weight(.medium))
-        }
-        .foregroundStyle(Color.elsepageTextPrimary)
-        .padding(.horizontal, ElsepageTheme.Spacing.medium)
-        .padding(.vertical, ElsepageTheme.Spacing.small)
-        .background(Color.elsepageSurfaceSecondary, in: Capsule())
-        .overlay(Capsule().stroke(Color.elsepageBorder))
-        .accessibilityElement(children: .combine)
-    }
-
-    // MARK: - Thoughts / Questions (brain.md §14)
-
-    private var thoughtsSection: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("正在形成的看法")
-                    .font(.headline.weight(.semibold))
-                Spacer()
-                Text("\(model.thoughts.count) 个")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            if model.thoughts.isEmpty {
-                Text("你的想法还在阅读里，会随讨论逐渐成形。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(showsAllThoughts ? model.thoughts : Array(model.thoughts.prefix(3)), id: \.id) { thought in
-                    BrainItemRow(
-                        title: thought.title,
-                        preview: thought.statement,
-                        badge: brainStageLabel(thought.stage),
-                        updatedAt: thought.updatedAt
-                    ) {
-                        Haptics.cardExpanded()
-                        selectedThought = thought
-                    }
-                }
-                if model.thoughts.count > 3 {
-                    Button(showsAllThoughts ? "收起" : "查看全部 \(model.thoughts.count) 条") {
-                        withAnimation(.snappy(duration: 0.24)) { showsAllThoughts.toggle() }
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .tint(Color.elsepageInteractive)
-                }
-            }
-        }
-    }
-
-    private var questionsSection: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("还在想的问题")
-                    .font(.headline.weight(.semibold))
-                Spacer()
-                Text("\(model.questions.count) 个")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            if model.questions.isEmpty {
-                Text("还没有正在追踪的问题。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(showsAllQuestions ? model.questions : Array(model.questions.prefix(3)), id: \.id) { question in
-                    BrainItemRow(
-                        title: question.question,
-                        preview: nil,
-                        badge: brainStateLabel(question.state),
-                        updatedAt: question.updatedAt
-                    ) {
-                        Haptics.cardExpanded()
-                        selectedQuestion = question
-                    }
-                }
-                if model.questions.count > 3 {
-                    Button(showsAllQuestions ? "收起" : "查看全部 \(model.questions.count) 条") {
-                        withAnimation(.snappy(duration: 0.24)) { showsAllQuestions.toggle() }
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .tint(Color.elsepageInteractive)
-                }
-            }
-        }
-    }
-
-    private var editingThoughtBinding: Binding<Bool> {
-        Binding(get: { editingThought != nil }, set: { if !$0 { editingThought = nil } })
-    }
-
-    private var editingQuestionBinding: Binding<Bool> {
-        Binding(get: { editingQuestion != nil }, set: { if !$0 { editingQuestion = nil } })
-    }
-
-    private var discussingBinding: Binding<Bool> {
-        Binding(get: { discussingItem != nil }, set: { if !$0 { discussingItem = nil } })
-    }
-
-    /// 低调徽章区(PRD F13):只列出已解锁的成就,无锁定/进度/积分。
-    private var achievementsSection: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("成就")
-                    .font(.headline.weight(.semibold))
-                Spacer()
-                Text("\(achievements.unlocked.count) 枚")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            if achievements.unlocked.isEmpty {
-                Text("读完并留下想法后，会开始解锁一些有意义的徽章。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(Achievement.all.filter { definition in
-                    achievements.unlocked.contains { $0.id == definition.id }
-                }) { definition in
-                    badgeRow(definition)
-                }
-            }
-        }
-    }
-
-    private func badgeRow(_ achievement: Achievement) -> some View {
-        HStack(spacing: ElsepageTheme.Spacing.medium) {
-            Image(systemName: achievement.systemImage)
-                .font(.title3)
-                .foregroundStyle(Color.elsepageInteractive)
-                .frame(width: 40, height: 40)
-                .background(Color.elsepageInteractive.opacity(0.12), in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(achievement.title).font(.subheadline.weight(.semibold))
-                Text(achievement.blurb).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            if let record = achievements.unlocked.first(where: { $0.id == achievement.id }) {
-                Text(ElsepageDateFormat.shortDate(record.unlockedAt))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(ElsepageTheme.Spacing.medium)
-        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(Color.elsepageBorder)
-        }
-        // A11Y-02: badge icon, title, blurb and date read as one stop.
-        .accessibilityElement(children: .combine)
-    }
-
-    private var emptyState: some View {
-        ContentUnavailableView(
-            "这里还没有长期内容",
-            systemImage: "sparkles",
-            description: Text("读完并留下想法后，你的看法、问题和记忆会慢慢形成。")
-        )
-    }
-
-    /// AI 记住的我(brain.md §14/§17):扁平列表 + 来源性质
-    /// 与置信度展示;已失效(不准确/忘记)作为审计痕迹保留。Phase 19 起读
-    /// brain store——投影形成的记忆即刻可见。
-    private var memoriesSection: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("AI 记住的我")
-                    .font(.headline.weight(.semibold))
-                Spacer()
-                Text("\(model.activeMemories.count) 条")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            if model.activeMemories.isEmpty {
-                Text("这是我目前从阅读与讨论中形成的理解，会随你的反馈调整。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(showsAllMemories ? model.activeMemories : Array(model.activeMemories.prefix(3)), id: \.id) { memory in
-                    row(for: memory)
-                }
-                if model.activeMemories.count > 3 {
-                    Button(showsAllMemories ? "收起" : "查看全部 \(model.activeMemories.count) 条") {
-                        withAnimation(.snappy(duration: 0.24)) { showsAllMemories.toggle() }
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .tint(Color.elsepageInteractive)
-                }
-            }
-            if !model.retiredMemories.isEmpty {
-                DisclosureGroup("已失效 \(model.retiredMemories.count) 条") {
-                    VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                        ForEach(model.retiredMemories, id: \.id) { memory in
-                            row(for: memory)
-                        }
-                    }
-                    .padding(.top, ElsepageTheme.Spacing.small)
-                }
-                .font(.subheadline.weight(.semibold))
-            }
-        }
-    }
-
     private func row(for memory: BrainMemory) -> some View {
         MemoryRow(
             memory: memory,
@@ -522,6 +455,69 @@ struct MyMindView: View {
     private var editingBinding: Binding<Bool> {
         Binding(get: { editingMemory != nil }, set: { if !$0 { editingMemory = nil } })
     }
+
+    private var editingThoughtBinding: Binding<Bool> {
+        Binding(get: { editingThought != nil }, set: { if !$0 { editingThought = nil } })
+    }
+
+    private var editingQuestionBinding: Binding<Bool> {
+        Binding(get: { editingQuestion != nil }, set: { if !$0 { editingQuestion = nil } })
+    }
+
+    private var discussingBinding: Binding<Bool> {
+        Binding(get: { discussingItem != nil }, set: { if !$0 { discussingItem = nil } })
+    }
+
+}
+
+private enum MindFacet: Hashable {
+    case thoughts
+    case questions
+    case memories
+}
+
+private struct MindRow: View {
+    let title: String
+    let preview: String?
+    let meta: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(Color.elsepageTextPrimary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    if let preview {
+                        Text(preview)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.elsepageTextSecondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Text(meta)
+                        .font(.footnote)
+                        .foregroundStyle(Color.elsepageTextTertiary)
+                        .padding(.top, 2)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.elsepageTextTertiary)
+                    .padding(.top, 2)
+                    .accessibilityHidden(true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("打开详情")
+    }
 }
 
 private struct MemoryEvidence {
@@ -545,22 +541,23 @@ private struct MemoryRow: View {
     private var isUserExplicit: Bool { memory.origin == .userExplicit }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+        VStack(alignment: .leading, spacing: 12) {
             Button(action: onToggleEvidence) {
-                HStack(alignment: .top, spacing: ElsepageTheme.Spacing.small) {
-                    originBadge
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(memory.content)
                             .font(.subheadline)
                             .strikethrough(isRetired, color: Color.elsepageTextSecondary)
                             .foregroundStyle(isRetired ? Color.elsepageTextSecondary : Color.elsepageTextPrimary)
                             .lineLimit(isExpanded ? nil : 4)
                             .multilineTextAlignment(.leading)
-                        metadata
+                        Text(metaLine)
+                            .font(.footnote)
+                            .foregroundStyle(Color.elsepageTextTertiary)
                     }
                     Spacer(minLength: 4)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.elsepageTextTertiary)
                         .accessibilityHidden(true)
                 }
@@ -578,39 +575,17 @@ private struct MemoryRow: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(ElsepageTheme.Spacing.medium)
-        .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                .stroke(Color.elsepageBorder)
-        }
+        .padding(16)
     }
 
     /// 来源性质(brain.md §17):用户明确表达 vs AI 推断——信任的第一信号。
-    private var originBadge: some View {
-        Text(isUserExplicit ? "用户明确表达" : "AI 推断")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Color.elsepageInteractive.opacity(isUserExplicit ? 0.18 : 0.12), in: Capsule())
-            .foregroundStyle(Color.elsepageInteractive)
-    }
-
-    private var metadata: some View {
-        HStack(spacing: ElsepageTheme.Spacing.small) {
-            if memory.state == .needsReview {
-                Text("待确认")
-                    .font(.caption)
-                    .foregroundStyle(Color.elsepageInteractive)
-            }
-            Text(ElsepageDateFormat.dateTime(memory.updatedAt))
-                .font(.caption)
-                .foregroundStyle(Color.elsepageTextSecondary)
-            Spacer(minLength: 4)
-            Text("置信度 \(memory.confidence.displayName)")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Color.elsepageTextSecondary)
-        }
+    private var metaLine: String {
+        var parts: [String] = []
+        if memory.state == .needsReview { parts.append("待确认") }
+        parts.append(isUserExplicit ? "用户明确表达" : "AI 推断")
+        parts.append("置信度\(memory.confidence.displayName)")
+        parts.append(ElsepageDateFormat.dateTime(memory.updatedAt))
+        return parts.joined(separator: " · ")
     }
 
     private var actions: some View {
@@ -625,7 +600,7 @@ private struct MemoryRow: View {
                 Button("忘记", action: onDelete)
                 Button(isExpanded ? "收起依据" : "查看依据", action: onToggleEvidence)
             }
-            .font(.caption)
+            .font(.footnote)
             .buttonStyle(.bordered)
             .tint(Color.elsepageInteractive)
             // A11Y-03: keep each compact action at the 44pt minimum target.
@@ -638,7 +613,7 @@ private struct MemoryRow: View {
         if let evidence {
             VStack(alignment: .leading, spacing: 6) {
                 Label("记忆来源", systemImage: "quote.bubble")
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.elsepageInteractive)
                 Text(evidence.reflectionText)
                     .font(.subheadline)
@@ -653,7 +628,7 @@ private struct MemoryRow: View {
             }
         } else {
             Text("没有可展示的来源依据")
-                .font(.caption)
+                .font(.footnote)
                 .foregroundStyle(Color.elsepageTextTertiary)
         }
     }
@@ -686,59 +661,6 @@ private func brainStateLabel(_ state: QuestionState) -> String {
     case .partiallyResolved: "部分解决"
     case .resolved: "已解决"
     case .dormant: "暂放"
-    }
-}
-
-/// A Thoughts/Questions row on the homepage: tap opens the detail view.
-private struct BrainItemRow: View {
-    let title: String
-    let preview: String?
-    let badge: String
-    let updatedAt: Date
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                if let preview {
-                    Text(preview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                HStack(spacing: ElsepageTheme.Spacing.small) {
-                    Text(badge)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.elsepageInteractive.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Color.elsepageInteractive)
-                    Text(ElsepageDateFormat.shortDate(updatedAt))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(ElsepageTheme.Spacing.medium)
-            .background(Color.elsepageSurface, in: RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: ElsepageTheme.Radius.small, style: .continuous)
-                    .stroke(Color.elsepageBorder)
-            }
-            .accessibilityElement(children: .combine)
-        }
-        .buttonStyle(.plain)
     }
 }
 
