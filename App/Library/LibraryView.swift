@@ -18,16 +18,19 @@ struct LibraryView: View {
     @State private var reflection: SessionReflectionModel?
     @State private var presentedReflectionSessionID: ReadingSessionID?
     @State private var didSaveReflectionInSheet = false
+    @Binding private var importRequest: Bool
     @Namespace private var bookTransitionNamespace
 
     init(
         model: LibraryModel,
         settings: SettingsRootModel,
-        achievements: AchievementModel? = nil
+        achievements: AchievementModel? = nil,
+        importRequest: Binding<Bool> = .constant(false)
     ) {
         self.model = model
         self.settings = settings
         self.achievements = achievements
+        _importRequest = importRequest
         _nextActionModel = State(initialValue: LibraryNextActionModel(library: model))
     }
 
@@ -136,6 +139,16 @@ struct LibraryView: View {
             .task {
                 await model.reload()
                 await nextActionModel.reload()
+            }
+            .onChange(of: importRequest) { _, requested in
+                guard requested else { return }
+                importing = true
+                importRequest = false
+            }
+            .onAppear {
+                guard importRequest else { return }
+                importing = true
+                importRequest = false
             }
         }
     }
