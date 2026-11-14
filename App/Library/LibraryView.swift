@@ -214,7 +214,6 @@ struct LibraryView: View {
 
         VStack(alignment: .leading, spacing: 0) {
             if let current {
-                sectionTitle("继续阅读", top: 8, bottom: 8)
                 currentReadingRow(current)
                 if !gridBooks.isEmpty {
                     sectionTitle("全部书籍", top: 32, bottom: 4)

@@ -4,7 +4,7 @@
 
 [打开静态样张](../prototypes/elsepage-native-refinement.html)。单文件、无 JavaScript、无网络请求；393×852 两帧只区分“默认”和“有未写想法”，不是可交互演示。书名、作者、进度和封面均为演示数据。
 
-结论不是把方案 1 继续放大，而是把自绘的 Web 组件换成系统组件，并把可省的交互删掉；阅读顺序保持不变：继续阅读在上，全部书籍在下。
+结论不是把方案 1 继续放大，而是把自绘的 Web 组件换成系统组件，并把可省的交互删掉；阅读顺序保持不变：当前书行在上，全部书籍在下；当前书行不再加“继续阅读”标签。
 
 ## 删掉了什么
 
@@ -26,7 +26,7 @@
 | 用途 | 样张 | SwiftUI | 说明 |
 | --- | --- | --- | --- |
 | 页面标题 | 34 / Bold | `.largeTitle`（`navigationTitle` 自动） | 不再手写 36 |
-| 区块标题 | 20 / Semibold | `.title3.weight(.semibold)` | “继续阅读”“全部书籍” |
+| 区块标题 | 20 / Semibold | `.title3.weight(.semibold)` | “全部书籍”；当前书行不再有区块标题 |
 | 当前书名 | 22 / Semibold | `.title2.weight(.semibold)` | |
 | 正文 / 操作 | 17 / Regular | `.body` | 搜索栏由系统提供 |
 | 作者、次要信息 | 15 / Regular | `.subheadline` | |
@@ -46,7 +46,6 @@
 NavigationStack {
     ScrollView {
         LazyVStack(alignment: .leading, spacing: 0) {
-            sectionHeader("继续阅读")
             ZStack(alignment: .bottomTrailing) {
                 Button { open(book) } label: {
                     CurrentReadingContent(book: book, progress: progress)
@@ -85,7 +84,7 @@ NavigationStack {
 
 ## 与现有实现的差异（已落地）
 
-- `LibraryView`：大标题、搜索和工具栏已经符合原生结构；新增“继续阅读”行与两个区块标题，当前书从网格移出。
+- `LibraryView`：大标题、搜索和工具栏已经符合原生结构；新增当前书行与“全部书籍”区块标题，当前书从网格移出；“继续阅读”标签已移除。
 - `LibraryGridView`：页边距 20 → 16；书名从 `.title3` 衬线改为 `.subheadline.semibold`；作者从 `.caption` 改为 `.footnote`；移除每格状态行和进度条；三列保留。
 - `ElsepageTheme.Spacing`：本轮不改全局 6 / 10 / 20 / 28，书架局部使用 16 / 12 / 24 / 32，避免连带其它页面。
 - 待写想法入口：位置改为当前行右下的 overlay，不参与布局；数据与保存路径不变。
