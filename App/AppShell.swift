@@ -43,14 +43,12 @@ struct AppShell: View {
             .tag(AppTab.myMind)
         }
         .tint(.elsepageInteractive)
-        // The system tab bar is a single capsule. Hide it and draw the split
-        // capsule + compose bar so the three destinations sit left of the
-        // trailing compose action. iOS 18 falls back to a material capsule.
+        // The system tab bar is a single capsule. The native split bar below
+        // keeps a real UITabBar (system glass + selection lens) and puts the
+        // compose button beside it, only on the shelf.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !keyboardVisible {
-                ElsepageTabBar(selection: $selection) {
-                    openImport()
-                }
+                bottomBar
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -87,31 +85,242 @@ struct AppShell: View {
         }
     }
 
+    @ViewBuilder
+    private var bottomBar: some View {
+        if #available(iOS 26.0, *) {
+            NativeSplitTabBar(
+                selection: $selection,
+                showsCompose: selection == .library,
+                onImport: openImport
+            )
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+        } else {
+            ElsepageMaterialTabBar(
+                selection: $selection,
+                showsCompose: selection == .library,
+                onImport: openImport
+            )
+        }
+    }
+
     private func openImport() {
         selection = .library
         importRequested = true
     }
 }
 
-/// The floating split bar: a glass capsule with the three destinations and a
-/// separate circular compose action. The capsule and button use the iOS 26
-/// glass API; older systems and Reduce Transparency get a material/solid
-/// surface with the same geometry.
-private struct ElsepageTabBar: View {
+// MARK: - iOS 26 native split bar
+
+/// A real `UITabBar` plus a real glass `UIButton`, mirroring the T3 Code iOS
+/// layout. The tab bar keeps its system glass and selection lens; the compose
+/// button is measured against the actual tab-button row. The tab bar's trailing
+/// area is reserved permanently, so hiding compose never moves the glass.
+private struct NativeSplitTabBar: UIViewRepresentable {
     @Binding var selection: AppTab
+    let showsCompose: Bool
     let onImport: () -> Void
 
-    var body: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 10) {
-                barBody
-            }
-        } else {
-            barBody
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> ElsepageSplitBarHost {
+        let host = ElsepageSplitBarHost()
+        host.tabBar.delegate = context.coordinator
+        host.onCompose = onImport
+        host.setSelection(selection)
+        host.setShowsCompose(showsCompose)
+        return host
+    }
+
+    func updateUIView(_ host: ElsepageSplitBarHost, context: Context) {
+        context.coordinator.parent = self
+        host.onCompose = onImport
+        host.setSelection(selection)
+        host.setShowsCompose(showsCompose)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: ElsepageSplitBarHost, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? UIScreen.main.bounds.width, height: 64)
+    }
+
+    final class Coordinator: NSObject, UITabBarDelegate {
+        var parent: NativeSplitTabBar
+
+        init(_ parent: NativeSplitTabBar) {
+            self.parent = parent
+        }
+
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard AppTab.all.indices.contains(item.tag) else { return }
+            parent.selection = AppTab.all[item.tag]
+        }
+    }
+}
+
+/// A plain UIButton whose accessibility activation also sends the touch action,
+/// so VoiceOver (and automation) can open the importer the same way a tap does.
+private final class ElsepageComposeButton: UIButton {
+    override func accessibilityActivate() -> Bool {
+        sendActions(for: .touchUpInside)
+        return true
+    }
+}
+
+private final class ElsepageSplitBarHost: UIView {
+    let tabBar = ElsepageNativeTabBar()
+    private let composeButton = ElsepageComposeButton(type: .system)
+    private let tabs = AppTab.all
+    private var showsCompose = false
+    private var selection: AppTab = .library
+    var onCompose: (() -> Void)?
+    private lazy var tabBarTrailing = tabBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -64)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+
+        tabBar.itemPositioning = .fill
+        if #available(iOS 17.0, *) {
+            tabBar.traitOverrides.horizontalSizeClass = .compact
+        }
+        tabBar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(tabBar)
+        NSLayoutConstraint.activate([
+            tabBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            tabBarTrailing,
+            tabBar.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+        ])
+        tabBar.onContentLayout = { [weak self] frame in
+            self?.layoutCompose(alongside: frame)
+        }
+
+        composeButton.accessibilityLabel = "导入 EPUB"
+        composeButton.addTarget(self, action: #selector(composeTapped), for: .touchUpInside)
+        composeButton.isHidden = true
+        addSubview(composeButton)
+
+        configureCompose()
+        configureItems()
+        setSelection(selection)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setSelection(_ tab: AppTab) {
+        selection = tab
+        guard let index = tabs.firstIndex(of: tab),
+              let items = tabBar.items,
+              items.indices.contains(index) else { return }
+        if tabBar.selectedItem !== items[index] {
+            tabBar.selectedItem = items[index]
         }
     }
 
-    private var barBody: some View {
+    func setShowsCompose(_ shows: Bool) {
+        guard showsCompose != shows else { return }
+        showsCompose = shows
+        composeButton.isHidden = !shows
+        if shows {
+            setNeedsLayout()
+            tabBar.setNeedsLayout()
+            tabBar.layoutIfNeeded()
+        } else {
+            composeButton.frame = .zero
+        }
+    }
+
+    private func configureItems() {
+        tabBar.items = tabs.enumerated().map { index, tab in
+            let item = UITabBarItem(
+                title: nil,
+                image: UIImage(systemName: tab.symbol),
+                tag: index
+            )
+            item.selectedImage = UIImage(systemName: tab.selectedSymbol)
+            item.accessibilityLabel = tab.title
+            item.accessibilityIdentifier = "elsepage-tab-\(index)"
+            return item
+        }
+        tabBar.tintColor = UIColor(Color.elsepageTextPrimary)
+        tabBar.unselectedItemTintColor = UIColor(Color.elsepageTextSecondary)
+    }
+
+    @objc private func composeTapped() {
+        onCompose?()
+    }
+
+    private func configureCompose() {
+        var configuration: UIButton.Configuration
+        if #available(iOS 26.0, *) {
+            configuration = .glass()
+        } else {
+            configuration = .gray()
+        }
+        configuration.cornerStyle = .capsule
+        configuration.baseForegroundColor = .label
+        configuration.image = UIImage(systemName: "plus")
+        composeButton.configuration = configuration
+    }
+
+    private func layoutCompose(alongside frame: CGRect) {
+        guard showsCompose, frame.height > 0 else { return }
+        let row = convert(frame, from: tabBar)
+        let size = row.height + 8
+        composeButton.frame = CGRect(
+            x: row.maxX + 16,
+            y: row.midY - size / 2,
+            width: size,
+            height: size
+        )
+    }
+}
+
+/// The tab bar's laid-out item row is private to UIKit. Read the real tab
+/// buttons (ignoring the enlarged glass-lens copy) so compose can sit exactly
+/// beside the floating glass, as T3 Code does.
+private final class ElsepageNativeTabBar: UITabBar {
+    var onContentLayout: ((CGRect) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let identified = tabButtons(in: self) {
+            $0.accessibilityIdentifier?.hasPrefix("elsepage-tab-") == true
+        }
+        let candidates = identified.isEmpty ? tabButtons(in: self) { _ in true } : identified
+        let buttons = candidates.filter {
+            let size = convert($0.bounds, from: $0).size
+            return abs(size.width - $0.bounds.width) < 1 && abs(size.height - $0.bounds.height) < 1
+        }
+        let row = buttons.reduce(CGRect.null) { $0.union(convert($1.bounds, from: $1)) }
+        if !row.isNull {
+            onContentLayout?(row)
+        }
+    }
+
+    private func tabButtons(in view: UIView, matching match: (UIView) -> Bool) -> [UIView] {
+        view.subviews.filter { !$0.isHidden }.flatMap { subview in
+            if subview is UIControl, match(subview) { return [subview] }
+            return tabButtons(in: subview, matching: match)
+        }
+    }
+}
+
+// MARK: - iOS 18 / Reduce Transparency fallback
+
+/// The same split geometry with a material capsule instead of Liquid Glass.
+/// Compose occupies a reserved slot even when hidden, so the capsule never
+/// changes width or position.
+private struct ElsepageMaterialTabBar: View {
+    @Binding var selection: AppTab
+    let showsCompose: Bool
+    let onImport: () -> Void
+
+    var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 0) {
                 tabButton(.library)
@@ -120,22 +329,28 @@ private struct ElsepageTabBar: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 56)
-            .elsepageGlass(Capsule())
+            .elsepageMaterial(Capsule())
 
-            Button(action: onImport) {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.elsepageTextPrimary)
+            if showsCompose {
+                Button(action: onImport) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color.elsepageTextPrimary)
+                        .frame(width: 56, height: 56)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("导入 EPUB")
+                .elsepageMaterial(Circle())
+            } else {
+                Color.clear
                     .frame(width: 56, height: 56)
-                    .contentShape(Circle())
+                    .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("导入 EPUB")
-            .elsepageGlass(Circle(), interactive: true)
         }
-        .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+        .padding(.leading, 8)
+        .padding(.trailing, 12)
         .padding(.bottom, 8)
-        .accessibilityElement(children: .contain)
     }
 
     private func tabButton(_ tab: AppTab) -> some View {
@@ -162,9 +377,8 @@ private struct ElsepageTabBar: View {
     }
 }
 
-private struct ElsepageGlass<S: Shape>: ViewModifier {
+private struct ElsepageMaterial<S: Shape>: ViewModifier {
     let shape: S
-    var interactive = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @ViewBuilder
@@ -173,8 +387,6 @@ private struct ElsepageGlass<S: Shape>: ViewModifier {
             content
                 .background(Color.elsepageSurface, in: shape)
                 .overlay(shape.stroke(Color.elsepageBorder, lineWidth: 0.5))
-        } else if #available(iOS 26.0, *) {
-            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             content
                 .background(.ultraThinMaterial, in: shape)
@@ -185,10 +397,12 @@ private struct ElsepageGlass<S: Shape>: ViewModifier {
 }
 
 private extension View {
-    func elsepageGlass<S: Shape>(_ shape: S, interactive: Bool = false) -> some View {
-        modifier(ElsepageGlass(shape: shape, interactive: interactive))
+    func elsepageMaterial<S: Shape>(_ shape: S) -> some View {
+        modifier(ElsepageMaterial(shape: shape))
     }
 }
+
+// MARK: - Shared
 
 private struct ReaderDestination: Identifiable {
     let id = UUID()
@@ -200,6 +414,8 @@ private enum AppTab: Hashable {
     case library
     case mind
     case myMind
+
+    static let all: [AppTab] = [.library, .mind, .myMind]
 
     var title: String {
         switch self {
@@ -214,6 +430,14 @@ private enum AppTab: Hashable {
         case .library: "books.vertical"
         case .mind: "lightbulb"
         case .myMind: "person.crop.circle"
+        }
+    }
+
+    var selectedSymbol: String {
+        switch self {
+        case .library: "books.vertical.fill"
+        case .mind: "lightbulb.fill"
+        case .myMind: "person.crop.circle.fill"
         }
     }
 }
