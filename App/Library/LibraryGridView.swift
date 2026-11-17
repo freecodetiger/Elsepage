@@ -253,23 +253,30 @@ struct LibraryGridView: View {
                 // A quiet "where was I" cue for every other book. The
                 // current book owns the full progress row above; this is
                 // only a 2pt line, not a third text line.
-                if let progress = progress(book), progress > 0 {
-                    ProgressView(value: progress)
-                        .tint(.elsepageInteractive)
-                        .frame(height: 2)
-                        .accessibilityHidden(true)
-                }
+                //
+                // Always laid out, even at zero: a line present on only some
+                // books made those cells taller, and the grid centres a cell
+                // in its row, so their covers rode a few points higher than
+                // their neighbours'.
+                ProgressView(value: progress(book) ?? 0)
+                    .tint(.elsepageInteractive)
+                    .frame(height: 2)
+                    .opacity((progress(book) ?? 0) > 0 ? 1 : 0)
+                    .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 2) {
+                // Space is reserved for both lines whether or not the title
+                // needs them, so every cell in a row is the same height and
+                // its cover lands at the same y as the rest.
                 Text(book.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.elsepageTextPrimary)
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
                 Text(authorName(book))
                     .font(.footnote)
                     .foregroundStyle(Color.elsepageTextSecondary)
-                    .lineLimit(1)
+                    .lineLimit(1, reservesSpace: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
