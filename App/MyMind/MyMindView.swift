@@ -214,7 +214,7 @@ struct MyMindView: View {
     /// the top fixed and gives each list its own scroll.
     private var facetPicker: some View {
         Picker("内容", selection: $selectedFacet) {
-            Text("看法 \(model.thoughts.count)").tag(MindFacet.thoughts)
+            Text("想法 \(model.thoughts.count)").tag(MindFacet.thoughts)
             Text("问题 \(model.questions.count)").tag(MindFacet.questions)
             Text("记忆 \(model.activeMemories.count)").tag(MindFacet.memories)
         }

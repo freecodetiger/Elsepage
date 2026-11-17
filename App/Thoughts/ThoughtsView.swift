@@ -377,7 +377,7 @@ private struct ThoughtRecordExtras: View {
 
             if !journal.whatIThink.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("看法")
+                    Text("想法")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
                     ForEach(journal.whatIThink.prefix(3), id: \.id) { thought in
