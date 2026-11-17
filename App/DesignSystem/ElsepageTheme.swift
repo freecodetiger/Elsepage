@@ -23,13 +23,15 @@ enum ElsepageTheme {
 
     enum Typography {
         static let emptyStateTitle = Font.system(.title2, design: .serif, weight: .semibold)
-        static let bookTitle = Font.system(.title3, design: .serif, weight: .semibold)
+        // Generated covers are 120pt wide; 22pt serif broke "Foundation" into
+        // "Foundati / on". 17pt keeps the placeholder readable without
+        // competing with the real title below the cover.
+        static let bookTitle = Font.system(.headline, design: .serif, weight: .semibold)
         static let itemTitle = Font.subheadline.weight(.semibold)
         static let metadata = Font.caption
     }
 
     enum MaterialToken {
-        static let chrome: Material = .ultraThinMaterial
         static let control: Material = .thinMaterial
     }
 

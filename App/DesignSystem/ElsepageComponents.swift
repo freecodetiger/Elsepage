@@ -2,27 +2,89 @@ import AppInfrastructure
 import SwiftUI
 import UIKit
 
+enum ElsepageIconButtonRole: String, CaseIterable, Identifiable {
+    case surface
+    case plain
+    case filled
+    case destructive
+
+    var id: String { rawValue }
+
+    var fill: Color {
+        switch self {
+        case .surface: ElsepageColor.surface
+        case .plain: .clear
+        case .filled: ElsepageColor.accent
+        case .destructive: ElsepageColor.danger
+        }
+    }
+
+    var foreground: Color {
+        switch self {
+        case .surface, .plain: ElsepageColor.textPrimary
+        case .filled, .destructive: ElsepageColor.onAccent
+        }
+    }
+
+    var hasBorder: Bool { self == .surface }
+}
+
 /// Circular icon button used in the reader chrome and onboarding header.
 /// A11Y-01: the frame scales with Dynamic Type (@ScaledMetric) so the touch
 /// target keeps up with the icon; A11Y-03: the base is the 44pt HIG minimum.
 struct ElsepageIconButton: View {
     let systemName: String
     let accessibilityLabel: String
+    var role: ElsepageIconButtonRole
+    var isEnabled: Bool
+    var isLoading: Bool
     let action: () -> Void
 
     @ScaledMetric(relativeTo: .body) private var side: CGFloat = AccessibilityMetrics.minimumTapTargetSide
 
+    init(
+        systemName: String,
+        accessibilityLabel: String,
+        role: ElsepageIconButtonRole = .surface,
+        isEnabled: Bool = true,
+        isLoading: Bool = false,
+        action: @escaping () -> Void
+    ) {
+        self.systemName = systemName
+        self.accessibilityLabel = accessibilityLabel
+        self.role = role
+        self.isEnabled = isEnabled
+        self.isLoading = isLoading
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.body.weight(.semibold))
-                .frame(width: side, height: side)
-                .background(Color.elsepageSurface, in: Circle())
-                .overlay(Circle().stroke(Color.elsepageBorder))
-                .contentShape(Circle())
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(role.foreground)
+                } else {
+                    Image(systemName: systemName)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(role.foreground)
+                }
+            }
+            .frame(width: side, height: side)
+            .background(role.fill, in: Circle())
+            .overlay {
+                if role.hasBorder {
+                    Circle().stroke(ElsepageColor.border, lineWidth: ElsepageBorder.hairline)
+                }
+            }
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled || isLoading)
+        .opacity(isEnabled ? (isLoading ? ElsepageState.loadingOpacity : 1) : ElsepageState.disabledOpacity)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isLoading ? "加载中" : "")
     }
 }
 
@@ -51,6 +113,8 @@ enum ElsepageBookCoverMetrics {
 }
 
 struct ElsepageBookCover: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let image: UIImage?
     let title: String
     let author: String?
@@ -96,11 +160,19 @@ struct ElsepageBookCover: View {
     /// A real cover already carries its own title and artwork; stamping the EPUB
     /// metadata over it only fights the art (titles are frequently a concatenated
     /// multi-book string). The label is reserved for the generated placeholder.
+    private var titleFont: Font {
+        // A 120pt grid cover leaves ~98pt of label width; 17pt serif broke
+        // "Foundation" mid-word ("Foundatio / n"). Scale with the cover so
+        // the placeholder wraps at word boundaries on the smallest covers.
+        let size = min(17, max(12, width * 0.13))
+        return .system(size: size, weight: .semibold, design: .serif)
+    }
+
     private var label: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.xSmall) {
             Text(title)
-                .font(ElsepageTheme.Typography.bookTitle)
-                .lineLimit(4)
+                .font(titleFont)
+                .lineLimit(3)
                 // The cover frame is fixed 2:3 while the title follows Dynamic
                 // Type; graceful downscale keeps oversized type inside the
                 // artwork instead of clipping it (A11Y-01). The card's real
@@ -115,7 +187,8 @@ struct ElsepageBookCover: View {
             }
         }
         .foregroundStyle(.white)
-        .padding(ElsepageTheme.Spacing.medium)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder
@@ -138,7 +211,10 @@ struct ElsepageBookCover: View {
             artwork
                 .frame(width: size.width, height: size.height)
                 .clipped()
-            if image == nil { label }
+            // The generated cover label is decorative repetition of the title
+            // below it. At accessibility sizes it cannot fit the fixed 2:3 box
+            // and breaks mid-word, so leave the gradient artwork alone.
+            if image == nil, !dynamicTypeSize.isAccessibilitySize { label }
         }
         .frame(width: size.width, height: size.height)
         .clipShape(
@@ -221,13 +297,17 @@ struct ElsepageSearchField: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
                         .foregroundStyle(Color.elsepageTextTertiary)
+                        // The glyph was a 16pt tap target; the row is the
+                        // control and the clear action gets the full 44pt.
+                        .frame(width: ElsepageSpacing.touchTarget, height: ElsepageSpacing.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("清除搜索")
             }
         }
         .padding(.horizontal, 10)
-        .frame(height: 36)
+        .frame(minHeight: ElsepageSpacing.fieldMinHeight)
         .background(
             Color(uiColor: .tertiarySystemFill),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)

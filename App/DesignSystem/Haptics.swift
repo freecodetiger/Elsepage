@@ -47,6 +47,11 @@ enum Haptics {
     }
 
     /// 书架中的书被抽出。
+    /// 拖拽换位时，手指进入另一本书。
+    static func selectionChanged() {
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
     static func bookPulled() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
