@@ -161,7 +161,7 @@ struct OnboardingView: View {
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
             }
-            TextField("模型名称", text: $provider.modelID)
+            TextField("模型名称（按服务商填写）", text: $provider.modelID)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             SecureField(provider.hasSavedKey ? "API 密钥（已保存）" : "API 密钥", text: $provider.apiKey)
@@ -244,7 +244,11 @@ struct OnboardingView: View {
     private var primaryDisabled: Bool {
         switch model.step {
         case .importBook: return model.isImporting
-        case .configureAI: return provider.isWorking
+        case .configureAI:
+            return provider.isWorking
+                || provider.modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || (!provider.hasSavedKey
+                    && provider.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         case .firstRead: return false
         }
     }

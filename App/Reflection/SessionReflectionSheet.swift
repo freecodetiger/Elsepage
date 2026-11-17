@@ -1069,6 +1069,7 @@ struct SessionReflectionSheet: View {
     @Bindable var model: SessionReflectionModel
     let onSaved: @MainActor (Reflection) -> Void
     var openCitation: ((AgentResponseEvidence) -> Void)?
+    @State private var confirmsDiscard = false
 
     var body: some View {
         NavigationStack {
@@ -1125,7 +1126,14 @@ struct SessionReflectionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(model.reflection == nil ? "今天先不了" : "完成") { dismiss() }
+                    Button(model.reflection == nil ? "这次不写" : "完成") {
+                        if model.reflection == nil,
+                           !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            confirmsDiscard = true
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
                 if model.reflection == nil { ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
@@ -1143,6 +1151,16 @@ struct SessionReflectionSheet: View {
             .achievementToast(model.achievements)
         }
         .presentationBackground(Color.elsepageBackground)
+        // Closing the editor must be a deliberate act. Swiping it away used to
+        // count as "今天先不了" and permanently dismiss the session; the toolbar
+        // now says "这次不写", and a non-empty draft asks before it is lost.
+        .interactiveDismissDisabled(model.reflection == nil)
+        .confirmationDialog("放弃这次想法？", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+            Button("继续写", role: .cancel) {}
+            Button("放弃并关闭", role: .destructive) { dismiss() }
+        } message: {
+            Text("已经写下的内容不会保存。")
+        }
         .alert("暂时无法保存", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -1175,6 +1193,11 @@ struct SessionReflectionSheet: View {
             Text("这是你的原始想法，会先保存在本机，再决定是否邀请回应。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            if !model.canSubmit {
+                Text(model.isVoiceRecording ? "结束录音后即可保存。" : "写一点内容即可保存。")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color.elsepageTextTertiary)
+            }
         }
     }
 
@@ -1411,7 +1434,7 @@ struct ReflectionConversationView: View {
                     )
                     switch pending.deliveryState {
                     case .sending:
-                        Label("已发送", systemImage: "checkmark.circle")
+                        Label("发送中…", systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     case .failed:

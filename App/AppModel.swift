@@ -69,10 +69,17 @@ final class AppModel {
             let providerConfigurations = GRDBProviderConfigurationRepository(database: database)
             let secrets = KeychainSecretStore()
             let routingTraces = GRDBRoutingTraceRepository(database: database)
-            let modelClientFactory = ConfiguredModelClientFactory(
-                configurations: providerConfigurations,
-                secrets: secrets
-            )
+            // UI tests swap the provider for a deterministic one; every other
+            // build resolves the real configuration and Keychain credential.
+            let modelClientFactory: any ModelClientFactory = {
+                #if DEBUG
+                if let fake = FakeModelProvider.fromLaunchArguments() { return fake }
+                #endif
+                return ConfiguredModelClientFactory(
+                    configurations: providerConfigurations,
+                    secrets: secrets
+                )
+            }()
             // Resolves the configured embedding provider (separate model, enabled
             // in Settings) at run time. Returns nil when disabled, so semantic
             // retrieval degrades to lexical without rebuilding the object graph.
@@ -236,9 +243,31 @@ final class AppModel {
             await library?.resumeBookIndexing()
             await achievements.reload()
             await importPendingIfReady()
+            #if DEBUG
+            // UI-test/QA fixture: `-seed-library` fills an empty shelf with the
+            // bundled sample EPUBs so drag-swap can be exercised.
+            if ProcessInfo.processInfo.arguments.contains("-seed-library") {
+                await library?.importDebugBooksIfNeeded()
+            }
+            #endif
             presentOnboardingIfFirstLaunch()
         } catch {
             startupError = error.localizedDescription
+        }
+    }
+
+    /// Retry a failed cold start without relaunching. `start()` guards on
+    /// `startupError`, so clear it first. If the graph made it far enough to
+    /// have a library, retry the loads that could have failed instead of
+    /// rebuilding the whole graph (which would leak the existing one).
+    func retryStartup() async {
+        startupError = nil
+        if library == nil {
+            await start()
+        } else {
+            await library?.reload()
+            await settings?.loadAll()
+            await achievements?.reload()
         }
     }
 

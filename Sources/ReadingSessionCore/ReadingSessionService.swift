@@ -98,16 +98,27 @@ public struct SessionEndingSummary: Hashable, Sendable {
 /// A deterministic product policy which prevents accidental or very short opens
 /// from becoming Reflection prompts.
 public struct MeaningfulReadingSessionPolicy: Sendable {
+    /// Below this the session never prompts for a reflection, even if a page
+    /// turned or a highlight was made. A two-minute look is not a reading
+    /// session worth interrupting; the progress and highlight signals only
+    /// qualify sessions that already cleared this floor.
+    public let hardFloorDuration: TimeInterval
     public let minimumDuration: TimeInterval
     public let minimumProgressDelta: Double
 
-    public init(minimumDuration: TimeInterval = 3 * 60, minimumProgressDelta: Double = 0.005) {
+    public init(
+        hardFloorDuration: TimeInterval = 2 * 60,
+        minimumDuration: TimeInterval = 3 * 60,
+        minimumProgressDelta: Double = 0.005
+    ) {
+        self.hardFloorDuration = hardFloorDuration
         self.minimumDuration = minimumDuration
         self.minimumProgressDelta = minimumProgressDelta
     }
 
     public func shouldOfferReflection(for summary: SessionEndingSummary) -> Bool {
         guard summary.session.endedAt != nil else { return false }
+        guard summary.wallClockDuration >= hardFloorDuration else { return false }
         return summary.wallClockDuration >= minimumDuration
             || (summary.progressDelta ?? 0) >= minimumProgressDelta
             || summary.session.highlightCount > 0

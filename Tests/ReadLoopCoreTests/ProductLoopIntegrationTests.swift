@@ -18,9 +18,16 @@ import Testing
     ))
     #expect(!short.shouldOfferReflection)
 
+    // A highlight inside a two-minute look is not enough: the hard floor wins.
     var annotated = short.session
     annotated.highlightCount = 1
-    #expect(SessionEndingSummary(session: annotated).shouldOfferReflection)
+    #expect(!SessionEndingSummary(session: annotated).shouldOfferReflection)
+
+    // Above the floor, signals qualify a session that is still under 3 minutes.
+    var brieflyAnnotated = short.session
+    brieflyAnnotated.endedAt = .init(timeIntervalSince1970: 250)
+    brieflyAnnotated.highlightCount = 1
+    #expect(SessionEndingSummary(session: brieflyAnnotated).shouldOfferReflection)
 
     var long = short.session
     long.endedAt = .init(timeIntervalSince1970: 281)

@@ -1,7 +1,12 @@
 import ContextRouting
 import AppInfrastructure
+import Foundation
 import ModelProviders
 import SwiftUI
+
+#if DEBUG
+import PulseUI
+#endif
 
 // MARK: - 设置主页
 
@@ -43,7 +48,7 @@ struct SettingsView: View {
                         NavigationLink {
                             RAGManagementView(model: model.ragManagement!)
                         } label: {
-                            statusRow(title: "每本书的检索进度", status: "索引状态与重新嵌入", muted: false, icon: "doc.text.magnifyingglass")
+                            statusRow(title: "每本书的检索进度", status: "索引状态与重新嵌入", muted: true, icon: "doc.text.magnifyingglass")
                         }
                     }
                 }
@@ -75,6 +80,11 @@ struct SettingsView: View {
                     } label: {
                         statusRow(title: "路由诊断", status: model.diagnosticsSummary, muted: true, icon: "chart.bar")
                     }
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("-pulse") {
+                        NavigationLink("网络请求（Pulse）") { ConsoleView() }
+                    }
+                    #endif
                 }
 
                 Section("数据与隐私") {
@@ -123,6 +133,12 @@ struct ChatProviderView: View {
     let onDeleteConfiguration: @MainActor () async -> Void
     @State private var showsDeleteConfirmation = false
 
+    private var canSave: Bool {
+        !model.modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (model.hasSavedKey
+                || !model.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     var body: some View {
         Form {
             Section("Provider") {
@@ -144,7 +160,7 @@ struct ChatProviderView: View {
                         .font(.footnote)
                         .textSelection(.enabled)
                 }
-                TextField("模型", text: $model.modelID)
+                TextField("模型（按服务商填写）", text: $model.modelID)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 SecureField(model.hasSavedKey ? "API Key（已保存）" : "API Key", text: $model.apiKey)
@@ -155,12 +171,14 @@ struct ChatProviderView: View {
 
             Section {
                 Button("保存配置") { Task { _ = await model.save() } }
+                    .disabled(!canSave)
                 Button("测试连接") { Task { await model.testConnection() } }
+                    .disabled(!canSave)
                 if model.hasSavedKey {
-                    Button("删除配置和 API Key", role: .destructive) { showsDeleteConfirmation = true }
+                    Button("删除所有 AI 配置和 API Key", role: .destructive) { showsDeleteConfirmation = true }
                 }
             } footer: {
-                Text("预设会自动使用服务商的官方接口地址：Anthropic 使用原生 Messages API，其余为 OpenAI-compatible。API Key 只保存在本机 Keychain；模型名请按服务商控制台填写。")
+                Text("预设会自动使用服务商的官方接口地址：Anthropic 使用原生 Messages API，其余为 OpenAI-compatible。API Key 只保存在本机 Keychain。测试连接使用当前填写的服务商、模型与 Key；模型名请按服务商控制台填写。")
             }
             .disabled(model.isWorking)
 

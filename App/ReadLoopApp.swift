@@ -1,14 +1,38 @@
 import SwiftUI
 
+#if DEBUG
+import Pulse
+import PulseProxy
+#endif
+
 @main
 struct ReadLoopApp: App {
     @State private var appModel = AppModel()
+
+    init() {
+        #if DEBUG
+        // Opt-in only: Pulse swizzles URLSession and persists request bodies,
+        // so it stays off unless a developer launches with `-pulse`.
+        if ProcessInfo.processInfo.arguments.contains("-pulse") {
+            NetworkLogger.enableProxy()
+        }
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if let message = appModel.startupError {
-                    ContentUnavailableView("无法打开本地书库", systemImage: "externaldrive.badge.exclamationmark", description: Text(message))
+                    ContentUnavailableView {
+                        Label("无法打开本地书库", systemImage: "externaldrive.badge.exclamationmark")
+                    } description: {
+                        Text(message)
+                    } actions: {
+                        Button("重试") {
+                            Task { await appModel.retryStartup() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 } else if let library = appModel.library,
                           let thoughts = appModel.thoughts,
                           let myMind = appModel.myMind,

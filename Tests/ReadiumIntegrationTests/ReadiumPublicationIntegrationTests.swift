@@ -1,6 +1,7 @@
 import AppInfrastructure
 import LibraryCore
 import Persistence
+import ReflectionCore
 import RetrievalCore
 import XCTest
 @testable import ReadLoop
@@ -124,7 +125,7 @@ final class ReadiumPublicationIntegrationTests: XCTestCase {
     }
 
     func testReflectionDraftKeepsOriginalWhenPolishedVersionIsSelected() {
-        var draft = ReflectionDraft(originalText: "这是我的原话")
+        var draft = ReflectionTextDraft(originalText: "这是我的原话")
 
         draft.applyPolishedText("这是整理后的表达")
 
@@ -134,7 +135,7 @@ final class ReadiumPublicationIntegrationTests: XCTestCase {
     }
 
     func testEditingOriginalInvalidatesAnExistingPolishedVersion() {
-        var draft = ReflectionDraft(originalText: "原话", polishedText: "整理版", selectedVersion: .original)
+        var draft = ReflectionTextDraft(originalText: "原话", polishedText: "整理版", selectedVersion: .original)
 
         draft.updateOriginalText("原话，再补充一点")
 
@@ -144,11 +145,11 @@ final class ReadiumPublicationIntegrationTests: XCTestCase {
     }
 
     func testReflectionDraftCanBeRestoredAfterClearing() {
-        var draft = ReflectionDraft(originalText: "原话", polishedText: "整理版", selectedVersion: .polished)
+        var draft = ReflectionTextDraft(originalText: "原话", polishedText: "整理版", selectedVersion: .polished)
         let snapshot = draft
 
         draft.clear()
-        XCTAssertFalse(draft.canSend)
+        XCTAssertFalse(draft.canSubmit)
 
         draft = snapshot
         XCTAssertEqual(draft.selectedText, "整理版")
@@ -156,10 +157,10 @@ final class ReadiumPublicationIntegrationTests: XCTestCase {
     }
 
     func testTakingAReflectionForSendingImmediatelyClearsOnlyThatDraft() {
-        var draft = ReflectionDraft(originalText: "  已经说完的这一段  ")
+        var draft = ReflectionTextDraft(originalText: "  已经说完的这一段  ")
 
         XCTAssertEqual(draft.takeSelectedTextForSending(), "已经说完的这一段")
-        XCTAssertFalse(draft.canSend)
+        XCTAssertFalse(draft.canSubmit)
 
         draft.updateOriginalText("Agent 回复期间继续写的新内容")
         XCTAssertEqual(draft.selectedText, "Agent 回复期间继续写的新内容")

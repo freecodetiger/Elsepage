@@ -21,6 +21,7 @@ struct MyMindView: View {
 
     @State private var expandedMemoryID: BrainItemID?
     @State private var editingMemory: BrainMemory?
+    @State private var forgettingMemory: BrainMemory?
     @State private var editText = ""
     @State private var showsClearAll = false
     @State private var showsSettings = false
@@ -100,11 +101,28 @@ struct MyMindView: View {
         }
         .sheet(isPresented: editingThoughtBinding) { thoughtEditor }
         .sheet(isPresented: editingQuestionBinding) { questionEditor }
+        .sheet(isPresented: discussingBinding) {
+            if let item = discussingItem {
+                BrainDiscussionSheet(item: item) { text in
+                    try await model.continueThinking(item: item, text: text)
+                }
+            }
+        }
         .confirmationDialog("清除全部记忆？", isPresented: $showsClearAll, titleVisibility: .visible) {
             Button("清除全部记忆", role: .destructive) { Task { await model.deleteAllMemories() } }
             Button("取消", role: .cancel) {}
         } message: {
             Text("这会删除 AI 记住的每一条内容，且无法撤销。")
+        }
+        .confirmationDialog("忘记这条记忆？", isPresented: forgettingBinding, titleVisibility: .visible) {
+            Button("忘记", role: .destructive) {
+                guard let memory = forgettingMemory else { return }
+                forgettingMemory = nil
+                Task { await model.delete(memory) }
+            }
+            Button("取消", role: .cancel) { forgettingMemory = nil }
+        } message: {
+            Text("这条记忆会被永久删除，无法撤销。")
         }
     }
 
@@ -427,7 +445,7 @@ struct MyMindView: View {
             onAccurate: { Task { await model.confirm(memory) } },
             onInaccurate: { Task { await model.markInaccurate(memory) } },
             onEdit: { startEdit(memory) },
-            onDelete: { Task { await model.delete(memory) } },
+            onDelete: { forgettingMemory = memory },
             openSource: openSource
         )
     }
@@ -465,6 +483,10 @@ struct MyMindView: View {
 
     private var editingBinding: Binding<Bool> {
         Binding(get: { editingMemory != nil }, set: { if !$0 { editingMemory = nil } })
+    }
+
+    private var forgettingBinding: Binding<Bool> {
+        Binding(get: { forgettingMemory != nil }, set: { if !$0 { forgettingMemory = nil } })
     }
 
     private var editingThoughtBinding: Binding<Bool> {
@@ -732,23 +754,22 @@ private struct BrainThoughtDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
-            if thought.stage == .stable {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("存档为记忆", action: onArchiveAsMemory)
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("继续想想", action: onContinueThinking)
                     .disabled(!canContinueThinking)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("编辑", action: onEdit)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .destructive) { showsDelete = true } label: {
-                    Image(systemName: "trash")
+                Menu {
+                    if thought.stage == .stable {
+                        Button("存档为记忆", action: onArchiveAsMemory)
+                    }
+                    Button("编辑", action: onEdit)
+                    Divider()
+                    Button("删除", role: .destructive) { showsDelete = true }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("删除这个想法")
+                .accessibilityLabel("更多操作")
             }
         }
         .confirmationDialog("删除这个想法？", isPresented: $showsDelete, titleVisibility: .visible) {
@@ -864,23 +885,22 @@ private struct BrainQuestionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadEvidence() }
         .toolbar {
-            if question.state != .resolved && !answerCandidates.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("标记已解决") { showsResolvePicker = true }
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("继续想想", action: onContinueThinking)
                     .disabled(!canContinueThinking)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("编辑", action: onEdit)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .destructive) { showsDelete = true } label: {
-                    Image(systemName: "trash")
+                Menu {
+                    if question.state != .resolved && !answerCandidates.isEmpty {
+                        Button("标记已解决") { showsResolvePicker = true }
+                    }
+                    Button("编辑", action: onEdit)
+                    Divider()
+                    Button("删除", role: .destructive) { showsDelete = true }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("删除这个问题")
+                .accessibilityLabel("更多操作")
             }
         }
         .confirmationDialog("删除这个问题？", isPresented: $showsDelete, titleVisibility: .visible) {
