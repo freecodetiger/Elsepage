@@ -24,6 +24,42 @@ enum ReaderPageBackground {
     }
 }
 
+/// Geometry the reader needs from Readium's private web view. Readium exposes
+/// no hook for either fact, so both are read from the hierarchy it builds.
+enum ReaderWebViewAccess {
+    /// Every web view under `view`. Readium uses one per visible spread.
+    static func webViews(in view: UIView) -> [WKWebView] {
+        var found: [WKWebView] = []
+        if let web = view as? WKWebView { found.append(web) }
+        for subview in view.subviews { found += webViews(in: subview) }
+        return found
+    }
+
+    /// True once a chapter is loaded. Before that the web view shows
+    /// `about:blank` in WebKit's default 980pt viewport.
+    static func hasLoadedChapter(in view: UIView) -> Bool {
+        guard let web = webViews(in: view).first else { return false }
+        guard !web.isLoading, let url = web.url else { return false }
+        return url.absoluteString != "about:blank"
+    }
+
+    /// Scroll mode lays the chapter out to the viewport width, so a horizontal
+    /// offset can only be a leftover from the 980pt pre-load layout. Paged mode
+    /// uses that offset for page turns and must be left alone.
+    static func clampScrollModeOffset(in view: UIView) {
+        for web in webViews(in: view) {
+            let scroll = web.scrollView
+            guard !scroll.isPagingEnabled else { continue }
+            scroll.alwaysBounceHorizontal = false
+            guard abs(scroll.contentOffset.x) > 0.5 else { continue }
+            scroll.setContentOffset(
+                CGPoint(x: 0, y: scroll.contentOffset.y),
+                animated: false
+            )
+        }
+    }
+}
+
 struct ReadiumReaderView: UIViewControllerRepresentable {
     let model: ReaderModel
     /// Value snapshots make Observation changes visible to the SwiftUI/UIKit bridge.
@@ -147,6 +183,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                     applyHighlights(model.highlights)
                     applyNotes(model.notes)
                     navigatorReadyAt = CFAbsoluteTimeGetCurrent()
+                    startFirstPageWatch(in: host)
                 } catch is CancellationError {
                     self?.abortParseIfNeeded()
                     return
@@ -163,6 +200,27 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             openingTask?.cancel()
             openingTask = nil
             navigator?.delegate = nil
+        }
+
+        /// Waits for the first chapter to paint, then reveals the reader. The
+        /// reveal is also the point where scroll mode's horizontal offset is
+        /// pinned: the pre-load layout is 980pt wide and a drag during that
+        /// window parks the page off-centre.
+        private func startFirstPageWatch(in host: ReaderHostViewController) {
+            Task { @MainActor [weak self, weak host] in
+                for _ in 0 ..< 50 {
+                    guard self != nil, let host else { return }
+                    if ReaderWebViewAccess.hasLoadedChapter(in: host.view) {
+                        ReaderWebViewAccess.clampScrollModeOffset(in: host.view)
+                        self?.model.markFirstPageRendered()
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                // Never trap the reader behind the cover if the load signal is
+                // missed; the worst case is the old behaviour for one open.
+                self?.model.markFirstPageRendered()
+            }
         }
 
         private func recordFirstPageIfNeeded() {
@@ -438,6 +496,12 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             let readiumPreferences = Self.readiumPreferences(from: preferences, colorScheme: colorScheme)
             navigator.submitPreferences(readiumPreferences)
             navigator.parent?.view.backgroundColor = readiumPreferences.theme?.backgroundColor.uiColor
+            // Switching into scroll mode reflows the chapter; drop any
+            // horizontal offset the previous page layout left behind.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak navigator] in
+                guard let navigator else { return }
+                ReaderWebViewAccess.clampScrollModeOffset(in: navigator.view)
+            }
         }
 
         private static func readiumPreferences(from preferences: ReaderPreferences, colorScheme: ColorScheme) -> EPUBPreferences {
@@ -584,6 +648,13 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         // Anchors are screen coordinates of the previous layout.
         model.clearTransientAnnotationUI(reason: "rotation")
         flushPosition()
+        // The reflow after a rotation can leave scroll mode parked sideways.
+        for delay in [0.6, 1.6] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                ReaderWebViewAccess.clampScrollModeOffset(in: self.view)
+            }
+        }
     }
 
     @objc private func flushPosition() { Task { await model.flushPosition() } }

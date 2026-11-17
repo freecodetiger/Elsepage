@@ -51,6 +51,17 @@ struct ReaderScreen: View {
                     .transition(reduceMotion ? .identity : .opacity)
             }
 
+            // Covers the window before the first chapter paints. Readium only
+            // injects its `viewport` meta on load, so until then the web view
+            // lays out in WebKit's 980pt default viewport: wider than the
+            // screen, cropped on the right, and freely draggable in scroll
+            // mode. Showing the cover one beat longer hides all of it.
+            if model.isPrepared, !model.hasRenderedFirstPage {
+                readerOpeningPlaceholder
+                    .background(themeBackground.ignoresSafeArea())
+                    .transition(reduceMotion ? .identity : .opacity)
+            }
+
             if model.isPrepared, model.showsControls {
                 readerChrome
                     .environment(\.colorScheme, readerColorScheme)

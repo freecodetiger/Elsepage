@@ -108,6 +108,13 @@ final class ReaderModel {
     private(set) var canNavigateBack = false
     private(set) var activeSession: ReadingSession?
     private(set) var isPrepared = false
+    /// The first chapter has painted. Until it does, the web view still holds
+    /// WebKit's default 980pt viewport (Readium injects its own `viewport` meta
+    /// on `load`), which is wider than the screen and can be dragged sideways
+    /// in scroll mode. The reader keeps its opening cover over that window.
+    private(set) var hasRenderedFirstPage = false
+    /// Called by the Readium bridge once the chapter it hosts has painted.
+    func markFirstPageRendered() { hasRenderedFirstPage = true }
     @ObservationIgnored var searchHandler: (@MainActor (String) async throws -> [ReaderSearchResult])?
     @ObservationIgnored private var positionSaveTask: Task<Void, Never>?
     @ObservationIgnored private var positionState = LatestValueState<ReadingPosition>()
