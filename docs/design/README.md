@@ -1,6 +1,8 @@
 # ElsePage UI/UX 现代化重构 · 产品理解阶段
 
-**当前阶段：00 产品理解与源码取证。只新增设计研究文档，停在本阶段；没有开始UX审计、视觉提案或实现。**
+**产品理解与源码取证已交付。后续用户明确授权视觉原型探索：当前已按方案 1 收敛出一版 iOS 原生书架样张，尚未写入 App。** 首次研究与运行证据保持为历史记录；新增探索见 [视觉原型 v0](01-visual-prototype.md)。
+
+后续运行验证恢复：用户另行授权处理阻塞，已修复既有 iOS 测试中的旧 API 引用，13 个集成测试通过；已补装 Codex GSD 角色，新 Device 通道的打开/截图/控件读取/点击/文本输入/App重启后读取均通过，并新增有等待上限的只读快检入口。正式业务路径仍未因此自动验收。原研究记录与下文 V01–V07 保留为首次研究的历史证据；最新结果、命令和限制见 [运行验证恢复记录](00-runtime-verification.md)。没有修改业务或 UI 实现。
 
 研究日期：2026-11-14（Asia/Shanghai）。源码基线 `main@000f28633efa090842cb39bb06f7a7456081a3cb`，研究前已有一处未暂存Scheme修改。本次构建与观察基于该工作区，不能当成纯HEAD的构建证明。
 
@@ -12,6 +14,23 @@
 | [页面与状态清单](00-screen-inventory.md) | 页面、Sheet、系统界面、Menu、Context Menu、Alert、主状态与不可达对象 |
 | [导航图与用户路径](00-navigation-map.md) | 实际导航容器、首启/阅读/标注/问答/反思/Brain/设置路径、数据与状态流 |
 | [重构边界与风险](00-refactor-risks.md) | 可以隔离的展示区域、十二类回归风险、现有缺口、后续验证边界 |
+| [运行验证恢复记录](00-runtime-verification.md) | 后续测试修复、设备通道调查、实际结果与仍未完成的运行验证 |
+| [视觉原型 v0](01-visual-prototype.md) | 用户授权后的A纸间/B清晰/C夜航三种交互方向，演示范围与待决策事项 |
+| [字号与版式三方案](02-typography-layout-options.md) | 最新反馈后的1原生大字/2编辑目录/3封面主导，重建字级与空间比例，用户选择方案 1 |
+| [书架原生收敛](03-native-refinement.md) | 方案 1 按 iOS/SwiftUI 最佳实践与奥卡姆剃刀收敛；删除项、版式规格与 SwiftUI 映射，已落地（书架，模拟器） |
+| [我的的信息架构与组件](04-native-screens.md) | 我的改为分段控件并列三类内容，删除连续天数；6 个可复用组件、阅读页字号与引文组件，已落地（想法/我的；阅读器未改） |
+| [Design System Guide](04-design-system-guide.md) | 语义色、字体、间距、圆角、边框/阴影、动效、组件状态；架构决定与使用规则 |
+| [Component Catalog](04-component-catalog.md) | 按钮/图标按钮/列表行/标题/输入/卡片/空载错误/Banner/Toast 的状态与 API、快照 |
+| [Migration Guidelines](04-migration-guidelines.md) | 逐屏迁移顺序、旧 token 映射、单屏步骤、验收清单与依赖边界 |
+| [底部玻璃分体菜单](05-split-tab-bar.md) | 三 Tab 玻璃胶囊 + 右侧加号；iOS 26 glass / iOS 18 material / 减弱透明度 / 键盘 / 无障碍兜底；已落地 |
+| [顶部标题行](06-header-row.md) | 大标题与右侧玻璃胶囊同一行；书架移除排序/导入按钮；自绘搜索框与键盘兜底；已落地 |
+| [阅读体验重构报告](05-reader-redesign-report.md) | 阅读 chrome、排版、目录、选区/高亮、笔记、问答流式与错误、引用回跳；前后截图、问题映射、构建与未解决项 |
+| [UI/UX 启发式评估](01-ux-audit.md) | 12 个维度、产品特性、视觉细节；区分已验证/高可信风险/待测试 |
+| [用户旅程分析](01-user-journey-analysis.md) | 场景 A–I 的真实目标、当前路径、困惑、反馈缺口与更简单路径 |
+| [优先问题清单](01-prioritized-issues.md) | 28 条问题、P0–P3、Top 10、Quick Wins、样板页与修复记录 |
+| [最终 UI/UX 验收](07-final-uiux-review.md) | 视觉、交互、无障碍、性能与一致性验收；本轮修复与剩余问题 |
+| [回归验收](07-regression-report.md) | EPUB、位置恢复、设置持久化、标注、AI 错误、生命周期、构建与测试 |
+| [剩余问题清单](07-remaining-issues.md) | UX-001–028 最终状态、新发现 N-01–N-14、产品决策与发布前清单 |
 
 ## 证据与状态约定
 
@@ -123,6 +142,8 @@ App构建有现存废弃API等警告，包括Speech的AVAudioSession权限API、
 
 ## 阻塞与未完成运行验证
 
+以下为首次研究结束时的状态。后续进展：第4项测试编译失败已修复并实际运行通过；第1项原 CUA 未修复，但替代的 Device 通道已实际通过基本交互与App重启后操作。其余业务未验收项没有因此自动完成，见 [恢复记录](00-runtime-verification.md)。
+
 1. **电脑控制通道失效**：笔记编辑时paste返回`Computer Use server error -10005: cgWindowNotFound`；重新取窗口与状态仍失败。simctl截图和App的HTTP/进程仍活跃，因此只能归为控制工具失效，没有App崩溃证据。未用脚本注入文字、私有手势或DB造数伪装完成。
 2. **真实AI数据缺失**：本次没有Key，未验证Test Connection成功、回应质量、真实引用回跳、Embedding/Reranker网络、Brain生成与长期质量。没有主动读取Keychain中的已有秘密。
 3. **样书不足**：只有单章单页英文fixture；不覆盖中文长文、多章、图文混排、脚注、复杂选区、长书性能和不同DRM失败样本。
@@ -130,7 +151,7 @@ App构建有现存废弃API等警告，包括Speech的AVAudioSession权限API、
 5. **本次未触达**：正式Session Reflection编辑/保存与档案详情、想法/我的/设置全部子页、正文搜索/标注列表、非空笔记保存、记忆编辑/来源、多条笔记、成就toast、系统分享与危险操作、真实语音、旋转/后台/强杀恢复。这些均只有相应源码或包级测试证据。
 6. **没有自动UI测试基线**：project.yml没有XCUITest target；DEBUG闭环目前只是有限隔离业务场景；历史真机证据不等同当前全链回归。
 
-## 工作区保护与阶段交付
+## 首次研究的工作区保护与阶段交付
 
 - 仅新增本目录五个Markdown文件，不修改业务/UI/测试/配置/现有文档。
 - 研究前的`ReadLoop.xcodeproj/xcshareddata/xcschemes/ReadLoop.xcscheme`差异保留；前后binary diff的SHA256均为`4a4b42d97ca42274be34b146a331f62a873fa65eaf912d87c2d03a5eb26ea1d5`。

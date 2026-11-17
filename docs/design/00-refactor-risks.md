@@ -1,6 +1,8 @@
 # UI/UX 重构边界与回归风险
 
-本阶段只研究，没有实施下列变更、修复缺口或确定新交互。风险分级是基于耦合与用户数据后果的工程判断，不是已完成UX审计。基线与实际测试见 [README](README.md)。
+首次研究只新增设计文档，没有实施下列产品变更、修复业务缺口或确定新交互。风险分级是基于耦合与用户数据后果的工程判断，不是已完成UX审计。基线与实际测试见 [README](README.md)。
+
+后续验证维护例外：用户授权后，已修正既有 iOS 集成测试中的旧 API 引用，13 个测试实际通过；未修改产品实现。下文保留首次发现及风险背景，R11 的原编译阻塞现已解除。另已补装GSD角色并恢复Device基础交互，正式业务路径尚未补验，细节见 [运行验证恢复记录](00-runtime-verification.md)。
 
 ## 1. 可以相对安全调整的部分
 
@@ -30,14 +32,14 @@
 | R08 极高 | 数据清理、导出、启动/索引恢复 | 永久数据损失、跨存储部分清除、假“恢复成功”。[wipe](/Users/zpc/projects/elsepage/App/Settings/DataSettingsModel.swift:176)；[DB后Keychain](/Users/zpc/projects/elsepage/Sources/Persistence/LocalDataWipeService.swift:18)；[resume](/Users/zpc/projects/elsepage/App/Reader/ReadiumBookIndexer.swift:119) | 区分删录音/删书/清记忆/全清；保留两阶段确认；不把导出称备份还原。故障测试必须断言DB与文件，旧用户迁移/强杀需设备验证 |
 | R09 高 | UIKit输入/选择、语音、音频附件、键盘与滚动 | 中文IME未提交被发出、草稿复活/丢失、音频引用悬空、长文本卡顿。[ReflectionTextSynchronization](/Users/zpc/projects/elsepage/App/Reflection/SessionReflectionSheet.swift:17)；[SelectionKeeper](/Users/zpc/projects/elsepage/App/DesignSystem/SelectableText.swift:620)；[两阶段音频](/Users/zpc/projects/elsepage/Sources/AppInfrastructure/AudioFileStore.swift) | 不把UITextView直接换TextEditor而忽略markedText/选区/量高；保留原话、端上zh-CN和模型缺失提示；真机权限/中断/续录/多段合并/波形seek专项 |
 | R10 中高 | 全局token、动态字号、语义色、Reduce Motion、触感 | 低对比度、按钮触达小、无障碍信息丢失、阅读字级改变；EPUB字号不随系统Dynamic Type。[token](/Users/zpc/projects/elsepage/App/DesignSystem/ElsepageTheme.swift:5)；[palette](/Users/zpc/projects/elsepage/Sources/AppInfrastructure/AccessibilitySupport.swift:64)；[EPUB偏好映射](/Users/zpc/projects/elsepage/App/Reader/ReadiumReaderView.swift:416) | 主壳与正文分层；包级对比度测试+AX5/VoiceOver/暗色/减少动态设备走查。局部固定字号不能据此声称全站Dynamic Type完整 |
-| R11 高（验收基础） | 工程生成、Scheme、iOS集成测试 | swift test绿掩盖App未编译或iOS测试失效；现有测试引用ReflectionDraft导致编译失败。[失败符号](/Users/zpc/projects/elsepage/Tests/ReadiumIntegrationTests/ReadiumPublicationIntegrationTests.swift:127)；[产物配置](/Users/zpc/projects/elsepage/project.yml:34)；[实际PRODUCT_NAME](/Users/zpc/projects/elsepage/ReadLoop.xcodeproj/project.pbxproj:956) | 当前App构建成功仅针对现有工作区；不可重新生成工程后声称同样通过。后续重构需另立任务恢复iOS测试，但本阶段不修测试或配置 |
+| R11 高（验收基础） | 工程生成、Scheme、iOS集成测试 | swift test绿不能替代App和iOS验证。首次发现的ReflectionDraft旧引用编译失败已通过测试维护解除，13个集成测试通过；仍无项目XCUITest基线。[当前测试](/Users/zpc/projects/elsepage/Tests/ReadiumIntegrationTests/ReadiumPublicationIntegrationTests.swift:127)；[修复证据](00-runtime-verification.md)；[产物配置](/Users/zpc/projects/elsepage/project.yml:34)；[实际PRODUCT_NAME](/Users/zpc/projects/elsepage/ReadLoop.xcodeproj/project.pbxproj:956) | 构建与测试结果仅针对现有工程；不可重新生成工程后声称同样通过。保持包级/iOS集成/真实UI三种证据独立；本轮没有修改工程配置 |
 | R12 高（范围控制） | 旧文档与不可达能力进入“视觉重构” | 无意加入新功能或改数据语义：Journal编辑、Brain继续想想、opt-out等可能被设计稿假定存在。[孤立讨论Sheet](/Users/zpc/projects/elsepage/App/MyMind/MyMindView.swift:1170)；[无UI调用的编辑服务](/Users/zpc/projects/elsepage/App/Thoughts/ThoughtsModel.swift:161) | 不把缺口修复混入纯UI工作；先由产品决定保留/移除占位/后续实现。与P1–P9冲突需先PRD记录，本次无豁免或实现改动 |
 
 ## 3. 已有缺口与必须保持诚实的状态
 
-这些问题是研究发现，**没有在本阶段修复**：
+这些问题是首次研究发现；除注明的测试维护外，**没有修复产品实现**：
 
-- **已运行证实**：iOS集成测试编译失败（ReflectionDraft不存在），exit65；App build本身成功。模拟器UI通道后来连续cgWindowNotFound，属于本次取证工具阻塞，不能据此判定App崩溃。
+- **首次运行证实，后续测试与基础交互已恢复**：原 iOS 集成测试因 ReflectionDraft 旧引用编译失败，exit65；修正为当前 ReflectionTextDraft API 后，13 个集成测试通过、exit0。App build 原本成功。原模拟器UI通道连续 cgWindowNotFound；第一次 Device 恢复尝试控件读取两次超时，第二轮串行准备后控件/输入/点击/重启后读取通过。没有修复原CUA提供方，也没有App崩溃证据。见 [恢复证据](00-runtime-verification.md)。
 - **可达性源码证实**：BrainDiscussionSheet无展示点；选区reflectOnSelection无工具栏调用；Journal用户编辑服务无当前UI入口。
 - **数据语义源码证实**：Memory“忘记”为硬删除；needsReview仍可被BrainRetriever召回；过去Reflection证据无Locator；JSON导出不包含完整新Range模型，也无还原入口。
 - **恢复接线存在具体矛盾**：BookIndexCoordinator对持久化 `.embedding` 状态选择 `.embed`，但BookIndexPipeline.embed入口仅接受lexicalReady/ready，直接返回。中断语义索引可能停留旧状态；本次只有lexicalReady，无真实Embedding Key，未实测此中断路径。不能把“有resume方法”写成全部索引状态已恢复验证。证据：[action(for:)](/Users/zpc/projects/elsepage/App/Reader/ReadiumBookIndexer.swift:157)；[embed(bookID:) guard](/Users/zpc/projects/elsepage/Sources/RetrievalCore/RetrievalServices.swift:190)。
@@ -63,4 +65,4 @@
 
 为后续审计提供约束，不是本轮实施计划：视觉改动应可逐功能回滚，保留View调用的Model/Service契约、Locator/Range与数据库schema。若以后需要迁移数据或更改删除/记忆/自动请求语义，必须作为单独产品/架构变更评估，先准备旧数据样本、前后数据库与文件证据、恢复策略，不能只靠revert UI代码回滚用户已写入的新数据。
 
-本阶段没有改schema、Prompt、服务、依赖、工程生成或测试源码；保留研究前已有Scheme差异。进入UX审计前还缺的信息见 [产品认知 §8](00-product-understanding.md)。
+首次研究没有改schema、Prompt、服务、依赖、工程生成或测试源码；保留研究前已有Scheme差异。后续仅维护上述iOS测试旧API引用，没有改变产品实现。进入UX审计前还缺的信息见 [产品认知 §8](00-product-understanding.md)。

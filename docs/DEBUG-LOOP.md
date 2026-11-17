@@ -101,9 +101,17 @@ Xcode 覆盖安装并启动后服务自动恢复；仅安装而未启动、App �
 - `python3 -m unittest discover -s Scripts -p test_debug_loop.py`：7 个执行器/连接管理测试通过，包含“页面成功但数据库文本错误”必须 FAIL、以及“HTTP 200 但载荷不是真 PNG”必须 FAIL（缺 png 字段 / 非法 base64 / base64 解出的不是 PNG 三种都覆盖）。
 - `xcodegen generate` 已完成；它只生成工程，不是构建。
 - 2026-09-12：用户构建安装后，已在 iPhone 上运行 `save` 并 PASS；无令牌自启动版本也通过，protocolVersion=1、instrumentationVersion=5。保存、重试与空白拒绝的原始结果见 [设备验收证据](testing/debug-loop/2026-09-12-device-save.json)。后续 instrumentationVersion=6 已连接并读取性能数据；版本 7 增加文本缓存统计；当前版本 8 通过 `/perf` 暴露 annotation 点击坐标、hit rect 和冲突命中事件，但这不自动构成未来代码改动的回归通过。
+- 2026-11-16：新增 DEBUG 启动参数 `-seed-library`：通过真实导入管线把 `Resources/DebugBooks/` 里的 5 本样例 EPUB 加进书架（已有 ≥3 本时跳过），用于多书场景与拖拽换位回归。另一个参数 `-fake-provider [slow|failure]` 注入确定性 AI 客户端，见下条。
+- 2026-11-16：新增 `Tests/ReadLoopUITests`（XCUITest，独立于本 HTTP 框架）：5 条无障碍审计（`hitRegion` / `sufficientElementDescription` 阻断，`contrast` / `textClipped` / `dynamicType` 只报告）+ 2 条性能基线（冷启动 1.508 s、点书→chrome 2.242 s，各 3 次）+ 3 条 AI 链路用例（流式/停止、失败/重试、引用）。AI 用例通过 DEBUG 启动参数 `-fake-provider [slow|failure]` 注入确定性 `ModelClientFactory`（`App/Debug/FakeModelProvider.swift`），不写 Key、不出网；它验证的是 App 侧链路，不证明真实 Provider 的网络/鉴权行为。它不替代真机 VoiceOver 走查，也不驱动本框架的场景。`DesignSystemTests` 快照已迁移到 `swift-snapshot-testing` 1.19.7；`swift test` 411 通过。iOS 模拟器下 `ReadLoopCoreTests` 有 14 条 Swift Testing 断言失败（同一批用例在 macOS `swift test` 通过），待单独排查。
 - 2026-10-07：`/screenshot` 已在 iPhone 17 / iOS 26.6 真机验证。scale=2 输出 804×1748、8-bit RGB、约 363KB PNG，内容是 App 书架的真实画面。此改动**未升级** `protocolVersion`（新增路由向后兼容）也未升级 `instrumentationVersion`（不是性能观测）；旧构建请求该路由返回 404。截图含用户真实书库，属个人数据，按第 6 条只留本机路径不进仓库。
 
 ## 后续扩展
+
+### 外部模拟器快检（不属于 v1 业务场景）
+
+2026-11-14：T3 Device / agent-device 的实际打开、截图、控件树、书架搜索输入/关闭、App重启后读取已通过；首次运行器冷构建曾超过90秒请求等待。该外部工具不是本HTTP框架的UI自动化实现，也不替代正式Reflection/Brain/语音验收。详细证据与限制见 [设计研究运行验证恢复](design/00-runtime-verification.md#5-gsd-补装与设备交互恢复第二轮)。
+
+已有设备工具返回的本线程绝对命令、并通过该命令 open App 后，可用 `python3 Scripts/device_snapshot.py --agent-device '<返回的绝对命令>' --debug` 做只读快检：snapshot默认15秒，daemon startup局部预算10秒，本地调用总等待30秒并预留约1秒清理；超时返回124、不自动重试、不停止共享daemon。脚本只保证本地调用退出，远端请求取消未验证。它不发现/接管设备、不构建/安装App、不注入数据，也不修改本框架的协议或观测版本。不同agent-device命令的timeout语义不同，不能将快检上限外推为所有手势的统一上限。
 
 按相同真实模型调用方式增加 Agent 失败/取消、Journal、Brain 测试。扩展前先补相应终态事件与关联 ID；Brain 投影完成不能借用 Agent 回复完成。首个场景无需重构所有 AppModel 装配或引入全局事件总线。
 
