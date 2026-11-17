@@ -1,0 +1,29 @@
+# Lint rules for the app and the local package. Formatting is owned by
+# `.swift-format`; this file only covers what a formatter cannot see.
+line_length:
+  warning: 160
+  error: 240
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  min_length: 1
+
+type_body_length:
+  warning: 400
+  error: 700
+
+file_length:
+  warning: 800
+  error: 1200
+
+disabled_rules:
+  - todo
+  - trailing_whitespace
+  - multiple_closures_with_trailing_closure
+
+excluded:
+  - .build
+  - build
+  - DerivedData
+  - docs

@@ -30,6 +30,7 @@ Application Support/
 *.sqlite-wal
 *.epub
 !Tests/ReadLoopCoreTests/Fixtures/EPUB/*.epub
+!Resources/DebugBooks/*.epub
 
 # Agent 技能目录:本地工具产物,与项目无关,不入库
 .agents/

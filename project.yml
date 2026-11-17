@@ -26,11 +26,17 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift.git
     exactVersion: 7.11.1
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing.git
+    exactVersion: 1.19.7
+  Pulse:
+    url: https://github.com/kean/Pulse.git
+    exactVersion: 5.2.3
 targets:
   ReadLoop:
     type: application
     platform: iOS
-    productName: Reader
+    productName: ReadLoop
     info:
       path: App/Info.plist
       properties:
@@ -61,6 +67,8 @@ targets:
               - public.epub
     sources:
       - path: App
+      - path: Resources/DebugBooks
+        buildPhase: resources
     dependencies:
       - package: ReadLoopCore
         product: LibraryCore
@@ -98,6 +106,12 @@ targets:
         product: ReadiumStreamer
       - package: Readium
         product: ReadiumNavigator
+      - package: Pulse
+        product: Pulse
+      - package: Pulse
+        product: PulseProxy
+      - package: Pulse
+        product: PulseUI
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO
@@ -113,6 +127,8 @@ targets:
       testTargets:
         - ReadLoopCoreTests
         - ReadiumIntegrationTests
+        - DesignSystemTests
+        - ReadLoopUITests
   ReadLoopCoreTests:
     type: bundle.unit-test
     platform: iOS
@@ -181,3 +197,31 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop"
         BUNDLE_LOADER: "$(TEST_HOST)"
+
+  DesignSystemTests:
+    type: bundle.unit-test
+    platform: iOS
+    hostApplication: ReadLoop
+    sources:
+      - path: Tests/DesignSystemTests
+    dependencies:
+      - target: ReadLoop
+      - package: SnapshotTesting
+        product: SnapshotTesting
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ReadLoop.app/ReadLoop"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  ReadLoopUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/ReadLoopUITests
+    dependencies:
+      - target: ReadLoop
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ReadLoop
