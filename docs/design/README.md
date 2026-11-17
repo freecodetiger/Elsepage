@@ -64,7 +64,7 @@ GSD入口已执行：`gsd-sdk query init.quick 'ElsePage UI UX modernization pro
 | Swift | Apple Swift 6.3.3，arm64-apple-macosx26.0 |
 | 模拟器 | iPhone 17 Pro，iOS 26.5，`C380BC09-F7BE-4A18-B856-10E516F9EB3C` |
 | App | bundle `com.readloop.reader`，1.0.0 (1)，Debug，无签名模拟器构建 |
-| 产物 | 实际 `ReadLoop.app`；project.yml中productName是Reader，有漂移，不运行xcodegen覆盖现状 |
+| 产物 | `ReadLoop.app`；productName 已统一为 ReadLoop（验收时曾为 Reader，与 TEST_HOST 指向的 ReadLoop.app 不一致，现已修正） |
 | 测试内容 | 仓库CC0 `minimal.epub`，单章单屏英文，不含个人书库或真实Key |
 | 真机/真实Provider | 本次没有执行，没有设置/读取用户Key |
 
@@ -113,7 +113,7 @@ python3 Scripts/debug_loop.py perf --wait 1 --output /tmp/elsepage-design-202611
 
 DEBUG HTTP监听进程经`lsof`确认是本次simulator App PID47333，而非复用未知真机转发。DEBUG测试session runID为`8074B2C1-64E3-49BF-89A4-905A4C012E17`（独立空白拒绝场景会另起session）；结果目录UUID并非该runID。没有把build1当成源码指纹；构建提交由本页基线与日志路径绑定。
 
-最初按project.yml的Reader.app路径安装失败（NSPOSIXErrorDomain code2，文件不存在），随后按build日志的实际ReadLoop.app安装并启动成功。此处不是产品导入失败。
+最初按当时 project.yml 里写的 Reader.app 路径安装失败（NSPOSIXErrorDomain code2，文件不存在），随后按build日志的实际ReadLoop.app安装并启动成功。此处不是产品导入失败。productName 现已统一为 ReadLoop，该路径漂移不再存在。
 
 App构建有现存废弃API等警告，包括Speech的AVAudioSession权限API、AudioFileStore的旧AVAssetExportSession API；本阶段保留，没有把warning描述为build失败，也没有顺手现代化代码。
 

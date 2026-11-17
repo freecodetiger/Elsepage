@@ -207,7 +207,7 @@ Reflection 主链：本地原文 → 配置工厂 → 会话/附近文本 → LL
 | 自动联网恢复 / 可恢复 Runtime | 实际为下次进入想法页懒补齐，无持久运行恢复 UI |
 | ARCHITECTURE 的 memories / MemoryRetriever | v26已退役 memories；生产使用 Brain lane |
 | 发布清单“5色高亮”“输出长度硬约束” | 源码为4色；自然语言长度指令与token预算不等于字符数硬验证 |
-| project.yml 的 Reader productName / Scheme 旧产物名 | 本次提交工程实际生成 ReadLoop.app；用户已有 Scheme 差异参与构建 |
+| project.yml 的 Reader productName / Scheme 旧产物名 | 审计时工程实际生成 ReadLoop.app，与 productName 不一致；现已统一为 ReadLoop |
 | release checklist “零真机证据” | DEBUG-LOOP 存历史真机记录；清单的全局断言不能照搬，也不能将旧真机证据冒充本次验收 |
 
 ## 8. 进入 UX 审计前需要的信息
