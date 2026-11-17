@@ -238,7 +238,7 @@ struct MyMindView: View {
 
     @ViewBuilder private var thoughtsFacet: some View {
         if model.thoughts.isEmpty {
-            facetEmpty("你的想法还在阅读里，会随讨论逐渐成形。")
+            EmptyView()
         } else {
             grouped {
                 ForEach(Array(model.thoughts.enumerated()), id: \.element.id) { index, thought in
@@ -260,7 +260,7 @@ struct MyMindView: View {
 
     @ViewBuilder private var questionsFacet: some View {
         if model.questions.isEmpty {
-            facetEmpty("还没有正在追踪的问题。")
+            EmptyView()
         } else {
             grouped {
                 ForEach(Array(model.questions.enumerated()), id: \.element.id) { index, question in
@@ -282,7 +282,7 @@ struct MyMindView: View {
 
     @ViewBuilder private var memoriesFacet: some View {
         if model.activeMemories.isEmpty && model.retiredMemories.isEmpty {
-            facetEmpty("这是我目前从阅读与讨论中形成的理解，会随你的反馈调整。")
+            EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 24) {
                 if !model.activeMemories.isEmpty {
@@ -331,14 +331,6 @@ struct MyMindView: View {
             Color.elsepageSurface,
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
-    }
-
-    private func facetEmpty(_ text: String) -> some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(Color.elsepageTextSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 8)
     }
 
     private var achievementsDestination: some View {
@@ -747,7 +739,7 @@ private struct BrainThoughtDetailView: View {
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(ElsepageTheme.Spacing.page)
+            .padding(ElsepageTheme.Spacing.pageInset)
         }
         .background(Color.elsepageBackground)
         .navigationTitle(thought.title)
@@ -878,7 +870,7 @@ private struct BrainQuestionDetailView: View {
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(ElsepageTheme.Spacing.page)
+            .padding(ElsepageTheme.Spacing.pageInset)
         }
         .background(Color.elsepageBackground)
         .navigationTitle("问题")
@@ -1162,7 +1154,7 @@ private struct BrainDiscussionSheet: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(ElsepageTheme.Spacing.page)
+                .padding(ElsepageTheme.Spacing.pageInset)
             }
             .background(Color.elsepageBackground)
             .navigationTitle("继续想想")

@@ -86,10 +86,12 @@ struct ThoughtsView: View {
     }
 
     private var emptyRecords: some View {
+        // No description line: the 想法 page holds records and nothing else,
+        // so the title plus the icon already say what is missing. A second
+        // paragraph here only competed with the tab bar and the search field.
         ContentUnavailableView(
             "还没有留下记录",
-            systemImage: "quote.bubble",
-            description: Text("结束一次阅读后，写下一点真正留下来的东西。它会先安静地保存在本机。")
+            systemImage: "quote.bubble"
         )
     }
 
@@ -325,12 +327,12 @@ private struct ThoughtRecordHeader: View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             HStack(alignment: .firstTextBaseline, spacing: ElsepageTheme.Spacing.xSmall) {
                 Text(entry.book.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.elsepageTextSecondary)
                 Text("·")
                     .foregroundStyle(Color.elsepageTextTertiary)
                 Text(ElsepageDateFormat.shortDate(entry.reflection.createdAt))
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundStyle(Color.elsepageTextTertiary)
             }
 
@@ -340,11 +342,11 @@ private struct ThoughtRecordHeader: View {
                         .fill(Color.elsepageTextPrimary)
                         .frame(width: 36, height: 36)
                     Text("概")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.elsepageBackground)
                 }
                 Text(summaryText)
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.elsepageTextPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -371,18 +373,18 @@ private struct ThoughtRecordExtras: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
             Text("这次留下")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .tracking(0.7)
                 .foregroundStyle(Color.elsepageTextTertiary)
 
             if !journal.whatIThink.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("想法")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
                     ForEach(journal.whatIThink.prefix(3), id: \.id) { thought in
                         Text("· \(thought.thought)")
-                            .font(.system(size: 15))
+                            .font(.subheadline)
                             .foregroundStyle(Color.elsepageTextPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -392,11 +394,11 @@ private struct ThoughtRecordExtras: View {
             if !journal.questions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("问题")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.elsepageTextSecondary)
                     ForEach(journal.questions.prefix(2)) { question in
                         Text("· \(question.text)")
-                            .font(.system(size: 15))
+                            .font(.subheadline)
                             .foregroundStyle(Color.elsepageTextPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

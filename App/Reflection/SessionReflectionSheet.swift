@@ -1080,7 +1080,7 @@ struct SessionReflectionSheet: View {
                             header
                             editor
                         }
-                        .padding(ElsepageTheme.Spacing.page)
+                        .padding(ElsepageTheme.Spacing.pageInset)
                     }
                     .background(Color.elsepageBackground)
                     Divider()
@@ -1104,7 +1104,7 @@ struct SessionReflectionSheet: View {
                         onVoiceTranscript: { model.markVoiceTranscript() },
                         onRecordingStateChange: { model.setVoiceRecording($0) }
                     )
-                    .padding(.horizontal, ElsepageTheme.Spacing.page)
+                    .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
                     .padding(.vertical, ElsepageTheme.Spacing.medium)
                     .background(Color.elsepageBackground)
                     .transition(.moment(reduceMotion))
@@ -1496,7 +1496,7 @@ struct ReflectionConversationView: View {
 
                     Color.clear.frame(height: 1).id("reflection-conversation-bottom")
                 }
-                .padding(ElsepageTheme.Spacing.page)
+                .padding(ElsepageTheme.Spacing.pageInset)
                 .background(ConversationTouchDelivery())
                 .contentShape(Rectangle())
                 .onTapGesture {
