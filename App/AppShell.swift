@@ -15,6 +15,10 @@ struct AppShell: View {
     @State private var readerDestination: ReaderDestination?
     @State private var importRequested = false
     @State private var keyboardVisible = false
+    /// The shelf reader is pushed inside `LibraryView`'s NavigationStack, so the
+    /// shell cannot see it through `readerDestination`. This flag lets the shelf
+    /// tell the shell to give the reader the whole screen (see `bottomBar`).
+    @State private var shelfReaderVisible = false
 
     var body: some View {
         TabView(selection: $selection) {
@@ -22,7 +26,8 @@ struct AppShell: View {
                 model: library,
                 settings: settings,
                 achievements: achievements,
-                importRequest: $importRequested
+                importRequest: $importRequested,
+                readerVisible: $shelfReaderVisible
             )
             .toolbar(.hidden, for: .tabBar)
             .tabItem { Label(AppTab.library.title, systemImage: AppTab.library.symbol) }
@@ -47,7 +52,11 @@ struct AppShell: View {
         // keeps a real UITabBar (system glass + selection lens) and puts the
         // compose button beside it, only on the shelf.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !keyboardVisible {
+            // A full-screen reader owns the whole screen: no app tab bar, no
+            // compose button, no reserved bottom inset. The push path reports
+            // through `shelfReaderVisible`; the cover path through
+            // `readerDestination`.
+            if !keyboardVisible, !shelfReaderVisible, readerDestination == nil {
                 bottomBar
             }
         }
@@ -91,7 +100,9 @@ struct AppShell: View {
             NativeSplitTabBar(
                 selection: $selection,
                 showsCompose: selection == .library,
-                onImport: openImport
+                isDeleteTarget: library.isDraggingBook,
+                onImport: openImport,
+                onTrashFrameChange: reportTrashFrame
             )
             .padding(.leading, 8)
             .padding(.trailing, 12)
@@ -99,9 +110,18 @@ struct AppShell: View {
             ElsepageMaterialTabBar(
                 selection: $selection,
                 showsCompose: selection == .library,
-                onImport: openImport
+                isDeleteTarget: library.isDraggingBook,
+                onImport: openImport,
+                onTrashFrameChange: reportTrashFrame
             )
         }
+    }
+
+    /// The bar draws the reorder drag's delete target (the compose button).
+    /// Its frame is reported from layout, not from a view update, so the write
+    /// is hopped to the next run loop turn.
+    private func reportTrashFrame(_ frame: CGRect) {
+        Task { @MainActor in library.trashZoneFrame = frame }
     }
 
     private func openImport() {
@@ -119,7 +139,9 @@ struct AppShell: View {
 private struct NativeSplitTabBar: UIViewRepresentable {
     @Binding var selection: AppTab
     let showsCompose: Bool
+    let isDeleteTarget: Bool
     let onImport: () -> Void
+    let onTrashFrameChange: (CGRect) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -129,16 +151,20 @@ private struct NativeSplitTabBar: UIViewRepresentable {
         let host = ElsepageSplitBarHost()
         host.tabBar.delegate = context.coordinator
         host.onCompose = onImport
+        host.onComposeFrameChange = onTrashFrameChange
         host.setSelection(selection)
         host.setShowsCompose(showsCompose)
+        host.setDeleteTarget(isDeleteTarget)
         return host
     }
 
     func updateUIView(_ host: ElsepageSplitBarHost, context: Context) {
         context.coordinator.parent = self
         host.onCompose = onImport
+        host.onComposeFrameChange = onTrashFrameChange
         host.setSelection(selection)
         host.setShowsCompose(showsCompose)
+        host.setDeleteTarget(isDeleteTarget)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ElsepageSplitBarHost, context: Context) -> CGSize? {
@@ -173,8 +199,13 @@ private final class ElsepageSplitBarHost: UIView {
     private let composeButton = ElsepageComposeButton(type: .system)
     private let tabs = AppTab.all
     private var showsCompose = false
+    private var isDeleteTarget = false
+    private var reportedComposeFrame: CGRect = .zero
     private var selection: AppTab = .library
     var onCompose: (() -> Void)?
+    /// Reports the compose button's window frame so the shelf's drag gesture
+    /// can resolve a drop on it. Fires from layout, not from a view update.
+    var onComposeFrameChange: ((CGRect) -> Void)?
     private lazy var tabBarTrailing = tabBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -64)
 
     override init(frame: CGRect) {
@@ -231,7 +262,15 @@ private final class ElsepageSplitBarHost: UIView {
             tabBar.layoutIfNeeded()
         } else {
             composeButton.frame = .zero
+            reportComposeFrame()
         }
+    }
+
+    /// While a dragged cover hovers the button it becomes the delete target.
+    fileprivate func setDeleteTarget(_ isTarget: Bool) {
+        guard isDeleteTarget != isTarget else { return }
+        isDeleteTarget = isTarget
+        applyComposeAppearance()
     }
 
     private func configureItems() {
@@ -262,9 +301,20 @@ private final class ElsepageSplitBarHost: UIView {
             configuration = .gray()
         }
         configuration.cornerStyle = .capsule
-        configuration.baseForegroundColor = .label
-        configuration.image = UIImage(systemName: "plus")
         composeButton.configuration = configuration
+        applyComposeAppearance()
+    }
+
+    private func applyComposeAppearance() {
+        guard var configuration = composeButton.configuration else { return }
+        // Liquid Glass ignores `baseForegroundColor` for symbol images, so the
+        // delete target carries its own tint.
+        configuration.image = isDeleteTarget
+            ? UIImage(systemName: "trash")?.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
+            : UIImage(systemName: "plus")
+        configuration.baseForegroundColor = .label
+        composeButton.configuration = configuration
+        composeButton.accessibilityLabel = isDeleteTarget ? "删除正在拖动的书" : "导入 EPUB"
     }
 
     private func layoutCompose(alongside frame: CGRect) {
@@ -277,6 +327,24 @@ private final class ElsepageSplitBarHost: UIView {
             width: size,
             height: size
         )
+        reportComposeFrame()
+    }
+
+    /// Converted to the window, the space SwiftUI's `.global` uses. Before the
+    /// host is in a window the conversion returns local coordinates, so
+    /// reporting waits for `didMoveToWindow`.
+    private func reportComposeFrame() {
+        guard window != nil else { return }
+        let frame = showsCompose ? composeButton.convert(composeButton.bounds, to: nil) : .zero
+        guard frame != reportedComposeFrame else { return }
+        reportedComposeFrame = frame
+        onComposeFrameChange?(frame)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        layoutIfNeeded()
+        reportComposeFrame()
     }
 }
 
@@ -318,7 +386,9 @@ private final class ElsepageNativeTabBar: UITabBar {
 private struct ElsepageMaterialTabBar: View {
     @Binding var selection: AppTab
     let showsCompose: Bool
+    let isDeleteTarget: Bool
     let onImport: () -> Void
+    let onTrashFrameChange: (CGRect) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -333,19 +403,23 @@ private struct ElsepageMaterialTabBar: View {
 
             if showsCompose {
                 Button(action: onImport) {
-                    Image(systemName: "plus")
+                    Image(systemName: isDeleteTarget ? "trash" : "plus")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(Color.elsepageTextPrimary)
+                        .foregroundStyle(isDeleteTarget ? Color.red : Color.elsepageTextPrimary)
                         .frame(width: 56, height: 56)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("导入 EPUB")
+                .accessibilityLabel(isDeleteTarget ? "删除正在拖动的书" : "导入 EPUB")
                 .elsepageMaterial(Circle())
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                    onTrashFrameChange(frame)
+                }
             } else {
                 Color.clear
                     .frame(width: 56, height: 56)
                     .accessibilityHidden(true)
+                    .onAppear { onTrashFrameChange(.zero) }
             }
         }
         .padding(.leading, 8)

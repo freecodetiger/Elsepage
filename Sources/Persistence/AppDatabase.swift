@@ -608,6 +608,14 @@ public final class AppDatabase: @unchecked Sendable {
                 t.check(sql: "length(trim(promptVersion)) > 0")
             }
         }
+        // Shelf manual order. Nullable: books that were never dragged keep
+        // using the automatic sorts, and only the two swapped books are
+        // rewritten on each drag.
+        migrator.registerMigration("v30_book_manual_order") { db in
+            try db.alter(table: "books") { t in
+                t.add(column: "manualOrder", .integer)
+            }
+        }
         return migrator
     }
 

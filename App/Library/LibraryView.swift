@@ -7,6 +7,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var model: LibraryModel
     @Bindable var settings: SettingsRootModel
     let achievements: AchievementModel?
@@ -14,23 +15,28 @@ struct LibraryView: View {
     @State private var importing = false
     @State private var showsSettings = false
     @State private var selectedBook: Book?
-    @State private var deletingBook: Book?
     @State private var reflection: SessionReflectionModel?
     @State private var presentedReflectionSessionID: ReadingSessionID?
     @State private var didSaveReflectionInSheet = false
     @Binding private var importRequest: Bool
+    /// Tells `AppShell` that the pushed reader owns the screen. The shell's
+    /// custom glass bar is a `safeAreaInset` on the TabView, so it cannot see
+    /// this navigation destination by itself.
+    @Binding private var readerVisible: Bool
     @Namespace private var bookTransitionNamespace
 
     init(
         model: LibraryModel,
         settings: SettingsRootModel,
         achievements: AchievementModel? = nil,
-        importRequest: Binding<Bool> = .constant(false)
+        importRequest: Binding<Bool> = .constant(false),
+        readerVisible: Binding<Bool> = .constant(false)
     ) {
         self.model = model
         self.settings = settings
         self.achievements = achievements
         _importRequest = importRequest
+        _readerVisible = readerVisible
         _nextActionModel = State(initialValue: LibraryNextActionModel(library: model))
     }
 
@@ -90,7 +96,8 @@ struct LibraryView: View {
             .navigationDestination(item: $selectedBook) { book in
                 ReaderScreen(
                     model: model.readerModel(for: book),
-                    openingCover: model.cover(for: book)
+                    openingCover: model.cover(for: book),
+                    onOpenSettings: { showsSettings = true }
                 ) {
                     Task {
                         await model.reload()
@@ -104,20 +111,23 @@ struct LibraryView: View {
                     )
                 )
             }
+            .onChange(of: selectedBook) { _, book in
+                readerVisible = book != nil
+            }
             .alert("导入失败", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好") {} } message: { Text(model.errorMessage ?? "") }
             .alert("这本书已经在书库中", isPresented: Binding(get: { model.duplicateTitle != nil }, set: { if !$0 { model.duplicateTitle = nil } })) { Button("好") {} } message: { Text(model.duplicateTitle ?? "") }
             .alert("从书架移除这本书？", isPresented: Binding(
-                get: { deletingBook != nil },
-                set: { if !$0 { deletingBook = nil } }
+                get: { model.pendingDeletion != nil },
+                set: { if !$0 { model.pendingDeletion = nil } }
             )) {
-                Button("取消", role: .cancel) { deletingBook = nil }
+                Button("取消", role: .cancel) { model.pendingDeletion = nil }
                 Button("移除", role: .destructive) {
-                    guard let book = deletingBook else { return }
-                    deletingBook = nil
+                    guard let book = model.pendingDeletion else { return }
+                    model.pendingDeletion = nil
                     Task { await model.delete(book) }
                 }
             } message: {
-                Text("会删除本机 EPUB、阅读位置和全部标注，无法恢复。")
+                Text("会删除本机 EPUB、阅读位置、全部标注，以及这本书的阅读会话、反思与 AI 对话，无法恢复。")
             }
             .safeAreaInset(edge: .bottom) {
                 if model.isImporting { importStatus }
@@ -216,92 +226,141 @@ struct LibraryView: View {
             if let current {
                 currentReadingRow(current)
                 if !gridBooks.isEmpty {
-                    sectionTitle("全部书籍", top: 32, bottom: 4)
+                    sectionHeader("全部书籍", top: 32, bottom: 4)
                     bookGrid(gridBooks, width: width)
                 }
             } else {
                 if !isSearching {
-                    sectionTitle("全部书籍", top: 8, bottom: 4)
+                    sectionHeader("全部书籍", top: 8, bottom: 4)
                 }
                 bookGrid(gridBooks, width: width)
             }
         }
     }
 
-    private func sectionTitle(_ text: String, top: CGFloat, bottom: CGFloat) -> some View {
-        Text(text)
-            .font(.title3.weight(.semibold))
-            .foregroundStyle(Color.elsepageTextPrimary)
-            .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
-            .padding(.top, top)
-            .padding(.bottom, bottom)
+    private func sectionHeader(_ text: String, top: CGFloat, bottom: CGFloat) -> some View {
+        HStack(alignment: .center) {
+            Text(text)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.elsepageTextPrimary)
+            Spacer(minLength: 8)
+            Menu {
+                Picker("排序", selection: $model.sortOrder) {
+                    ForEach(LibrarySortOrder.allCases) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.elsepageTextSecondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("排序")
+            .accessibilityValue(model.sortOrder.title)
+        }
+        .padding(.horizontal, ElsepageTheme.Spacing.pageInset)
+        .padding(.top, top)
+        .padding(.bottom, bottom)
     }
 
     private func bookGrid(_ books: [Book], width: CGFloat) -> some View {
         LibraryGridView(
             books: books,
             cover: { model.cover(for: $0) },
+            progress: { model.progress(for: $0) },
             transitionNamespace: bookTransitionNamespace,
             openBook: { selectedBook = $0 },
             loadCover: { await model.loadCover(for: $0) },
-            requestDelete: { deletingBook = $0 },
+            requestDelete: { model.pendingDeletion = $0 },
+            onSwap: { model.swapBooks($0, with: $1) },
+            onDragChange: { model.isDraggingBook = $0 },
+            trashZone: model.trashZoneFrame,
+            moveBook: { model.moveBook($0.id, by: $1) },
             accessibilityLabel: { accessibilityLabel(for: $0) },
             containerWidth: width
         )
     }
 
-    /// The book on the desk. The cover fixes the row at 180pt; the conditional
-    /// reflection chip is an overlay, so it cannot push the grid down.
+    /// The book on the desk. The cover fixes the row at 180pt; the reflection
+    /// chip always gets its own row below it. Overlaying the chip in the
+    /// trailing whitespace forced a 128pt reservation on the chapter line,
+    /// which truncated it to "第二章 重读的…" at every text size.
     private func currentReadingRow(_ book: Book) -> some View {
         let progress = model.progress(for: book)
         let showsReflection = nextActionModel.pendingReflection?.book.id == book.id
 
-        return ZStack(alignment: .bottomTrailing) {
-            Button {
-                selectedBook = book
-            } label: {
-                HStack(spacing: 16) {
-                    currentCover(book)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(book.title)
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Color.elsepageTextPrimary)
-                            .lineLimit(1)
-                        Text(authorName(book))
-                            .font(.subheadline)
-                            .foregroundStyle(Color.elsepageTextSecondary)
-                            .lineLimit(1)
-                        if let progress, progress > 0 {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ProgressView(value: progress)
-                                    .tint(.elsepageInteractive)
-                                Text(progressLabel(for: book, progress: progress))
-                                    .font(.footnote)
-                                    .foregroundStyle(Color.elsepageTextSecondary)
-                                    .lineLimit(1)
-                            }
-                            .padding(.top, 14)
+        let row = Button {
+            selectedBook = book
+        } label: {
+            HStack(spacing: 16) {
+                currentCover(book)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(book.title)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.elsepageTextPrimary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                    Text(authorName(book))
+                        .font(.subheadline)
+                        .foregroundStyle(Color.elsepageTextSecondary)
+                        .lineLimit(2)
+                    if let progress, progress > 0 {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ProgressView(value: progress)
+                                .tint(.elsepageInteractive)
+                            Text(progressLabel(for: book, progress: progress))
+                                .font(.footnote)
+                                .foregroundStyle(Color.elsepageTextSecondary)
+                                .lineLimit(1)
                         }
+                        .padding(.top, 14)
+                    } else if book.lastOpenedAt == nil {
+                        // The top row is the newest import, not necessarily
+                        // the last book read. Say so instead of implying it.
+                        Text("新导入 · 还没开始读")
+                            .font(.footnote)
+                            .foregroundStyle(Color.elsepageTextTertiary)
+                            .padding(.top, 14)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: 180)
-                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityLabel(for: book))
-            .accessibilityHint("打开并继续阅读")
+            .frame(minHeight: 180)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            // The current book sits above the grid, outside its drag surface,
+            // so it keeps the menu: without it the last book in the library
+            // would have no delete action at all.
+            Button(role: .destructive) { model.pendingDeletion = book } label: {
+                Label("从书架移除", systemImage: "trash")
+            }
+        }
+        .accessibilityLabel(accessibilityLabel(for: book))
+        .accessibilityHint("打开并继续阅读")
+        .accessibilityAction(named: "移除这本书") { model.pendingDeletion = book }
 
+        let chip = Button {
+            presentReflection()
+        } label: {
+            Label("补写想法", systemImage: "square.and.pencil")
+                .font(.subheadline.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .frame(minHeight: 44)
+        .accessibilityLabel("补写上一次阅读的想法")
+
+        return Group {
             if showsReflection {
-                Button {
-                    presentReflection()
-                } label: {
-                    Label("补写想法", systemImage: "square.and.pencil")
-                        .font(.subheadline.weight(.semibold))
+                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
+                    row
+                    chip
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .accessibilityLabel("补写上一次阅读的想法")
+            } else {
+                row
             }
         }
         .padding(.horizontal, ElsepageTheme.Spacing.pageInset)

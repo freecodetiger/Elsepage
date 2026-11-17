@@ -21,11 +21,15 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
     public let fileSize: Int64
     public let importedAt: Date
     public var lastOpenedAt: Date?
+    /// Position in the shelf's manual order. Nil until the reader first drags
+    /// a book; the automatic sorts ignore it.
+    public var manualOrder: Int?
 
     public init(
         id: BookID = BookID(), fingerprint: ContentFingerprint, title: String,
         author: String? = nil, fileName: String, fileSize: Int64,
-        importedAt: Date = Date(), lastOpenedAt: Date? = nil
+        importedAt: Date = Date(), lastOpenedAt: Date? = nil,
+        manualOrder: Int? = nil
     ) {
         self.id = id
         self.fingerprint = fingerprint
@@ -35,6 +39,7 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
         self.fileSize = fileSize
         self.importedAt = importedAt
         self.lastOpenedAt = lastOpenedAt
+        self.manualOrder = manualOrder
     }
 }
 
@@ -63,10 +68,15 @@ public protocol BookRepository: Sendable {
     /// query over existing tables (session durations, highlights, reflections).
     /// Books without any accumulated data are simply absent from the result.
     func libraryStats(for bookIDs: [BookID]) async throws -> [BookID: BookLibraryStats]
+    /// Persists the shelf's manual order. Only the books being swapped need to
+    /// be present; omitted books keep their current value.
+    func updateManualOrder(_ orders: [BookID: Int]) async throws
 }
 
 public extension BookRepository {
     /// Fakes inherit an empty default; the GRDB implementation runs the real
     /// aggregate query.
     func libraryStats(for bookIDs: [BookID]) async throws -> [BookID: BookLibraryStats] { [:] }
+    /// Fakes inherit a no-op; only the GRDB library persists manual order.
+    func updateManualOrder(_ orders: [BookID: Int]) async throws {}
 }

@@ -43,7 +43,25 @@ final class LibraryModel {
     var errorMessage: String?
     var duplicateTitle: String?
     var searchQuery = ""
-    var sortOrder: LibrarySortOrder = .recentlyOpened
+    var sortOrder: LibrarySortOrder = .recentlyOpened {
+        didSet {
+            UserDefaults.standard.set(sortOrder.rawValue, forKey: Self.sortOrderDefaultsKey)
+            guard sortOrder == .manual, oldValue != .manual else { return }
+            adoptCurrentOrderAsManual(previousSort: oldValue)
+        }
+    }
+    /// Manual order is only meaningful if the shelf reopens in the manual
+    /// sort; otherwise the persisted order would be invisible after relaunch.
+    private static let sortOrderDefaultsKey = "library.sortOrder"
+    /// Book waiting for the removal confirmation. Dropping a dragged cover on
+    /// the shell's delete target sets it; the shelf presents the alert.
+    var pendingDeletion: Book?
+    /// True while a cover is lifted for reordering. The shell watches it to
+    /// turn the compose button into the delete target.
+    var isDraggingBook = false
+    /// Where the shell draws that target, in window coordinates (the same
+    /// space as SwiftUI's `.global`). `.zero` until the bar lays out.
+    var trashZoneFrame: CGRect = .zero
 
     init(
         books: any BookRepository,
@@ -75,6 +93,10 @@ final class LibraryModel {
         self.readium = readium
         self.indexCoordinator = indexCoordinator
         self.bookIndex = bookIndex
+        if let raw = UserDefaults.standard.string(forKey: Self.sortOrderDefaultsKey),
+           let stored = LibrarySortOrder(rawValue: raw) {
+            sortOrder = stored
+        }
     }
 
     func reload() async {
@@ -93,6 +115,7 @@ final class LibraryModel {
         if let stats = try? await booksRepository.libraryStats(for: books.map(\.id)) {
             bookStats = stats
         }
+        appendBooksMissingManualOrder()
     }
 
     /// Imports an EPUB through the full pipeline (staging, metadata, dedupe,
@@ -161,14 +184,98 @@ final class LibraryModel {
             return book.title.localizedCaseInsensitiveContains(query)
                 || (book.author?.localizedCaseInsensitiveContains(query) ?? false)
         }
-        return matches.sorted { lhs, rhs in
-            switch sortOrder {
+        return sorted(matches, by: sortOrder)
+    }
+
+    private func sorted(_ books: [Book], by order: LibrarySortOrder) -> [Book] {
+        books.sorted { lhs, rhs in
+            switch order {
             case .recentlyOpened:
                 return recentDate(for: lhs) > recentDate(for: rhs)
             case .title:
                 return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
             case .author:
                 return (lhs.author ?? "").localizedStandardCompare(rhs.author ?? "") == .orderedAscending
+            case .manual:
+                let lhsOrder = lhs.manualOrder ?? Int.max
+                let rhsOrder = rhs.manualOrder ?? Int.max
+                if lhsOrder != rhsOrder { return lhsOrder < rhsOrder }
+                return recentDate(for: lhs) > recentDate(for: rhs)
+            }
+        }
+    }
+
+    /// Swaps two shelf positions. The rest of the grid does not shift: the
+    /// reader asked for an exchange, not an insert-and-reflow.
+    func swapBooks(_ draggedID: BookID, with targetID: BookID) {
+        guard draggedID != targetID else { return }
+        if sortOrder != .manual { sortOrder = .manual }
+
+        guard let draggedIndex = books.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = books.firstIndex(where: { $0.id == targetID }),
+              let draggedOrder = books[draggedIndex].manualOrder,
+              let targetOrder = books[targetIndex].manualOrder,
+              draggedOrder != targetOrder
+        else { return }
+
+        books[draggedIndex].manualOrder = targetOrder
+        books[targetIndex].manualOrder = draggedOrder
+        Haptics.bookPulled()
+
+        let orders = [draggedID: targetOrder, targetID: draggedOrder]
+        Task {
+            do {
+                try await booksRepository.updateManualOrder(orders)
+            } catch {
+                errorMessage = error.localizedDescription
+                await reload()
+            }
+        }
+    }
+
+    /// One-step move behind the cover's accessibility actions. Dragging is not
+    /// available to VoiceOver, so this is the only reorder path there.
+    func moveBook(_ id: BookID, by offset: Int) {
+        let ordered = sorted(books, by: sortOrder)
+        guard let index = ordered.firstIndex(where: { $0.id == id }),
+              ordered.indices.contains(index + offset) else { return }
+        swapBooks(id, with: ordered[index + offset].id)
+    }
+
+    /// Switching to the manual sort keeps exactly what the reader is looking
+    /// at, then freezes it: every visible book gets an index in that order.
+    private func adoptCurrentOrderAsManual(previousSort: LibrarySortOrder) {
+        let ordered = sorted(books, by: previousSort)
+        var orders: [BookID: Int] = [:]
+        for (index, book) in ordered.enumerated() {
+            guard let position = books.firstIndex(where: { $0.id == book.id }) else { continue }
+            books[position].manualOrder = index
+            orders[book.id] = index
+        }
+        persistManualOrder(orders)
+    }
+
+    /// A book imported while the manual sort is active has no index yet; put
+    /// it at the end instead of letting it jump into the middle.
+    private func appendBooksMissingManualOrder() {
+        guard sortOrder == .manual else { return }
+        var next = (books.compactMap(\.manualOrder).max() ?? -1) + 1
+        var orders: [BookID: Int] = [:]
+        for index in books.indices where books[index].manualOrder == nil {
+            books[index].manualOrder = next
+            orders[books[index].id] = next
+            next += 1
+        }
+        persistManualOrder(orders)
+    }
+
+    private func persistManualOrder(_ orders: [BookID: Int]) {
+        guard !orders.isEmpty else { return }
+        Task {
+            do {
+                try await booksRepository.updateManualOrder(orders)
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
     }
@@ -176,6 +283,19 @@ final class LibraryModel {
     func progress(for book: Book) -> Double? {
         readingProgress[book.id]
     }
+
+    #if DEBUG
+    /// QA fixture, opt-in with `-seed-library`: imports the bundled sample
+    /// EPUBs so the grid has enough books to exercise drag-swap. Skips when
+    /// the shelf already has books, so it never duplicates on relaunch.
+    func importDebugBooksIfNeeded() async {
+        guard books.count < 3 else { return }
+        for index in 1...5 {
+            guard let url = Bundle.main.url(forResource: "debug-book-\(index)", withExtension: "epub") else { continue }
+            _ = await importBook(url)
+        }
+    }
+    #endif
 
     /// Quiet per-card metadata line ("读过 24 分钟 · 划线 3 · 想法 2"), or nil
     /// when nothing has accumulated yet so fresh books stay uncluttered.
@@ -281,6 +401,7 @@ enum LibrarySortOrder: String, CaseIterable, Identifiable {
     case recentlyOpened
     case title
     case author
+    case manual
 
     var id: String { rawValue }
     var title: String {
@@ -288,6 +409,7 @@ enum LibrarySortOrder: String, CaseIterable, Identifiable {
         case .recentlyOpened: "最近阅读"
         case .title: "书名"
         case .author: "作者"
+        case .manual: "自定义"
         }
     }
 }

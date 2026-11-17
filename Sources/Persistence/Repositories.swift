@@ -12,6 +12,14 @@ public final class GRDBBookRepository: BookRepository, @unchecked Sendable {
     public func book(fingerprint: ContentFingerprint) async throws -> Book? { try await db.writer.read { db in try BookRecord.filter(Column("fingerprint") == fingerprint.rawValue).fetchOne(db)?.domain } }
     public func insert(_ book: Book) async throws { try await db.writer.write { db in try BookRecord(book).insert(db) } }
     public func markOpened(_ id: BookID, at date: Date) async throws { try await db.writer.write { db in try db.execute(sql: "UPDATE books SET lastOpenedAt = ? WHERE id = ?", arguments: [date, id.description]) } }
+    public func updateManualOrder(_ orders: [BookID: Int]) async throws {
+        guard !orders.isEmpty else { return }
+        try await db.writer.write { db in
+            for (id, order) in orders {
+                try db.execute(sql: "UPDATE books SET manualOrder = ? WHERE id = ?", arguments: [order, id.description])
+            }
+        }
+    }
     public func delete(_ id: BookID) async throws { _ = try await db.writer.write { db in try BookRecord.deleteOne(db, key: id.description) } }
     /// One grouped statement for the whole library grid: session duration,
     /// highlight and reflection counts join per book, so loading stats for
@@ -119,9 +127,9 @@ private struct BookLibraryStatsRow: Codable, FetchableRecord {
 
 private struct BookRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "books"
-    var id, fingerprint, title: String; var author: String?; var fileName: String; var fileSize: Int64; var importedAt: Date; var lastOpenedAt: Date?
-    init(_ b: Book) { id=b.id.description; fingerprint=b.fingerprint.rawValue; title=b.title; author=b.author; fileName=b.fileName; fileSize=b.fileSize; importedAt=b.importedAt; lastOpenedAt=b.lastOpenedAt }
-    var domain: Book { Book(id: BookID(rawValue: UUID(uuidString: id)!), fingerprint: .init(rawValue: fingerprint), title: title, author: author, fileName: fileName, fileSize: fileSize, importedAt: importedAt, lastOpenedAt: lastOpenedAt) }
+    var id, fingerprint, title: String; var author: String?; var fileName: String; var fileSize: Int64; var importedAt: Date; var lastOpenedAt: Date?; var manualOrder: Int?
+    init(_ b: Book) { id=b.id.description; fingerprint=b.fingerprint.rawValue; title=b.title; author=b.author; fileName=b.fileName; fileSize=b.fileSize; importedAt=b.importedAt; lastOpenedAt=b.lastOpenedAt; manualOrder=b.manualOrder }
+    var domain: Book { Book(id: BookID(rawValue: UUID(uuidString: id)!), fingerprint: .init(rawValue: fingerprint), title: title, author: author, fileName: fileName, fileSize: fileSize, importedAt: importedAt, lastOpenedAt: lastOpenedAt, manualOrder: manualOrder) }
 }
 
 private protocol LocatorRecord { var locatorJSON: Data { get }; var href: String { get }; var progression: Double? { get }; var totalProgression: Double? { get }; var textBefore: String? { get }; var textHighlight: String? { get }; var textAfter: String? { get } }

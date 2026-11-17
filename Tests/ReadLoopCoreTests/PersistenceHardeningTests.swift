@@ -67,7 +67,8 @@ import Testing
         "v26_retire_legacy_memories",
         "v27_reflection_message_audio",
         "v28_text_annotations",
-        "v29_reflection_summaries"
+        "v29_reflection_summaries",
+        "v30_book_manual_order"
     ])
 }
 
