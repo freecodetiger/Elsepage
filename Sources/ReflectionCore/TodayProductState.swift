@@ -40,35 +40,21 @@ public enum TodayProductStateResolver {
     }
 }
 
-/// Remembers the sessions for which the user explicitly declined the Today
-/// reflection prompt ("今天先不了"), so the 补写 card does not reappear for the
-/// same session. Everything else — completing, editing, deleting a reflection —
-/// stays derived from the reflections table by session id. Pure local
-/// UserDefaults storage; offline by construction and bounded in size.
+/// Sessions dismissed by an older build, back when "这次不写" was a permanent
+/// opt-out. Nothing writes here any more: a skip now lasts for one run and the
+/// prompt returns on the next launch. The stored ids stay readable so those
+/// earlier choices are not quietly re-surfaced. Completing, editing, or
+/// deleting a reflection is still derived from the reflections table.
 public struct ReflectionPromptDismissalStore: @unchecked Sendable {
     public static let storageKey = "today.reflectionDismissedSessionIDs"
-    /// Only recent sessions matter for the Today card; the cap keeps the flag
-    /// list from growing without bound.
-    private let capacity: Int
     private let defaults: UserDefaults
 
-    public init(defaults: UserDefaults = .standard, capacity: Int = 50) {
+    public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.capacity = max(1, capacity)
     }
 
     public func dismissedSessionIDs() -> Set<ReadingSessionID> {
         guard let raw = defaults.stringArray(forKey: Self.storageKey) else { return [] }
         return Set(raw.compactMap { id in UUID(uuidString: id).map(ReadingSessionID.init(rawValue:)) })
-    }
-
-    public func dismiss(_ sessionID: ReadingSessionID) {
-        var ids = defaults.stringArray(forKey: Self.storageKey) ?? []
-        ids.removeAll { $0 == sessionID.description }
-        ids.append(sessionID.description)
-        if ids.count > capacity {
-            ids.removeFirst(ids.count - capacity)
-        }
-        defaults.set(ids, forKey: Self.storageKey)
     }
 }

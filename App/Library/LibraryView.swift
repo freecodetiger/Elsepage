@@ -417,8 +417,8 @@ struct LibraryView: View {
     }
 
     /// Presents the reflection the reader offered at the end of a session and
-    /// the user has not written yet. Moving off the shelf without saving counts
-    /// as "今天先不了" — see the dismissal store.
+    /// the user has not written yet. Closing it without saving skips this
+    /// session for the current run only; the card returns on the next launch.
     private func presentReflection() {
         guard let pending = nextActionModel.pendingReflection,
               let locator = pending.session.endLocator else { return }

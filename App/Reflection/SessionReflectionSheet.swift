@@ -1152,8 +1152,9 @@ struct SessionReflectionSheet: View {
         }
         .presentationBackground(Color.elsepageBackground)
         // Closing the editor must be a deliberate act. Swiping it away used to
-        // count as "今天先不了" and permanently dismiss the session; the toolbar
-        // now says "这次不写", and a non-empty draft asks before it is lost.
+        // count as "今天先不了"; the toolbar now says "这次不写", and a non-empty
+        // draft asks before it is lost. A skip closes the card for this run
+        // only — the session is not written off permanently.
         .interactiveDismissDisabled(model.reflection == nil)
         .confirmationDialog("放弃这次想法？", isPresented: $confirmsDiscard, titleVisibility: .visible) {
             Button("继续写", role: .cancel) {}

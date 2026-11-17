@@ -123,24 +123,18 @@ private func meaningfulSession(_ book: Book, startedAt: TimeInterval, endedAt: T
     ) == .noCurrentBook)
 }
 
-/// 明确的「今天先不了」需要本地标记（完成与否本来就由 reflections 表派生）。
-/// 标记按会话去重、有界，纯 UserDefaults 本地存储，离线可用。
-@Test func reflectionDismissalStoreRoundTripsDeduplicatesAndPrunes() throws {
+/// 旧版本把「这次不写」写成永久标记；现在不再写入，但旧标记仍要读出来，
+/// 否则老用户当时明确跳过的会话会被重新弹出来。
+@Test func reflectionDismissalStoreStillHonorsLegacyDismissals() throws {
     let suiteName = "today.reflectionDismissedSessionIDs.tests.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
-    let store = ReflectionPromptDismissalStore(defaults: defaults, capacity: 2)
-    #expect(store.dismissedSessionIDs().isEmpty)
-
-    let first = ReadingSessionID()
-    let second = ReadingSessionID()
-    let third = ReadingSessionID()
-    store.dismiss(first)
-    store.dismiss(first) // 同一会话重复 dismissal 只记一次
-    store.dismiss(second)
-    #expect(store.dismissedSessionIDs() == [first, second])
-
-    store.dismiss(third) // 超出容量时淘汰最早的记录
-    #expect(store.dismissedSessionIDs() == [second, third])
+    let dismissed = ReadingSessionID()
+    defaults.set(
+        [dismissed.description, "not-a-uuid"],
+        forKey: ReflectionPromptDismissalStore.storageKey
+    )
+    let store = ReflectionPromptDismissalStore(defaults: defaults)
+    #expect(store.dismissedSessionIDs() == [dismissed])
 }
