@@ -124,6 +124,10 @@ final class ReaderModel {
     /// Phase-0 perf anchor: set by ReaderScreen when the cover opens; the
     /// coordinator records readerOpen = now → first locationDidChange.
     @ObservationIgnored var perfOpenBeganAt: CFTimeInterval = 0
+    /// Matching `os_signpost` interval for `readerOpen`, so XCTest's
+    /// `XCTOSSignpostMetric` can baseline the same number the diagnostics
+    /// screen shows.
+    @ObservationIgnored var perfOpenInterval: Perf.Interval?
 
     init(
         book: Book,
@@ -834,7 +838,10 @@ final class ReaderModel {
         }
     }
     func flushPosition() async {
-        positionSaveTask?.cancel()
+        // Do not cancel `positionSaveTask` here: this method is also called
+        // from that task, and cancelling it made GRDB's async write throw
+        // CancellationError before committing. The debounced save then never
+        // landed and only the background/exit flush persisted the position.
         positionSaveTask = nil
         while let target = positionState.beginWrite() {
             do {
@@ -860,7 +867,9 @@ final class ReaderModel {
         }
     }
     func flushPreferences() async {
-        preferenceSaveTask?.cancel()
+        // Same self-cancellation trap as `flushPosition()`: the debounce task
+        // calls this method, so cancelling `preferenceSaveTask` aborted the
+        // write it was about to perform.
         preferenceSaveTask = nil
         while let target = preferenceState.beginWrite() {
             do {

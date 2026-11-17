@@ -14,17 +14,20 @@ struct ReaderScreen: View {
     @State private var reflectionPrompt: SessionReflectionModel?
     @State private var dismissAfterReflection = false
     let openingCover: UIImage?
+    let onOpenSettings: (() -> Void)?
     let onReflectionSaved: () -> Void
 
     init(
         model: ReaderModel,
         achievements: AchievementModel? = nil,
         openingCover: UIImage? = nil,
+        onOpenSettings: (() -> Void)? = nil,
         onReflectionSaved: @escaping () -> Void = {}
     ) {
         _model = State(initialValue: model)
         model.achievements = achievements
         self.openingCover = openingCover
+        self.onOpenSettings = onOpenSettings
         self.onReflectionSaved = onReflectionSaved
     }
 
@@ -49,11 +52,20 @@ struct ReaderScreen: View {
             }
 
             if model.isPrepared, model.showsControls {
-                readerChrome.transition(.opacity)
+                readerChrome
+                    .environment(\.colorScheme, readerColorScheme)
+                    .transition(.opacity)
             }
 
             if model.isPrepared {
-                ReaderAnnotationOverlays(model: model)
+                ReaderAnnotationOverlays(
+                    model: model,
+                    noticeBottomInset: model.helpPresentation == nil ? 0 : 184
+                )
+                // Menus and notices float over the page, so they must follow the
+                // reading theme rather than the system. With a dark page in a
+                // light system the chrome text used to resolve to near-black.
+                .environment(\.colorScheme, readerColorScheme)
             }
         }
         .animation(ElsepageTheme.Motion.quick, value: model.showsControls)
@@ -63,50 +75,63 @@ struct ReaderScreen: View {
         .statusBarHidden(model.isPrepared && !model.showsControls)
         .task {
             model.perfOpenBeganAt = CFAbsoluteTimeGetCurrent()
+            model.perfOpenInterval = Perf.shared.begin(.readerOpen)
             await model.prepare()
         }
         .sheet(item: $presentedSheet) { sheet in
-            switch sheet {
-            case .contents: ContentsSheet(model: model)
-            case .search: ReaderSearchSheet(model: model)
-            case .annotations:
-                ReaderAnnotationsSheet(model: model) { annotation in
-                    if let highlight = annotation.highlight {
-                        // Menu opens in place once the jump arrives.
-                        model.jumpToHighlight(highlight.id)
-                        presentedSheet = nil
-                    } else if let note = annotation.note {
-                        model.jump(to: note.locator)
-                        presentedSheet = nil
-                        model.openNoteEditor(.note(note.id))
+            readerSheetChrome(
+                Group {
+                    switch sheet {
+                    case .contents: ContentsSheet(model: model)
+                    case .search: ReaderSearchSheet(model: model)
+                    case .annotations:
+                        ReaderAnnotationsSheet(model: model) { annotation in
+                            if let highlight = annotation.highlight {
+                                // Menu opens in place once the jump arrives.
+                                model.jumpToHighlight(highlight.id)
+                                presentedSheet = nil
+                            } else if let note = annotation.note {
+                                model.jump(to: note.locator)
+                                presentedSheet = nil
+                                model.openNoteEditor(.note(note.id))
+                            }
+                        }
+                    case .appearance: ReaderAppearanceSheet(model: model)
                     }
                 }
-            case .appearance: ReaderAppearanceSheet(model: model)
-            }
+            )
         }
         .sheet(item: $model.noteEditorRequest, onDismiss: {
             // Reset explicitly so a later request with the same note always
             // re-presents, whatever the automatic dismissal path did.
             model.noteEditorRequest = nil
         }) { request in
-            NoteEditorSheet(model: model, target: request.target)
+            readerSheetChrome(NoteEditorSheet(model: model, target: request.target))
         }
         .sheet(item: $model.helpPresentation) { presentation in
-            ReaderHelpSheet(model: presentation.model) { evidence in
-                jumpToCitation(evidence)
-            }
+            readerSheetChrome(
+                ReaderHelpSheet(
+                    model: presentation.model,
+                    openCitation: { evidence in jumpToCitation(evidence) },
+                    onOpenSettings: onOpenSettings
+                )
+            )
         }
         .sheet(item: $model.contextReflection) { reflection in
-            SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
-                jumpToCitation(evidence)
-            }
+            readerSheetChrome(
+                SessionReflectionSheet(model: reflection, onSaved: { _ in }) { evidence in
+                    jumpToCitation(evidence)
+                }
+            )
         }
         .sheet(item: $reflectionPrompt, onDismiss: {
             if dismissAfterReflection { dismiss() }
         }) { reflection in
-            SessionReflectionSheet(model: reflection, onSaved: { _ in onReflectionSaved() }) { evidence in
-                jumpToCitation(evidence)
-            }
+            readerSheetChrome(
+                SessionReflectionSheet(model: reflection, onSaved: { _ in onReflectionSaved() }) { evidence in
+                    jumpToCitation(evidence)
+                }
+            )
         }
         .alert("无法完成操作", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -159,86 +184,160 @@ struct ReaderScreen: View {
     }
 
     private var readerChrome: some View {
-        VStack(spacing: ElsepageTheme.Spacing.small) {
-            HStack(spacing: ElsepageTheme.Spacing.medium) {
-                ElsepageIconButton(systemName: "chevron.left", accessibilityLabel: "读到这里并返回") {
-                    finishReading()
-                }
-                if model.canNavigateBack {
-                    ElsepageIconButton(systemName: "arrow.uturn.backward", accessibilityLabel: "返回跳转前位置") {
-                        model.navigateBack()
-                    }
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.book.title)
-                        .font(.system(.subheadline, design: .serif, weight: .semibold))
-                        .lineLimit(1)
-                    if let chapter = model.currentChapterTitle {
-                        Text(chapter).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-                // A11Y-02: title + current chapter read as one element.
-                .accessibilityElement(children: .combine)
-                Spacer()
-                ElsepageIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索正文") { presentedSheet = .search }
-                ElsepageIconButton(systemName: "textformat", accessibilityLabel: "阅读设置") { presentedSheet = .appearance }
-            }
-            .padding(.horizontal, ElsepageTheme.Spacing.medium)
-            .padding(.vertical, ElsepageTheme.Spacing.small)
-            .background(ElsepageTheme.MaterialToken.chrome)
+        VStack(spacing: 0) {
+            topChrome
 
-            Spacer()
+            Spacer(minLength: 0)
 
             // A11Y-01: at accessibility Dynamic Type sizes a single row cannot
             // fit on narrow widths, so the bar wraps into two stacked rows.
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: ElsepageTheme.Spacing.large) {
+                HStack(spacing: ElsepageSpacing.md) {
                     bottomBarButtons
                     bottomBarProgress
                 }
-                VStack(alignment: .leading, spacing: ElsepageTheme.Spacing.small) {
-                    HStack(spacing: ElsepageTheme.Spacing.large) {
+                VStack(alignment: .leading, spacing: ElsepageSpacing.xs) {
+                    HStack(spacing: ElsepageSpacing.md) {
                         bottomBarButtons
                     }
-                    HStack(spacing: ElsepageTheme.Spacing.small) {
-                        bottomBarProgress
-                    }
+                    bottomBarProgress
                 }
             }
-            .font(.body)
-            .buttonStyle(.plain)
-            .padding(.horizontal, ElsepageTheme.Spacing.large)
-            .padding(.vertical, ElsepageTheme.Spacing.medium)
-            .background(ElsepageTheme.MaterialToken.chrome)
+            .padding(.horizontal, ElsepageSpacing.sm)
+            .frame(minHeight: ReaderChromeMetrics.bottomBarHeight)
+            .background(themeBackground, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(ElsepageColor.separator.opacity(0.35), lineWidth: ElsepageBorder.hairline)
+            }
+            .padding(.horizontal, ElsepageSpacing.md)
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(ElsepageColor.textPrimary)
+        // A short page-colour fade, not a reserved band: the capsule still
+        // floats over the text, but a line ending at the capsule edge fades
+        // out instead of being sliced in half. Only present with the chrome.
+        .background(alignment: .top) { chromeScrim(edge: .top) }
+        .background(alignment: .bottom) { chromeScrim(edge: .bottom) }
+        // Capping chrome text growth keeps the floating capsules predictable at
+        // accessibility sizes. Reading text itself follows the reader's font
+        // size, not Dynamic Type.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
-    @ViewBuilder private var bottomBarButtons: some View {
-        Button { presentedSheet = .contents } label: {
-            Label("目录", systemImage: "list.bullet.indent").labelStyle(.iconOnly)
-        }
-        .elsepageTapTarget()
-        Button { presentedSheet = .annotations } label: {
-            Label("标注", systemImage: "highlighter").labelStyle(.iconOnly)
-        }
-        .elsepageTapTarget()
-        Button { finishReading() } label: {
-            Label("读到这里", systemImage: "bookmark")
-        }
-        .elsepageTapTarget()
+    private func chromeScrim(edge: VerticalEdge) -> some View {
+        LinearGradient(
+            stops: edge == .top
+                ? [
+                    .init(color: themeBackground, location: 0),
+                    .init(color: themeBackground, location: 0.88),
+                    .init(color: themeBackground.opacity(0), location: 1),
+                ]
+                : [
+                    .init(color: themeBackground.opacity(0), location: 0),
+                    .init(color: themeBackground, location: 0.12),
+                    .init(color: themeBackground, location: 1),
+                ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: ReaderChromeMetrics.scrimHeight)
+        .allowsHitTesting(false)
     }
 
-    @ViewBuilder private var bottomBarProgress: some View {
-        ProgressView(value: model.progress)
-            .tint(.elsepageInteractive)
-            .accessibilityLabel("阅读进度")
-            .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
-        // The visible percent duplicates the ProgressView's accessibilityValue.
-        Text(model.progress, format: .percent.precision(.fractionLength(0)))
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
+    /// One floating capsule, like the bottom bar. It deliberately sits over the
+    /// page instead of reserving a band above it: the text keeps the full page,
+    /// and the transient chrome is the only thing that covers it.
+    private var topChrome: some View {
+        HStack(spacing: ElsepageSpacing.xs) {
+            chromeIcon("xmark", label: "结束阅读并返回书架") { finishReading() }
+            if model.canNavigateBack {
+                chromeIcon("arrow.uturn.backward", label: "返回跳转前位置") { model.navigateBack() }
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(model.book.title)
+                    .font(ElsepageFont.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if let chapter = model.currentChapterTitle {
+                    Text(chapter)
+                        .font(ElsepageFont.caption2)
+                        .foregroundStyle(ElsepageColor.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            // A11Y-02: title + current chapter read as one element.
+            .accessibilityElement(children: .combine)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, ElsepageSpacing.xs)
+
+            chromeIcon("magnifyingglass", label: "搜索正文") { presentedSheet = .search }
+            chromeIcon("textformat.size", label: "阅读设置") { presentedSheet = .appearance }
+        }
+        .padding(.horizontal, ElsepageSpacing.sm)
+        .frame(height: ReaderChromeMetrics.topBarHeight)
+        .background(themeBackground, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(ElsepageColor.separator.opacity(0.35), lineWidth: ElsepageBorder.hairline)
+        }
+        .padding(.horizontal, ElsepageSpacing.md)
+        .padding(.top, ElsepageSpacing.xs)
+    }
+
+    private func chromeIcon(_ systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: ElsepageSpacing.touchTarget, height: ElsepageSpacing.touchTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private var bottomBarButtons: some View {
+        HStack(spacing: ElsepageSpacing.xs) {
+            barButton("目录", systemName: "list.bullet.indent") { presentedSheet = .contents }
+            barButton("标注", systemName: "highlighter") { presentedSheet = .annotations }
+        }
+    }
+
+    /// Icon + short label. The label is what makes these discoverable at a
+    /// glance; the 44pt row keeps the touch target while staying compact.
+    private func barButton(_ title: String, systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: systemName)
+                    .font(.system(size: 17, weight: .regular))
+                Text(title)
+                    .font(ElsepageFont.caption2)
+                    .foregroundStyle(ElsepageColor.textSecondary)
+            }
+            .frame(minWidth: 48, minHeight: ElsepageSpacing.touchTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+
+    private var bottomBarProgress: some View {
+        HStack(spacing: ElsepageSpacing.sm) {
+            // The bar is decorative: a 4pt-tall control exposes a hit area far
+            // below 44pt, so the percentage text carries the accessibility
+            // value instead of duplicating it.
+            ProgressView(value: model.progress)
+                .tint(ElsepageColor.accent)
+                .accessibilityHidden(true)
+            Text(model.progress, format: .percent.precision(.fractionLength(0)))
+                .font(ElsepageFont.caption2.monospacedDigit())
+                .foregroundStyle(ElsepageColor.textSecondary)
+                .frame(minWidth: 34, alignment: .trailing)
+                .accessibilityLabel("阅读进度")
+                .accessibilityValue(Text(model.progress, format: .percent.precision(.fractionLength(0))))
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func finishReading() {
@@ -289,6 +388,46 @@ struct ReaderScreen: View {
         case .sepia: .elsepageReaderSepia
         }
     }
+
+    /// The reading theme owns the page, so it also owns every overlay drawn on
+    /// top of it. A dark page in a light system used to give the floating chrome
+    /// dark text on a black capsule.
+    private var readerColorScheme: ColorScheme {
+        switch model.preferences.theme {
+        case .system: colorScheme
+        case .light, .sepia: .light
+        case .dark: .dark
+        }
+    }
+
+    /// Sheets are a new environment root, so the reader theme has to be pushed
+    /// in explicitly. Without this a dark page opened a light sheet (and vice
+    /// versa), and the default material let body text show through the form.
+    private func readerSheetChrome<Content: View>(_ content: Content) -> some View {
+        content
+            .environment(\.colorScheme, readerColorScheme)
+            .presentationBackground(
+                ReaderPageBackground.color(for: model.preferences.theme, colorScheme: colorScheme)
+            )
+    }
+}
+
+/// Shared geometry for the reader chrome.
+/// The chrome floats over the page and reserves no content inset: the EPUB uses
+/// the full safe area, so showing or hiding the transient capsule never
+/// reflows the text and never leaves a permanent blank band.
+enum ReaderChromeMetrics {
+    static let topBarHeight: CGFloat = 48
+    static let bottomBarHeight: CGFloat = 48
+    /// Extra space kept free above the content, excluding the window's safe
+    /// area. Zero: the capsule is an overlay, not a layout row.
+    static let contentTopInset: CGFloat = 0
+    /// Extra space kept free below the content, excluding the window's safe
+    /// area. Zero: same reason as the top.
+    static let contentBottomInset: CGFloat = 0
+    /// Height of the page-colour fade under the floating chrome. It softens
+    /// the line at the capsule edge without reserving layout space.
+    static let scrimHeight: CGFloat = 72
 }
 
 private enum ReaderSheet: Identifiable {
@@ -314,24 +453,36 @@ private struct ContentsSheet: View {
                 if model.chapters.isEmpty {
                     ContentUnavailableView("没有目录", systemImage: "list.bullet.indent", description: Text("这本 EPUB 没有提供章节目录。"))
                 } else {
-                    List(model.chapters) { chapter in
-                        Button {
-                            model.jump(to: chapter)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                Text(chapter.title)
-                                Spacer()
-                                if chapter.id == model.currentChapterID {
-                                    Image(systemName: "checkmark").foregroundStyle(Color.elsepageInteractive)
+                    ScrollViewReader { proxy in
+                        List(model.chapters) { chapter in
+                            Button {
+                                model.jump(to: chapter)
+                                dismiss()
+                            } label: {
+                                HStack(spacing: ElsepageSpacing.sm) {
+                                    Text(chapter.title)
+                                        .lineLimit(2)
+                                    Spacer(minLength: 0)
+                                    if chapter.id == model.currentChapterID {
+                                        Image(systemName: "checkmark")
+                                            .font(.caption.weight(.semibold))
+                                    }
                                 }
+                                .foregroundStyle(chapter.id == model.currentChapterID ? ElsepageColor.accent : ElsepageColor.textPrimary)
+                                .padding(.leading, CGFloat(chapter.depth) * ElsepageSpacing.lg)
+                                .frame(minHeight: ElsepageSpacing.controlHeight)
                             }
-                            .foregroundStyle(chapter.id == model.currentChapterID ? Color.elsepageInteractive : .primary)
-                            .padding(.leading, CGFloat(chapter.depth) * 16)
+                            .id(chapter.id)
+                            .accessibilityHint("跳转到这一章")
                         }
-                        .accessibilityHint("跳转到这一章")
+                        .listStyle(.plain)
+                        .onAppear {
+                            // Open the table of contents at the chapter being
+                            // read, not at the book's first page.
+                            guard let current = model.currentChapterID else { return }
+                            proxy.scrollTo(current, anchor: .center)
+                        }
                     }
-                    .listStyle(.plain)
                 }
             }
             .navigationTitle("目录")
@@ -541,7 +692,16 @@ private struct ReaderAppearanceSheet: View {
             }
             .navigationTitle("阅读设置")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("恢复默认") {
+                        model.preferences = .default
+                        model.savePreferences()
+                    }
+                    .font(.subheadline)
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
+            }
         }
         .presentationDetents([.medium, .large])
         .onDisappear { model.savePreferences() }

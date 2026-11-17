@@ -5,44 +5,115 @@ import SwiftUI
 
 struct ReaderHelpSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var model: ReaderHelpModel
     let openCitation: (AgentResponseEvidence) -> Void
+    let onOpenSettings: (() -> Void)?
 
     @FocusState private var composerFocused: Bool
-    @State private var selectedDetent: PresentationDetent = .medium
+    @State private var selectedDetent: PresentationDetent = .height(300)
+    @State private var confirmsDiscard = false
+
+    private static let bottomAnchor = "conversation-bottom"
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        // Streaming updates every ~50ms; a scroll without animation keeps the
+        // newest token visible instead of queueing overlapping animations.
+        proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
-                    quoteCard
-                    conversation
-                    completedExtras
-                    saveFeedback
-                    disclosure
-                    saveError
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: ElsepageTheme.Spacing.medium) {
+                        quoteCard
+                        conversation
+                        completedExtras
+                        saveFeedback
+                        disclosure
+                        saveError
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.bottomAnchor)
+                    }
+                    .padding(ElsepageTheme.Spacing.medium)
                 }
-                .padding(ElsepageTheme.Spacing.medium)
+                .scrollDismissesKeyboard(.interactively)
+                // Follow the new question as soon as it is sent, then follow
+                // the streamed tokens. Do not scroll when the stream completes:
+                // the source list and answer actions sit below the answer, and
+                // jumping to them would hide the very text the reader asked for.
+                .onChange(of: model.activeQuestion) { _, question in
+                    if question != nil { scrollToBottom(proxy) }
+                }
+                .onChange(of: model.streamingContent) { _, text in
+                    guard !text.isEmpty else { return }
+                    scrollToBottom(proxy)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
 
             Divider()
             composer
         }
         .background(Color.elsepageBackground)
-        .presentationDetents([.height(184), .medium, .large], selection: $selectedDetent)
-        .presentationDragIndicator(.visible)
+        .presentationDetents([.height(184), .height(300), .medium, .large], selection: $selectedDetent)
+        // No drag indicator: this temporary thread is deliberately not
+        // swipe-dismissable, so the indicator would promise a gesture that
+        // does nothing. Closing is explicit and confirmed when it has content.
+        .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(true)
+        .onAppear {
+            // At accessibility sizes the quote card and composer need the
+            // whole sheet; a 300pt detent clips the primary action.
+            if dynamicTypeSize.isAccessibilitySize {
+                selectedDetent = .large
+            }
+        }
         .onChange(of: model.saveNotice) { _, notice in
             // Reveal the newly persisted underline/highlight behind the sheet.
-            if notice != nil {
+            if notice != nil, !dynamicTypeSize.isAccessibilitySize {
                 selectedDetent = .height(184)
             }
         }
+        .onChange(of: model.state) { _, state in
+            // The 300pt sheet is sized for the quote and the first action; once
+            // tokens arrive, give the answer enough room without taking the
+            // whole page. Only expand from the initial detent, so a reader who
+            // deliberately collapsed the sheet keeps their choice.
+            if state == .streaming, selectedDetent == .height(300) {
+                selectedDetent = .medium
+            }
+        }
         .onDisappear { model.cancel() }
+        .confirmationDialog("丢弃这次问答？", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+            Button("继续问", role: .cancel) {}
+            Button("丢弃并关闭", role: .destructive) {
+                model.discard()
+                dismiss()
+            }
+        } message: {
+            Text("这次问答没有保存，关闭后不会保留。")
+        }
+    }
+
+    private var hasThreadContent: Bool {
+        !model.turns.isEmpty
+            || model.activeQuestion != nil
+            || !model.streamingContent.isEmpty
+            || !model.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func requestClose() {
+        if hasThreadContent {
+            confirmsDiscard = true
+        } else {
+            model.discard()
+            dismiss()
+        }
     }
 
     private var header: some View {
@@ -59,8 +130,7 @@ struct ReaderHelpSheet: View {
             }
             Spacer()
             Button {
-                model.discard()
-                dismiss()
+                requestClose()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .semibold))
@@ -84,6 +154,10 @@ struct ReaderHelpSheet: View {
                 .font(.system(.subheadline, design: .serif))
                 .foregroundStyle(.primary)
                 .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("回答只使用这段原文和你已经读过的部分。")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,9 +197,9 @@ struct ReaderHelpSheet: View {
         case .completed:
             EmptyView()
         case .cancelled:
-            retryRow("已停止")
+            stoppedRow
         case .failed(let message):
-            retryRow(message)
+            failureCard(message)
         }
     }
 
@@ -163,24 +237,49 @@ struct ReaderHelpSheet: View {
                 Divider()
                 ForEach(Array(provenance.citations.enumerated()), id: \.offset) { index, citation in
                     if let evidence = provenance.evidence.first(where: { $0.id == citation.evidenceID }) {
-                        Button {
-                            handleCitation(evidence)
-                        } label: {
+                        if evidence.locator != nil {
+                            Button {
+                                handleCitation(evidence)
+                            } label: {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(AgentMarkdownText.superscript(index + 1))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Color.elsepageInteractive)
+                                    Text(sourceTitle(for: evidence))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(ElsepageColor.textTertiary)
+                                }
+                                .frame(minHeight: 44)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("来源 \(index + 1)：\(sourceTitle(for: evidence))")
+                        } else {
+                            // Past thoughts have no locator. Do not render a
+                            // button that promises a jump it cannot perform.
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(AgentMarkdownText.superscript(index + 1))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(Color.elsepageInteractive)
-                                Text(sourceTitle(for: evidence))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.leading)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(sourceTitle(for: evidence))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text("这条过去记录没有原文位置，无法跳转")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
                                 Spacer(minLength: 0)
                             }
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
+                            .frame(minHeight: 44, alignment: .leading)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("来源 \(index + 1)：\(sourceTitle(for: evidence))，无法跳转")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("来源 \(index + 1)：\(sourceTitle(for: evidence))")
                     }
                 }
             }
@@ -257,14 +356,6 @@ struct ReaderHelpSheet: View {
 
     private var composer: some View {
         VStack(spacing: 8) {
-            if model.canRetry {
-                HStack {
-                    Button("重试") { model.retry() }
-                        .font(.caption.weight(.semibold))
-                    Spacer()
-                }
-            }
-
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("继续追问…", text: $model.composerText, axis: .vertical)
                     .lineLimit(1...4)
@@ -276,21 +367,35 @@ struct ReaderHelpSheet: View {
                     .background(.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .accessibilityLabel("继续追问")
 
-                Button {
-                    model.sendComposer()
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.elsepageOnInteractive)
-                        .frame(width: 44, height: 44)
-                        .background(
-                            model.canSubmitComposer ? Color.elsepageInteractive : Color.secondary.opacity(0.28),
-                            in: Circle()
-                        )
+                if model.isBusy {
+                    Button {
+                        model.cancel()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(ElsepageColor.textPrimary)
+                            .frame(width: 44, height: 44)
+                            .background(ElsepageColor.surfaceSecondary, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("停止回答")
+                } else {
+                    Button {
+                        model.sendComposer()
+                    } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(ElsepageColor.onAccent)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                model.canSubmitComposer ? ElsepageColor.accent : Color.secondary.opacity(0.28),
+                                in: Circle()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!model.canSubmitComposer)
+                    .accessibilityLabel("发送追问")
                 }
-                .buttonStyle(.plain)
-                .disabled(!model.canSubmitComposer)
-                .accessibilityLabel("发送追问")
             }
         }
         .padding(.horizontal, ElsepageTheme.Spacing.medium)
@@ -356,7 +461,9 @@ struct ReaderHelpSheet: View {
     private func handleCitation(_ evidence: AgentResponseEvidence) {
         // Keep the temporary thread alive. Collapsing the sheet reveals the
         // source while preserving the answer and its follow-up context.
-        selectedDetent = .height(184)
+        if !dynamicTypeSize.isAccessibilitySize {
+            selectedDetent = .height(184)
+        }
         openCitation(evidence)
     }
 
@@ -372,16 +479,54 @@ struct ReaderHelpSheet: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func retryRow(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(.secondary)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// A failure is a state, not a line of gray text: it says what happened and
+    /// offers the next action in place. The configuration failure routes to
+    /// Settings instead of leaving the reader with a dead retry.
+    private func failureCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: ElsepageSpacing.sm) {
+            HStack(alignment: .top, spacing: ElsepageSpacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(ElsepageColor.warning)
+                Text(message)
+                    .font(ElsepageFont.subheadline)
+                    .foregroundStyle(ElsepageColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: ElsepageSpacing.lg) {
+                if model.canRetry {
+                    Button("重试") { model.retry() }
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
+                }
+                if model.failureNeedsConfiguration, let onOpenSettings {
+                    Button("去设置聊天模型") {
+                        dismiss()
+                        onOpenSettings()
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .accessibilityHint("关闭这次问答并打开聊天模型设置")
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .padding(ElsepageSpacing.md)
+        .background(ElsepageColor.warning.opacity(0.08), in: RoundedRectangle(cornerRadius: ElsepageRadius.card, style: .continuous))
+        .accessibilityElement(children: .contain)
     }
+
+    private var stoppedRow: some View {
+        HStack(spacing: ElsepageSpacing.sm) {
+            Text("已停止")
+                .font(ElsepageFont.subheadline)
+                .foregroundStyle(ElsepageColor.textSecondary)
+            Button("重试") { model.retry() }
+                .font(.subheadline.weight(.semibold))
+                .frame(minHeight: 44)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+
 }

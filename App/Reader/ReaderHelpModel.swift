@@ -48,6 +48,9 @@ final class ReaderHelpModel {
     private(set) var isLatestResponseTruncated = false
     private(set) var isSavingNote = false
     private(set) var saveNotice: String?
+    /// True when the current failure is "no model provider configured"; the
+    /// sheet can offer a direct route to Settings instead of a dead retry.
+    private(set) var failureNeedsConfiguration = false
     var saveError: String?
 
     private var savedResponseID: UUID?
@@ -229,6 +232,7 @@ final class ReaderHelpModel {
         isLatestResponseTruncated = false
         saveNotice = nil
         saveError = nil
+        failureNeedsConfiguration = false
         state = .preparing
         runTask?.cancel()
 
@@ -297,6 +301,7 @@ final class ReaderHelpModel {
         case .failed(let failure):
             flushStreamingResponse()
             streamingBuffer.discardPending()
+            failureNeedsConfiguration = failure == .providerNotConfigured
             state = .failed(Self.message(for: failure))
             Perf.shared.event("readerHelp.fail")
             runTask = nil

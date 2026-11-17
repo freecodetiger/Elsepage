@@ -46,9 +46,12 @@ extension HighlightColor {
 /// participates in the reader's layout (zero layout shift).
 struct ReaderAnnotationOverlays: View {
     let model: ReaderModel
+    /// Keeps transient feedback above a collapsed sheet so "已回到原文" is
+    /// visible at the moment the citation jump lands.
+    var noticeBottomInset: CGFloat = 0
     private static let margin: CGFloat = 12
     fileprivate static let gap: CGFloat = 10
-    fileprivate static let menuSizeEstimate = CGSize(width: 240, height: 96)
+    fileprivate static let menuSizeEstimate = CGSize(width: 340, height: 56)
 
     /// Safe-area insets from the key window. The overlay's GeometryReader
     /// ignores the safe area so its coordinates match the navigator's
@@ -67,7 +70,6 @@ struct ReaderAnnotationOverlays: View {
         GeometryReader { proxy in
             let insets = Self.windowInsets
             let fullSize = proxy.size
-            let fullContainer = CGRect(origin: .zero, size: fullSize)
             // Clamping bounds keep menus inside the safe area plus a margin.
             let safeBounds = CGRect(
                 x: insets.leading + Self.margin,
@@ -110,6 +112,7 @@ struct ReaderAnnotationOverlays: View {
                             model: model,
                             highlightID: id,
                             onSelectColor: { model.changeHighlightColor(id, to: $0) },
+                            onNote: { model.openNote(forHighlightID: id) },
                             onDelete: { model.deleteHighlightWithUndo(id) }
                         )
                     }
@@ -120,7 +123,7 @@ struct ReaderAnnotationOverlays: View {
                 if let notice = model.transientNotice {
                     TransientNoticePill(notice: notice, onUndo: { model.undoNotice() })
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, insets.bottom + 14)
+                        .padding(.bottom, insets.bottom + 14 + noticeBottomInset)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
@@ -171,58 +174,81 @@ private struct AnchoredMenu<Menu: View>: View {
 /// Replaces the system text-selection menu. The color dots create a highlight
 /// in one tap; a long-press selection never needs a second step before the
 /// highlight exists.
+///
+/// One row instead of two: the old stacked bar was ~104pt tall and covered the
+/// paragraph the reader had just selected. Icon + label keeps every action
+/// readable at ~52pt while fitting the four swatches and three tools.
 struct SelectionToolbar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let onSelectColor: (HighlightColor) -> Void
     let onNote: () -> Void
     let onAsk: () -> Void
     let onCopy: () -> Void
 
+    /// At accessibility sizes the three labelled tools no longer fit beside
+    /// four swatches on a phone. Drop the visible labels; the accessibility
+    /// labels stay unchanged.
+    private var showsToolLabels: Bool {
+        !dynamicTypeSize.isAccessibilitySize
+    }
+
     var body: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 4) {
-                ForEach(HighlightColor.allCases, id: \.self) { color in
-                    Button {
-                        onSelectColor(color)
-                    } label: {
-                        Circle()
-                            .fill(color.annotationColor)
-                            .frame(width: 28, height: 28)
-                            .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
-                            // A11Y-03: the 28pt swatch rides in a 44pt hit target.
-                            .frame(width: AccessibilityMetrics.minimumTapTargetSide, height: AccessibilityMetrics.minimumTapTargetSide)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(color.accessibilityName)
-                    .accessibilityHint("创建这个颜色的高亮")
+        HStack(spacing: ElsepageSpacing.xxs) {
+            ForEach(HighlightColor.allCases, id: \.self) { color in
+                Button {
+                    onSelectColor(color)
+                } label: {
+                    Circle()
+                        .fill(color.annotationColor)
+                        .frame(width: 26, height: 26)
+                        .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+                        // A11Y-03: the swatch rides in a 44pt hit target.
+                        .frame(width: ElsepageSpacing.touchTarget, height: ElsepageSpacing.touchTarget)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(color.accessibilityName)
+                .accessibilityHint("创建这个颜色的高亮")
             }
 
             Divider()
+                .frame(height: 24)
+                .padding(.horizontal, ElsepageSpacing.xxs)
 
-            HStack(spacing: 2) {
-                toolButton("笔记", action: onNote)
-                toolButton("问", action: onAsk)
-                toolButton("复制", action: onCopy)
-            }
+            toolButton("笔记", systemImage: "note.text", label: "添加笔记", action: onNote)
+            toolButton("问 AI", systemImage: "sparkles", label: "就这段问 AI", action: onAsk)
+            toolButton("复制", systemImage: "doc.on.doc", label: "复制", action: onCopy)
         }
-        .padding(6)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.primary.opacity(0.08)))
+        .foregroundStyle(ElsepageColor.textPrimary)
+        .padding(.horizontal, ElsepageSpacing.sm)
+        .padding(.vertical, ElsepageSpacing.xxs)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.primary.opacity(0.08)))
         .shadow(color: .black.opacity(0.14), radius: 16, y: 7)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("标注工具")
     }
 
-    private func toolButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func toolButton(
+        _ title: String,
+        systemImage: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 7)
-                .frame(minHeight: 40)
-                .contentShape(Rectangle())
+            VStack(spacing: 2) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                if showsToolLabels {
+                    Text(title)
+                        .font(ElsepageFont.caption2)
+                }
+            }
+            .frame(minWidth: 48, minHeight: ElsepageSpacing.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 
@@ -296,6 +322,7 @@ struct AnnotationConflictMenu: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ElsepageColor.textPrimary)
                 .padding(.horizontal, 10)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
@@ -309,9 +336,11 @@ struct AnnotationConflictMenu: View {
 
 /// Single-row menu anchored to a tapped highlight: recolor, note, delete.
 struct HighlightMenu: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let model: ReaderModel
     let highlightID: UUID
     let onSelectColor: (HighlightColor) -> Void
+    let onNote: () -> Void
     let onDelete: () -> Void
 
     private var highlight: Highlight? {
@@ -348,7 +377,8 @@ struct HighlightMenu: View {
                 Divider()
                     .frame(height: 26)
 
-                toolButton("删除", destructive: true, action: onDelete)
+                toolButton("笔记", systemImage: "note.text", action: onNote)
+                toolButton("删除", systemImage: "trash", destructive: true, action: onDelete)
             }
             .padding(.leading, 6)
             .padding(.trailing, 10)
@@ -361,15 +391,27 @@ struct HighlightMenu: View {
         }
     }
 
-    private func toolButton(_ title: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func toolButton(
+        _ title: String,
+        systemImage: String,
+        destructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(destructive ? AnyShapeStyle(Color.elsepageDanger) : AnyShapeStyle(.primary))
-                .padding(.horizontal, 8)
-                .frame(minHeight: 40)
-                .contentShape(Rectangle())
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            .foregroundStyle(destructive ? AnyShapeStyle(Color.elsepageDanger) : AnyShapeStyle(ElsepageColor.textPrimary))
+            .padding(.horizontal, 8)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .accessibilityLabel(title)
         .buttonStyle(.plain)
         .accessibilityHint(title == "删除" ? "删除这个高亮，可在短时间内撤销" : "")
     }
@@ -404,6 +446,7 @@ struct TransientNoticePill: View {
         HStack(spacing: 12) {
             Text(label)
                 .font(.subheadline)
+                .foregroundStyle(ElsepageColor.textPrimary)
             if canUndo {
                 Button("撤销", action: onUndo)
                     .font(.subheadline.weight(.bold))
@@ -432,11 +475,9 @@ struct TransientNoticePill: View {
 /// always reflects what is in the editor, so user words are never lost
 /// (PRD P2). An emptied note is removed, with undo offered by the reader.
 struct NoteEditorSheet: View {
-    private enum Mode: String, CaseIterable, Identifiable {
-        case preview = "预览"
-        case edit = "编辑"
-
-        var id: Self { self }
+    private enum Mode {
+        case preview
+        case edit
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -516,15 +557,14 @@ struct NoteEditorSheet: View {
                     .disabled(note == nil)
                 }
 
-                Picker("显示模式", selection: $mode) {
-                    ForEach(Mode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                if !trimmedText.isEmpty {
+                    Button(mode == .preview ? "编辑" : "预览") {
+                        mode = mode == .preview ? .edit : .preview
                     }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .accessibilityLabel(mode == .preview ? "编辑笔记" : "预览笔记")
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 128)
-                .accessibilityLabel("笔记显示模式")
 
                 Button("完成") { dismiss() }
                     .font(.subheadline.weight(.semibold))
@@ -559,7 +599,18 @@ struct NoteEditorSheet: View {
                     .focused($editorFocused)
                     .scrollContentBackground(.hidden)
                     .padding(8)
-                    .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: ElsepageRadius.card, style: .continuous))
+                    .overlay(alignment: .topLeading) {
+                        if trimmedText.isEmpty {
+                            Text("写下你的想法…")
+                                .font(ElsepageFont.body)
+                                .foregroundStyle(ElsepageColor.textTertiary)
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 16)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
                     .accessibilityLabel("笔记内容")
             }
         }
@@ -571,8 +622,16 @@ struct NoteEditorSheet: View {
             loadedTarget = target
             activeTarget = target
             text = note?.body ?? ""
-            mode = .preview
+            // A fresh note should be a writing surface immediately; the old
+            // preview-first default forced an extra tap before typing. Existing
+            // notes still open read-first so they can be reviewed without the
+            // keyboard covering the excerpt.
+            let hasBody = !(note?.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            mode = hasBody ? .preview : .edit
             editorFocused = false
+            if !hasBody {
+                Task { @MainActor in editorFocused = true }
+            }
         }
         .onChange(of: mode) { _, mode in
             editorFocused = mode == .edit

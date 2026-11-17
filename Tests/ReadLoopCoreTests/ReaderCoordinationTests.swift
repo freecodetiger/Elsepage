@@ -198,8 +198,8 @@ private actor PositionHarness {
 
 @Test func readerDefaultsFavorComfortableLongFormTypography() {
     let preferences = ReaderPreferences.default
-    #expect(preferences.fontSize == 1.05)
-    #expect(preferences.lineHeight == 1.2)
-    #expect(preferences.pageMargins == 1.1)
+    #expect(preferences.fontSize == 1.2)
+    #expect(preferences.lineHeight == 1.6)
+    #expect(preferences.pageMargins == 1.2)
     #expect(preferences.readingMode == .paginated)
 }

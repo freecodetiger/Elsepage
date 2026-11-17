@@ -169,9 +169,10 @@ public struct ReaderPreferences: Hashable, Codable, Sendable {
 
     public init(
         theme: ReaderTheme = .system,
-        fontSize: Double = 1.05,
-        lineHeight: Double = 1.2,
-        pageMargins: Double = 1.1,
+        // Long-form defaults: ~20pt body, 1.6 line height, 24pt page margins.
+        fontSize: Double = 1.2,
+        lineHeight: Double = 1.6,
+        pageMargins: Double = 1.2,
         readingMode: ReadingMode = .paginated,
         lastUsedHighlightColor: HighlightColor = .yellow
     ) {

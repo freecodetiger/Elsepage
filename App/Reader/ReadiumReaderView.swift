@@ -7,6 +7,23 @@ import SwiftUI
 import UIKit
 import WebKit
 
+/// The page surface the navigator actually paints. Reader sheets use the same
+/// color so a dark page does not open a translucent system sheet over live text.
+enum ReaderPageBackground {
+    static func readiumTheme(for readerTheme: ReaderTheme, colorScheme: ColorScheme) -> Theme {
+        switch readerTheme {
+        case .system: colorScheme == .dark ? .dark : .light
+        case .light: .light
+        case .dark: .dark
+        case .sepia: .sepia
+        }
+    }
+
+    static func color(for readerTheme: ReaderTheme, colorScheme: ColorScheme) -> SwiftUI.Color {
+        SwiftUI.Color(uiColor: readiumTheme(for: readerTheme, colorScheme: colorScheme).backgroundColor.uiColor)
+    }
+}
+
 struct ReadiumReaderView: UIViewControllerRepresentable {
     let model: ReaderModel
     /// Value snapshots make Observation changes visible to the SwiftUI/UIKit bridge.
@@ -77,11 +94,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                             // Readium scrolls vertically inside one spine resource.
                             // Keep its outer page turn enabled so readers can cross
                             // chapter/resource boundaries at the top and bottom.
-                            disablePageTurnsWhileScrolling: false,
-                            contentInset: [
-                                .compact: (top: 8, bottom: 8),
-                                .regular: (top: 16, bottom: 16),
-                            ]
+                            disablePageTurnsWhileScrolling: false
                         )
                     )
                     navigator.delegate = self
@@ -159,7 +172,10 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
             if navigatorReadyAt > 0 {
                 Perf.shared.record(.readerToFirstPage, ms: (now - navigatorReadyAt) * 1000)
             }
-            if model.perfOpenBeganAt > 0 {
+            if let interval = model.perfOpenInterval {
+                Perf.shared.end(interval)
+                model.perfOpenInterval = nil
+            } else if model.perfOpenBeganAt > 0 {
                 Perf.shared.record(.readerOpen, ms: (now - model.perfOpenBeganAt) * 1000)
             }
             Perf.shared.signpostEvent("reader.firstPage")
@@ -170,6 +186,20 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
                 Perf.shared.abort(interval)
                 parseInterval = nil
             }
+        }
+
+        /// Readium applies these margins inside the full-screen navigator.
+        /// Only the safe area is reserved: the chrome is a floating overlay, so
+        /// tapping to show it never changes the layout and never reflows the
+        /// page. The transient capsule is allowed to cover the text beneath it.
+        func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
+            let safe = navigator.view.window?.safeAreaInsets ?? .zero
+            return UIEdgeInsets(
+                top: safe.top + ReaderChromeMetrics.contentTopInset,
+                left: safe.left,
+                bottom: safe.bottom + ReaderChromeMetrics.contentBottomInset,
+                right: safe.right
+            )
         }
 
         func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
@@ -411,12 +441,7 @@ struct ReadiumReaderView: UIViewControllerRepresentable {
         }
 
         private static func readiumPreferences(from preferences: ReaderPreferences, colorScheme: ColorScheme) -> EPUBPreferences {
-            let theme: Theme = switch preferences.theme {
-            case .system: colorScheme == .dark ? .dark : .light
-            case .light: .light
-            case .dark: .dark
-            case .sepia: .sepia
-            }
+            let theme = ReaderPageBackground.readiumTheme(for: preferences.theme, colorScheme: colorScheme)
             return .init(
                 fontSize: preferences.fontSize,
                 lineHeight: preferences.lineHeight,
