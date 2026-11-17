@@ -210,7 +210,9 @@ struct ReaderScreen: View {
                 Capsule()
                     .stroke(ElsepageColor.separator.opacity(0.35), lineWidth: ElsepageBorder.hairline)
             }
-            .padding(.horizontal, ElsepageSpacing.md)
+            // Same inset as the root screens: a 12pt capsule next to a 16pt
+            // page edge reads as misalignment, not as a floating layer.
+            .padding(.horizontal, ElsepageSpacing.page)
         }
         .foregroundStyle(ElsepageColor.textPrimary)
         // A short page-colour fade, not a reserved band: the capsule still
@@ -281,7 +283,7 @@ struct ReaderScreen: View {
             Capsule()
                 .stroke(ElsepageColor.separator.opacity(0.35), lineWidth: ElsepageBorder.hairline)
         }
-        .padding(.horizontal, ElsepageSpacing.md)
+        .padding(.horizontal, ElsepageSpacing.page)
         .padding(.top, ElsepageSpacing.xs)
     }
 
@@ -380,13 +382,12 @@ struct ReaderScreen: View {
         model.showNotice(.returnedToSource)
     }
 
+    /// The page's own colour, taken from the same mapping Readium renders with.
+    /// The chrome floats over the page, so any other value shows up as a grey
+    /// band around the capsules: `elsepageBackground` is the app canvas, which
+    /// in light mode is not the white the reader draws.
     private var themeBackground: Color {
-        switch model.preferences.theme {
-        case .system: colorScheme == .dark ? Color(uiColor: .black) : .elsepageBackground
-        case .light: Color(uiColor: .systemBackground)
-        case .dark: Color(uiColor: .black)
-        case .sepia: .elsepageReaderSepia
-        }
+        ReaderPageBackground.color(for: model.preferences.theme, colorScheme: colorScheme)
     }
 
     /// The reading theme owns the page, so it also owns every overlay drawn on
