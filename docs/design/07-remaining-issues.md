@@ -104,7 +104,7 @@
 - [x] 假 Provider 覆盖 App 侧 AI 链路：流式/停止、失败/重试、引用校验与跳回原文（`-fake-provider`）。
 - [x] `swift-format` / `swiftlint` / `Scripts/lint.sh` 接入；CI 用 `LINT_STRICT=1`。
 - [ ] 给存量代码做一次 `xcrun swift-format format -i`，让严格门禁能覆盖全部文件。
-- [ ] 排查 `ReadLoopCoreTests` 在 iOS 模拟器上的 14 条 Swift Testing 断言失败（`swift test` 通过，疑似平台/运行时差异，与本轮改动无关）。
+- [x] 排查 `ReadLoopCoreTests` 在 iOS 模拟器上的 14 条 Swift Testing 断言失败。根因不是平台差异：`ReadiumIntegrationTests` 托管在 App 里并链接了包产品，Xcode 为此把 `LibraryCore / ReaderCore / RetrievalCore / Persistence / AppInfrastructure / GRDB` 提升为动态框架，这些框架又把静态依赖（`AgentRuntime`、`BrainCore`、`ModelProviders`）嵌进自己；未被托管的单测包再静态链接同一批产品，于是同一枚举在测试进程里存在两份（探针实测：抛出值来自 `Persistence_..._PackageProduct`，期望类型来自 `ReadLoopCoreTests`），`as?` 与 `#expect(throws:)` 按类型身份比较必然失败。App 二进制里 `AgentRuntime` 符号为 0（全部来自 `Persistence.framework`），线上只有一份，不受影响。在 `project.yml` 里把 3 个做跨模块错误类型比较的测试文件从 Xcode 目标排除，改由 `swift test` 覆盖（Xcode 264 条全绿，`swift test` 那 31 条仍通过）。
 
 ### 4.3 可以后续做
 
