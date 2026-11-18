@@ -1134,6 +1134,16 @@ struct SessionReflectionSheet: View {
                             dismiss()
                         }
                     }
+                    // Skipping is the way out, not the thing to do: it stays
+                    // quiet so "保存" is the one the page points at. Plain
+                    // drops the glass capsule iOS 26 gives every toolbar item,
+                    // which made the two look equally important.
+                    .buttonStyle(.plain)
+                    .fixedSize()
+                    .foregroundStyle(Color.elsepageTextSecondary)
+                    .accessibilityHint(
+                        model.reflection == nil ? "只跳过这一次，下次读完还会再问你" : ""
+                    )
                 }
                 if model.reflection == nil { ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
@@ -1144,6 +1154,8 @@ struct SessionReflectionSheet: View {
                             }
                         }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.elsepageInteractive)
                     .disabled(!model.canSubmit)
                 } }
             }
@@ -1156,11 +1168,14 @@ struct SessionReflectionSheet: View {
         // draft asks before it is lost. A skip closes the card for this run
         // only — the session is not written off permanently.
         .interactiveDismissDisabled(model.reflection == nil)
-        .confirmationDialog("放弃这次想法？", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+        // An alert, not a confirmation dialog: on iOS 26 the sheet form drops
+        // the cancel action when the keyboard is up, leaving the destructive
+        // button as the only way out.
+        .alert("放弃这次想法？", isPresented: $confirmsDiscard) {
             Button("继续写", role: .cancel) {}
             Button("放弃并关闭", role: .destructive) { dismiss() }
         } message: {
-            Text("已经写下的内容不会保存。")
+            Text("已经写下的内容不会保存。跳过只影响这一次，下次读完还会再问你。")
         }
         .alert("暂时无法保存", isPresented: Binding(
             get: { model.errorMessage != nil },
