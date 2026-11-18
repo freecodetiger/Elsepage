@@ -133,7 +133,18 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
+      # These three files compare error *types* thrown by package code. Xcode
+      # builds Persistence (shared with the app and its hosted test bundle) as a
+      # dynamic framework, which absorbs its static dependencies — AgentRuntime,
+      # BrainCore, ModelProviders. This bundle links the same products statically,
+      # so the same enum exists twice in the test process and `as?` fails on
+      # values that print identically. They still run under `swift test`, where
+      # the whole package is one image.
       - path: Tests/ReadLoopCoreTests
+        excludes:
+          - BrainPersistenceTests.swift
+          - OpenAICompatibleEmbeddingProviderTests.swift
+          - SiliconFlowRerankerTests.swift
     dependencies:
       - package: ReadLoopCore
         product: LibraryCore
