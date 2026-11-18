@@ -68,7 +68,8 @@ import Testing
         "v27_reflection_message_audio",
         "v28_text_annotations",
         "v29_reflection_summaries",
-        "v30_book_manual_order"
+        "v30_book_manual_order",
+        "v31_session_active_duration"
     ])
 }
 

@@ -19,12 +19,19 @@ public struct ReadingSession: Hashable, Codable, Sendable, Identifiable {
     public var highlightCount: Int
     public var noteCount: Int
     public var agentDiscussionCount: Int
+    /// Seconds the reader was actually in the reader, excluding background and
+    /// between-launch gaps. `nil` on rows written before activity tracking;
+    /// those fall back to the wall-clock span.
+    public var activeDuration: TimeInterval?
+    /// Start of the currently open active segment, `nil` while paused or ended.
+    public var activeSince: Date?
 
     public init(
         id: ReadingSessionID = ReadingSessionID(), bookID: BookID,
         startedAt: Date = Date(), endedAt: Date? = nil,
         startLocator: BookLocator, endLocator: BookLocator? = nil,
-        highlightCount: Int = 0, noteCount: Int = 0, agentDiscussionCount: Int = 0
+        highlightCount: Int = 0, noteCount: Int = 0, agentDiscussionCount: Int = 0,
+        activeDuration: TimeInterval? = nil, activeSince: Date? = nil
     ) {
         self.id = id
         self.bookID = bookID
@@ -35,9 +42,25 @@ public struct ReadingSession: Hashable, Codable, Sendable, Identifiable {
         self.highlightCount = highlightCount
         self.noteCount = noteCount
         self.agentDiscussionCount = agentDiscussionCount
+        self.activeDuration = activeDuration
+        self.activeSince = activeSince
     }
 
-    public var duration: TimeInterval? { endedAt.map { $0.timeIntervalSince(startedAt) } }
+    /// Reading time, not wall-clock time: a book left open while the phone sat
+    /// in a pocket the whole night is a few minutes, not 624.
+    public var duration: TimeInterval? {
+        guard let endedAt else { return nil }
+        return activeDuration ?? endedAt.timeIntervalSince(startedAt)
+    }
+
+    /// The last moment the reader was known to be reading — the anchor the
+    /// resume window is measured from. An open session whose value is stale is
+    /// a leftover, not a session someone is still reading.
+    public var lastActiveAt: Date {
+        if let activeSince { return activeSince }
+        guard let activeDuration else { return startedAt }
+        return startedAt.addingTimeInterval(activeDuration)
+    }
 }
 
 public protocol ReadingSessionRepository: Sendable {
@@ -56,6 +79,9 @@ public protocol ReadingSessionRepository: Sendable {
     /// discussion counter as soon as a discussion starts, so it survives crashes
     /// and can never be overwritten by a later session end.
     func incrementAgentDiscussionCount(id: ReadingSessionID, by count: Int) async throws
+    /// Replaces the activity bookkeeping. `activeSince == nil` means the
+    /// reader is not on screen; `activeDuration` is the time already banked.
+    func setActivity(id: ReadingSessionID, activeDuration: TimeInterval, activeSince: Date?) async throws
     func delete(id: ReadingSessionID) async throws
 }
 

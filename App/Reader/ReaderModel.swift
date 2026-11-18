@@ -980,6 +980,31 @@ final class ReaderModel {
         }
     }
 
+    /// The reader left the screen — background, another tab, a dismiss. Bank
+    /// the foreground time so the session stops growing while it is away. Only
+    /// the X button ends a session; leaving is a pause.
+    func pauseReadingSession(at now: Date = Date()) async {
+        guard let session = activeSession, session.endedAt == nil else { return }
+        if let paused = try? await sessions.pause(id: session.id, at: now) {
+            activeSession = paused
+        }
+    }
+
+    /// Back in the reader: the clock restarts here, not where it stopped.
+    func resumeReadingSession(at now: Date = Date()) async {
+        guard let session = activeSession else { return }
+        guard session.endedAt == nil else {
+            // The previous sitting was closed with the X button. This is a new
+            // one; dropping the ended session lets the next location change
+            // start a fresh one instead of silently reading untimed.
+            activeSession = nil
+            return
+        }
+        if let resumed = try? await sessions.resume(id: session.id, at: now) {
+            activeSession = resumed
+        }
+    }
+
     private func startSessionIfNeeded(at locator: BookLocator) async {
         guard activeSession == nil else { return }
         do {

@@ -27,7 +27,7 @@ import Testing
     #expect(retriedEnd.noteCount == 1)
 }
 
-@Test func sessionEndingSummaryUsesHonestWallClockDurationAndProgress() throws {
+@Test func sessionEndingSummaryUsesHonestReadingDurationAndProgress() throws {
     let start = try TestFixtures.realisticLocator(progression: 0.5)
     let end = try TestFixtures.realisticLocator(progression: 0.25)
     let session = ReadingSession(
@@ -39,7 +39,7 @@ import Testing
     )
     let summary = SessionEndingSummary(session: session)
 
-    #expect(summary.wallClockDuration == 0)
+    #expect(summary.readingDuration == 0)
     #expect(summary.progressDelta == 0)
     #expect(!summary.shouldOfferReflection)
 }

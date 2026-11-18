@@ -39,10 +39,22 @@ public final class GRDBReadingSessionRepository: ReadingSessionRepository, @unch
                 throw PersistenceError.missingReadingSession
             }
             record.endedAt = endedAt
+            record.foldActiveSegment(at: endedAt)
             record.setEndLocator(endLocator)
             record.highlightCount = highlightCount
             record.noteCount = noteCount
             record.agentDiscussionCount = agentDiscussionCount
+            try record.update(db)
+        }
+    }
+
+    public func setActivity(id: ReadingSessionID, activeDuration: TimeInterval, activeSince: Date?) async throws {
+        try await db.writer.write { db in
+            guard var record = try SessionRecord.fetchOne(db, key: id.description) else {
+                throw PersistenceError.missingReadingSession
+            }
+            record.activeDuration = max(0, activeDuration)
+            record.activeSince = activeSince
             try record.update(db)
         }
     }
@@ -483,6 +495,8 @@ private struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var endProgression, endTotalProgression: Double?
     var endTextBefore, endTextHighlight, endTextAfter: String?
     var highlightCount, noteCount, agentDiscussionCount: Int
+    var activeDuration: Double?
+    var activeSince: Date?
 
     init(_ session: ReadingSession) {
         id = session.id.description; bookID = session.bookID.description
@@ -493,7 +507,16 @@ private struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         endLocatorJSON = nil; endHref = nil; endProgression = nil; endTotalProgression = nil
         endTextBefore = nil; endTextHighlight = nil; endTextAfter = nil
         highlightCount = session.highlightCount; noteCount = session.noteCount; agentDiscussionCount = session.agentDiscussionCount
+        activeDuration = session.activeDuration; activeSince = session.activeSince
         if let locator = session.endLocator { setEndLocator(locator) }
+    }
+
+    /// The open segment ends where the session ends, never past it.
+    mutating func foldActiveSegment(at endedAt: Date) {
+        if let activeSince {
+            activeDuration = (activeDuration ?? 0) + max(0, endedAt.timeIntervalSince(activeSince))
+        }
+        self.activeSince = nil
     }
 
     mutating func setEndLocator(_ locator: BookLocator) {
@@ -512,7 +535,8 @@ private struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             id: .init(rawValue: try decodeUUID(id, table: Self.databaseTableName, recordID: id, field: "id")),
             bookID: .init(rawValue: try decodeUUID(bookID, table: Self.databaseTableName, recordID: id, field: "bookID")),
             startedAt: startedAt, endedAt: endedAt, startLocator: start, endLocator: end,
-            highlightCount: highlightCount, noteCount: noteCount, agentDiscussionCount: agentDiscussionCount
+            highlightCount: highlightCount, noteCount: noteCount, agentDiscussionCount: agentDiscussionCount,
+            activeDuration: activeDuration, activeSince: activeSince
         )
     }
 }

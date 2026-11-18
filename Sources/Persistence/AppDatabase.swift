@@ -616,8 +616,34 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "manualOrder", .integer)
             }
         }
+        // Sessions used to measure wall-clock time between start and end, so a
+        // book left open overnight was recorded as 624 minutes. From here on
+        // `activeDuration` banks only foreground time; `activeSince` marks the
+        // segment currently running.
+        migrator.registerMigration("v31_session_active_duration") { db in
+            try db.alter(table: "readingSessions") { t in
+                t.add(column: "activeDuration", .double)
+                t.add(column: "activeSince", .datetime)
+            }
+            // Existing rows keep their recorded span, capped at the longest
+            // plausible single sitting — anything beyond it is background time
+            // that leaked into the number.
+            try db.execute(sql: """
+                UPDATE readingSessions
+                SET activeDuration = MIN((julianday(endedAt) - julianday(startedAt)) * 86400.0, ?)
+                WHERE endedAt IS NOT NULL
+                """, arguments: [Self.legacySessionDurationCap])
+            // Unfinished rows are leftovers from a killed app; they hold no
+            // trustworthy time at all.
+            try db.execute(sql: "UPDATE readingSessions SET activeDuration = 0 WHERE endedAt IS NULL")
+        }
         return migrator
     }
+
+    /// The longest span a pre-`activeDuration` session is trusted to represent:
+    /// two hours of continuous reading. Longer recorded spans always included
+    /// time the app was not on screen.
+    static let legacySessionDurationCap: Double = 2 * 60 * 60
 
     /// One-time, idempotent carry-over of legacy `memories` rows into
     /// `brainItems` (kind = memory). Deterministic mapping: provisional→needsReview,

@@ -1281,7 +1281,7 @@ struct SessionReflectionSheet: View {
 
     private var durationLine: String {
         guard model.summary.session.endedAt != nil else { return "这句话让你想到什么？" }
-        let minutes = Int((model.summary.wallClockDuration / 60).rounded(.down))
+        let minutes = Int((model.summary.readingDuration / 60).rounded(.down))
         return minutes > 0 ? "这一段约 \(minutes) 分钟" : "这一段阅读结束了"
     }
 

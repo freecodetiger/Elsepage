@@ -153,7 +153,10 @@ struct ReaderScreen: View {
             Text(model.errorMessage ?? "")
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase != .active else { return }
+            if phase == .active {
+                Task { await model.resumeReadingSession() }
+                return
+            }
             // Annotation menu anchors are screen coordinates; drop them while
             // backgrounded so they cannot reappear stale after relaunch.
             model.clearTransientAnnotationUI(reason: "background")
@@ -161,13 +164,23 @@ struct ReaderScreen: View {
             Task {
                 await model.flushPosition()
                 await model.flushPreferences()
+                // Reading time is foreground time: a book parked in a pocket
+                // overnight is minutes, not hundreds of them.
+                await model.pauseReadingSession()
             }
+        }
+        .onAppear {
+            // Coming back to a book that was left open — no backgrounding in
+            // between — needs the clock restarted explicitly: the session was
+            // paused when the reader disappeared.
+            Task { await model.resumeReadingSession() }
         }
         .onDisappear {
             model.savePreferences()
             Task {
                 await model.flushPosition()
                 await model.flushPreferences()
+                await model.pauseReadingSession()
             }
         }
     }

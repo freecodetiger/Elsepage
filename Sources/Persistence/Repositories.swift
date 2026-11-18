@@ -29,8 +29,11 @@ public final class GRDBBookRepository: BookRepository, @unchecked Sendable {
         let ids = bookIDs.map(\.description)
         let placeholders = ids.map { _ in "?" }.joined(separator: ",")
         return try await db.writer.read { db in
-            // Dates are stored as ISO-like text, so duration must go through
-            // julianday(): the difference in days times 86400 gives seconds.
+            // Reading time is the banked foreground time, not the span between
+            // first and last page: a book left open overnight is minutes. Rows
+            // written before activity tracking fall back to that span, which is
+            // all they ever had. Dates are stored as ISO-like text, so the
+            // fallback goes through julianday(): days times 86400 = seconds.
             // Unfinished sessions (endedAt IS NULL) contribute no reading time.
             let rows = try BookLibraryStatsRow.fetchAll(db, sql: """
                 SELECT books.id AS bookID,
@@ -39,7 +42,7 @@ public final class GRDBBookRepository: BookRepository, @unchecked Sendable {
                        COALESCE(r.reflectionCount, 0) AS reflectionCount
                 FROM books
                 LEFT JOIN (
-                    SELECT bookID, ROUND(SUM(julianday(endedAt) - julianday(startedAt)) * 86400) AS readingSeconds
+                    SELECT bookID, ROUND(SUM(COALESCE(activeDuration, (julianday(endedAt) - julianday(startedAt)) * 86400))) AS readingSeconds
                     FROM readingSessions WHERE endedAt IS NOT NULL GROUP BY bookID
                 ) s ON s.bookID = books.id
                 LEFT JOIN (SELECT bookID, COUNT(*) AS highlightCount FROM highlights GROUP BY bookID) h ON h.bookID = books.id

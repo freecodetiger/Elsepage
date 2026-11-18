@@ -6,20 +6,68 @@ import ReaderCore
 /// The persistent representation remains the source of truth across launches.
 public actor ReadingSessionService {
     private let repository: any ReadingSessionRepository
+    /// How long an unfinished session stays resumable. Something left open
+    /// days ago is a leftover (app killed, reader skipped out), not the same
+    /// read, so it is closed instead of being continued.
+    public let resumeWindow: TimeInterval
 
-    public init(repository: any ReadingSessionRepository) {
+    public init(repository: any ReadingSessionRepository, resumeWindow: TimeInterval = 30 * 60) {
         self.repository = repository
+        self.resumeWindow = resumeWindow
     }
 
-    /// Returns the existing unfinished session for this book, or records a new one.
-    public func start(bookID: BookID, at locator: BookLocator, startedAt: Date = Date()) async throws -> ReadingSession {
-        if let active = try await repository.sessions(for: bookID).first(where: { $0.endedAt == nil }) {
-            return active
+    /// Returns the unfinished session for this book if the reader was in the
+    /// reader recently enough to be the same sitting, or records a new one.
+    public func start(bookID: BookID, at locator: BookLocator, startedAt now: Date = Date()) async throws -> ReadingSession {
+        if let open = try await repository.sessions(for: bookID).first(where: { $0.endedAt == nil }) {
+            if open.lastActiveAt >= now.addingTimeInterval(-resumeWindow) {
+                // An open session seen here came from a previous process: it was
+                // never paused because the app died or the reader was skipped
+                // out. Nobody can tell how long that gap was, so none of it is
+                // banked — the clock restarts now.
+                try await repository.setActivity(
+                    id: open.id,
+                    activeDuration: open.activeDuration ?? 0,
+                    activeSince: now
+                )
+                return try await repository.session(id: open.id) ?? open
+            }
+            // Close the leftover where it stopped, so its own duration stays
+            // honest and it cannot carry its clock into the new session.
+            _ = try? await end(
+                id: open.id,
+                at: open.endLocator ?? open.startLocator,
+                endedAt: open.lastActiveAt,
+                highlightCount: open.highlightCount,
+                noteCount: open.noteCount
+            )
         }
 
-        let session = ReadingSession(bookID: bookID, startedAt: startedAt, startLocator: locator)
+        let session = ReadingSession(bookID: bookID, startedAt: now, startLocator: locator, activeSince: now)
         try await repository.insert(session)
         return session
+    }
+
+    /// The reader left the screen: bank the open segment and stop the clock.
+    @discardableResult
+    public func pause(id: ReadingSessionID, at now: Date = Date()) async throws -> ReadingSession? {
+        guard let session = try await repository.session(id: id),
+              session.endedAt == nil,
+              let open = session.activeSince else { return nil }
+        let banked = (session.activeDuration ?? 0) + max(0, now.timeIntervalSince(open))
+        try await repository.setActivity(id: id, activeDuration: banked, activeSince: nil)
+        return try await repository.session(id: id)
+    }
+
+    /// The reader came back: count from now on. Background time is never
+    /// banked, so it never lands in the session's duration.
+    @discardableResult
+    public func resume(id: ReadingSessionID, at now: Date = Date()) async throws -> ReadingSession? {
+        guard let session = try await repository.session(id: id),
+              session.endedAt == nil,
+              session.activeSince == nil else { return nil }
+        try await repository.setActivity(id: id, activeDuration: session.activeDuration ?? 0, activeSince: now)
+        return try await repository.session(id: id)
     }
 
     /// Completes a session exactly once. A repeated end request returns the already-recorded result.
@@ -72,7 +120,8 @@ public enum ReadingSessionServiceError: Error, Equatable, Sendable {
     case missingSession
 }
 
-/// UI-ready facts derived from persisted session data. Duration is wall-clock time, not active-reading time.
+/// UI-ready facts derived from persisted session data. Duration is reading
+/// time — the time the reader was actually in the reader — not wall-clock time.
 public struct SessionEndingSummary: Hashable, Sendable {
     public let session: ReadingSession
 
@@ -80,7 +129,7 @@ public struct SessionEndingSummary: Hashable, Sendable {
         self.session = session
     }
 
-    public var wallClockDuration: TimeInterval {
+    public var readingDuration: TimeInterval {
         max(0, session.duration ?? 0)
     }
 
@@ -118,8 +167,8 @@ public struct MeaningfulReadingSessionPolicy: Sendable {
 
     public func shouldOfferReflection(for summary: SessionEndingSummary) -> Bool {
         guard summary.session.endedAt != nil else { return false }
-        guard summary.wallClockDuration >= hardFloorDuration else { return false }
-        return summary.wallClockDuration >= minimumDuration
+        guard summary.readingDuration >= hardFloorDuration else { return false }
+        return summary.readingDuration >= minimumDuration
             || (summary.progressDelta ?? 0) >= minimumProgressDelta
             || summary.session.highlightCount > 0
             || summary.session.noteCount > 0
