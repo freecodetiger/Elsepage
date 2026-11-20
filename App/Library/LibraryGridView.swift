@@ -12,6 +12,10 @@ struct LibraryGridView: View {
     let cover: (Book) -> UIImage?
     let progress: (Book) -> Double?
     let transitionNamespace: Namespace.ID
+    /// The cover-to-reader zoom source renders its own copy of the cover, which
+    /// drifts while the shelf crossfades between states. Only attach it once the
+    /// shelf is still.
+    let zoomActive: Bool
     let openBook: (Book) -> Void
     let loadCover: (Book) async -> Void
     let requestDelete: (Book) -> Void
@@ -310,20 +314,7 @@ struct LibraryGridView: View {
             showsShadow: false,
             width: coverWidth
         )
-        .matchedTransitionSource(id: book.id, in: transitionNamespace) { source in
-            source
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: ElsepageBookCoverMetrics.cornerRadius,
-                        style: .continuous
-                    )
-                )
-                .shadow(
-                    color: ElsepageBookCoverMetrics.shadowColor,
-                    radius: ElsepageBookCoverMetrics.shadowRadius,
-                    y: ElsepageBookCoverMetrics.shadowY
-                )
-        }
+        .modifier(GridZoomSource(id: book.id, namespace: transitionNamespace, active: zoomActive))
         .task(id: book.id) { await loadCover(book) }
     }
 
@@ -331,6 +322,34 @@ struct LibraryGridView: View {
         guard let author = book.author?.trimmingCharacters(in: .whitespacesAndNewlines),
               !author.isEmpty else { return "未知作者" }
         return author
+    }
+}
+
+/// The cover-to-reader zoom source, present only while the shelf is still.
+private struct GridZoomSource<ID: Hashable>: ViewModifier {
+    let id: ID
+    let namespace: Namespace.ID
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.matchedTransitionSource(id: id, in: namespace) { source in
+                source
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: ElsepageBookCoverMetrics.cornerRadius,
+                            style: .continuous
+                        )
+                    )
+                    .shadow(
+                        color: ElsepageBookCoverMetrics.shadowColor,
+                        radius: ElsepageBookCoverMetrics.shadowRadius,
+                        y: ElsepageBookCoverMetrics.shadowY
+                    )
+            }
+        } else {
+            content
+        }
     }
 }
 

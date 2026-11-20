@@ -270,6 +270,9 @@ struct ElsepageRootHeader<Actions: View>: View {
 struct ElsepageSearchField: View {
     @Binding var text: String
     let prompt: String
+    /// Focus on appear, for fields revealed by an icon tap rather than a tap
+    /// on the field itself.
+    var autoFocus: Bool = false
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -312,6 +315,12 @@ struct ElsepageSearchField: View {
             Color(uiColor: .tertiarySystemFill),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
+        .onAppear {
+            guard autoFocus else { return }
+            // The field is not in the responder chain on the same run-loop turn
+            // it is inserted, so focus has to wait one tick.
+            DispatchQueue.main.async { isFocused = true }
+        }
     }
 }
 
